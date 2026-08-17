@@ -1,0 +1,1278 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>訪販カルテ</title>
+<meta name="description" content="マンション別に訪問結果を記録する営業ツール">
+<meta name="theme-color" content="#EFF1F5" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0B0F15" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="訪販カルテ">
+<meta name="format-detection" content="telephone=no">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="apple-touch-icon" href="./icons/icon-180.png">
+<link rel="icon" href="./icons/icon-192.png">
+</head>
+<body>
+<style>
+/* ============================================================
+   訪販カルテ
+   モチーフ: 集合ポストの部屋番号プレート
+   色: スチールネイビー(操作) + 意味を持つ4色(不在/断り/検討/契約)
+   ============================================================ */
+:root{
+  --ground:#EFF1F5;
+  --surface:#FFFFFF;
+  --surface-2:#E7EAF0;
+  --sunken:#DFE3EA;
+  --line:rgba(18,26,38,.10);
+  --line-2:rgba(18,26,38,.06);
+  --ink:#10151C;
+  --ink-2:#59636F;
+  --ink-3:#8B95A2;
+  --brand:#2B4A8F;
+  --brand-ink:#FFFFFF;
+  --brand-soft:#E4EAF8;
+  --scrim:rgba(8,12,18,.42);
+  --bar:rgba(255,255,255,.82);
+  --shadow-1:0 1px 2px rgba(16,21,28,.05);
+  --shadow-2:0 2px 6px rgba(16,21,28,.07), 0 10px 24px rgba(16,21,28,.06);
+  --shadow-3:0 -1px 0 rgba(18,26,38,.08), 0 -12px 40px rgba(16,21,28,.18);
+  --hi:rgba(255,255,255,.85);
+
+  --st-none:#98A3B0;
+  --st-absent:#5A6878;
+  --st-refuse:#BE3B36;
+  --st-consider:#B57708;
+  --st-contract:#0E7A54;
+  --st-none-bg:#F1F3F6;
+  --st-absent-bg:#E6EAEF;
+  --st-refuse-bg:#FBE9E7;
+  --st-consider-bg:#FBF0D9;
+  --st-contract-bg:#DEF2E9;
+
+  --r-sm:10px; --r-md:14px; --r-lg:20px;
+  --tap:48px;
+  --font:-apple-system,BlinkMacSystemFont,"SF Pro JP","Hiragino Kaku Gothic ProN","Yu Gothic UI","Noto Sans JP","Segoe UI",sans-serif;
+  --mono:ui-monospace,"SF Mono","SFMono-Regular",Menlo,Consolas,"Roboto Mono",monospace;
+  --ease:cubic-bezier(.32,.72,0,1);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --ground:#0B0F15;
+    --surface:#161C25;
+    --surface-2:#1F2731;
+    --sunken:#10161E;
+    --line:rgba(255,255,255,.10);
+    --line-2:rgba(255,255,255,.06);
+    --ink:#EAEEF4;
+    --ink-2:#A3AEBC;
+    --ink-3:#6D7887;
+    --brand:#7FA2EE;
+    --brand-ink:#0B1017;
+    --brand-soft:#1D2941;
+    --scrim:rgba(0,0,0,.6);
+    --bar:rgba(16,22,30,.78);
+    --shadow-1:0 1px 2px rgba(0,0,0,.4);
+    --shadow-2:0 2px 6px rgba(0,0,0,.4), 0 10px 24px rgba(0,0,0,.3);
+    --shadow-3:0 -1px 0 rgba(255,255,255,.07), 0 -12px 40px rgba(0,0,0,.5);
+    --hi:rgba(255,255,255,.06);
+    --st-none:#6D7887;
+    --st-absent:#8896A6;
+    --st-refuse:#EE7B73;
+    --st-consider:#E4AB44;
+    --st-contract:#45CA92;
+    --st-none-bg:#1B222B;
+    --st-absent-bg:#212A35;
+    --st-refuse-bg:#33201F;
+    --st-consider-bg:#302716;
+    --st-contract-bg:#132C24;
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#0B0F15; --surface:#161C25; --surface-2:#1F2731; --sunken:#10161E;
+  --line:rgba(255,255,255,.10); --line-2:rgba(255,255,255,.06);
+  --ink:#EAEEF4; --ink-2:#A3AEBC; --ink-3:#6D7887;
+  --brand:#7FA2EE; --brand-ink:#0B1017; --brand-soft:#1D2941;
+  --scrim:rgba(0,0,0,.6); --bar:rgba(16,22,30,.78);
+  --shadow-1:0 1px 2px rgba(0,0,0,.4);
+  --shadow-2:0 2px 6px rgba(0,0,0,.4), 0 10px 24px rgba(0,0,0,.3);
+  --shadow-3:0 -1px 0 rgba(255,255,255,.07), 0 -12px 40px rgba(0,0,0,.5);
+  --hi:rgba(255,255,255,.06);
+  --st-none:#6D7887; --st-absent:#8896A6; --st-refuse:#EE7B73;
+  --st-consider:#E4AB44; --st-contract:#45CA92;
+  --st-none-bg:#1B222B; --st-absent-bg:#212A35; --st-refuse-bg:#33201F;
+  --st-consider-bg:#302716; --st-contract-bg:#132C24;
+}
+
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{
+  background:var(--ground);color:var(--ink);
+  font-family:var(--font);font-size:15px;line-height:1.6;
+  -webkit-text-size-adjust:100%;
+  -webkit-tap-highlight-color:transparent;
+  -webkit-user-select:none;user-select:none;
+  overscroll-behavior:none;
+}
+input,textarea,.selectable{-webkit-user-select:text;user-select:text}
+button,input,textarea{font:inherit;color:inherit;margin:0}
+button{cursor:pointer;background:none;border:none;padding:0;touch-action:manipulation;-webkit-touch-callout:none}
+svg{display:block;flex:0 0 auto}
+:focus{outline:none}
+:focus-visible{outline:2px solid var(--brand);outline-offset:2px;border-radius:8px}
+@media (prefers-reduced-motion: reduce){*{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+
+/* ================= app shell ================= */
+.app{
+  position:fixed;inset:0;margin:0 auto;max-width:620px;
+  display:flex;flex-direction:column;background:var(--ground);
+  border-left:1px solid var(--line-2);border-right:1px solid var(--line-2);
+}
+@media (max-width:640px){.app{border:none}}
+
+.bar{
+  position:relative;z-index:30;flex:0 0 auto;
+  padding-top:env(safe-area-inset-top);
+  background:var(--bar);
+  -webkit-backdrop-filter:saturate(180%) blur(20px);
+  backdrop-filter:saturate(180%) blur(20px);
+  box-shadow:0 .5px 0 transparent;
+  transition:box-shadow .2s;
+}
+.app.compact .bar{box-shadow:0 .5px 0 var(--line)}
+.bar .inner{display:flex;align-items:center;gap:6px;height:52px;padding:0 8px}
+.bar h1{
+  flex:1;min-width:0;margin:0;text-align:center;
+  font-size:16px;font-weight:700;letter-spacing:-.01em;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  transition:opacity .2s,transform .2s;
+}
+.bar h1 .sub{
+  display:block;font-size:11px;font-weight:600;color:var(--ink-3);
+  letter-spacing:.02em;margin-top:-2px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.app[data-view="home"]:not(.compact) .bar h1{opacity:0;transform:translateY(3px)}
+.navbtn{
+  min-width:40px;height:40px;flex:0 0 auto;border-radius:12px;
+  display:flex;align-items:center;justify-content:center;gap:1px;
+  color:var(--brand);font-size:15px;font-weight:600;
+  transition:background .15s,transform .1s;
+}
+.navbtn:active{background:var(--surface-2);transform:scale(.94)}
+.navbtn[hidden]{display:none}
+.navbtn.ghost{visibility:hidden}
+
+/* ================= stage / screens ================= */
+.stage{position:relative;flex:1;overflow:hidden}
+.screen{
+  position:absolute;inset:0;overflow-y:auto;overflow-x:hidden;
+  -webkit-overflow-scrolling:touch;overscroll-behavior:contain;
+  background:var(--ground);
+  padding:4px 16px calc(40px + env(safe-area-inset-bottom));
+  visibility:hidden;
+}
+.screen.on{visibility:visible;z-index:2}
+.screen.leaving{visibility:visible;z-index:1}
+@keyframes pushIn{from{transform:translateX(100%)}to{transform:translateX(0)}}
+@keyframes pushOut{from{transform:translateX(0);opacity:1}to{transform:translateX(-26%);opacity:.55}}
+@keyframes popIn{from{transform:translateX(-26%);opacity:.55}to{transform:translateX(0);opacity:1}}
+@keyframes popOut{from{transform:translateX(0)}to{transform:translateX(100%)}}
+.screen.a-pushIn{animation:pushIn .34s var(--ease) both}
+.screen.a-pushOut{animation:pushOut .34s var(--ease) both}
+.screen.a-popIn{animation:popIn .34s var(--ease) both}
+.screen.a-popOut{animation:popOut .34s var(--ease) both}
+
+/* ================= type ================= */
+.largetitle{
+  margin:8px 2px 14px;font-size:30px;font-weight:800;letter-spacing:-.025em;
+  text-wrap:balance;line-height:1.2;
+}
+.grouphead{
+  display:flex;align-items:baseline;gap:8px;margin:26px 4px 8px;
+}
+.grouphead h2{
+  margin:0;font-size:12px;font-weight:700;letter-spacing:.09em;color:var(--ink-3);
+}
+.grouphead .n{margin-left:auto;font-size:12px;color:var(--ink-3);font-variant-numeric:tabular-nums}
+.tiny{font-size:12.5px;line-height:1.55;color:var(--ink-3)}
+.hairline{height:1px;background:var(--line);margin:20px 0}
+
+/* ================= controls ================= */
+.btn{
+  width:100%;min-height:var(--tap);padding:0 18px;border-radius:var(--r-md);
+  background:var(--surface);color:var(--ink);font-size:15.5px;font-weight:700;
+  display:flex;align-items:center;justify-content:center;gap:8px;
+  box-shadow:var(--shadow-1);border:1px solid var(--line);
+  transition:transform .1s var(--ease),filter .15s;
+}
+.btn:active{transform:scale(.975);filter:brightness(.96)}
+.btn.primary{background:var(--brand);color:var(--brand-ink);border-color:transparent;box-shadow:var(--shadow-2)}
+.btn.plain{background:transparent;border-color:transparent;box-shadow:none;color:var(--brand)}
+.btn.danger{color:var(--st-refuse)}
+.btn.sm{min-height:40px;font-size:14px;border-radius:11px}
+.row{display:flex;gap:10px}
+.stack{display:flex;flex-direction:column;gap:18px}
+
+.label{
+  display:block;font-size:11.5px;font-weight:700;letter-spacing:.08em;
+  color:var(--ink-3);margin:0 0 7px 3px;
+}
+.field{
+  width:100%;min-height:var(--tap);padding:12px 14px;
+  background:var(--surface);color:var(--ink);font-size:16px;
+  border:1px solid var(--line);border-radius:var(--r-md);
+  box-shadow:var(--shadow-1);appearance:none;
+  transition:border-color .15s,box-shadow .15s;
+}
+.field:focus{border-color:var(--brand);box-shadow:0 0 0 3px var(--brand-soft)}
+.field::placeholder{color:var(--ink-3)}
+textarea.field{min-height:92px;resize:none;line-height:1.6}
+
+.searchbar{position:relative;margin-bottom:4px}
+.searchbar .ic{position:absolute;left:13px;top:50%;transform:translateY(-50%);color:var(--ink-3);pointer-events:none}
+.searchbar .field{padding-left:42px}
+
+/* iOS風セグメント */
+.segwrap{
+  margin:2px -16px 14px;padding:0 16px;overflow-x:auto;
+  scrollbar-width:none;-webkit-overflow-scrolling:touch;
+}
+.segwrap::-webkit-scrollbar{display:none}
+.seg{display:inline-flex;gap:2px;padding:3px;background:var(--sunken);border-radius:12px}
+.seg button{
+  min-height:32px;padding:0 14px;border-radius:9px;white-space:nowrap;
+  font-size:13.5px;font-weight:600;color:var(--ink-2);
+  transition:background .18s,color .18s,box-shadow .18s,transform .1s;
+}
+.seg button:active{transform:scale(.96)}
+.seg button[aria-pressed="true"]{background:var(--surface);color:var(--ink);box-shadow:var(--shadow-1);font-weight:700}
+
+/* ================= inset grouped list ================= */
+.list{
+  background:var(--surface);border-radius:var(--r-md);overflow:hidden;
+  box-shadow:var(--shadow-1);border:1px solid var(--line);
+}
+.list .item{
+  display:flex;align-items:center;gap:12px;width:100%;text-align:left;
+  padding:13px 14px;position:relative;
+  transition:background .12s;
+}
+.list .item:active{background:var(--surface-2)}
+.list .item + .item::before{
+  content:"";position:absolute;left:14px;right:0;top:0;height:1px;background:var(--line-2);
+}
+.item .txt{flex:1;min-width:0}
+.item .nm{font-size:15.5px;font-weight:650;letter-spacing:-.01em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.item .meta{font-size:12.5px;color:var(--ink-3);font-variant-numeric:tabular-nums;margin-top:1px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.item .chev{color:var(--ink-3);opacity:.6}
+.item .pill{
+  flex:0 0 auto;font-family:var(--mono);font-size:11.5px;font-weight:700;
+  padding:4px 8px;border-radius:8px;background:var(--st-consider-bg);color:var(--st-consider);
+  font-variant-numeric:tabular-nums;
+}
+
+.empty{
+  display:flex;flex-direction:column;align-items:center;gap:10px;
+  text-align:center;padding:40px 22px;color:var(--ink-3);
+  background:var(--surface);border:1px solid var(--line);border-radius:var(--r-md);
+  box-shadow:var(--shadow-1);
+}
+.empty .art{color:var(--ink-3);opacity:.45}
+.empty p{margin:0;font-size:13.5px;line-height:1.7}
+
+/* ================= status ================= */
+.chip{
+  display:inline-flex;align-items:center;gap:5px;vertical-align:middle;
+  padding:3px 10px;border-radius:999px;font-size:12px;font-weight:700;line-height:1.5;
+}
+.chip::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.s-none{color:var(--st-none);background:var(--st-none-bg)}
+.s-absent{color:var(--st-absent);background:var(--st-absent-bg)}
+.s-refuse{color:var(--st-refuse);background:var(--st-refuse-bg)}
+.s-consider{color:var(--st-consider);background:var(--st-consider-bg)}
+.s-contract{color:var(--st-contract);background:var(--st-contract-bg)}
+
+/* ================= 部屋プレート ================= */
+.floorhead{display:flex;align-items:center;gap:10px;margin:18px 3px 9px}
+.floorhead:first-child{margin-top:6px}
+.floorhead .fl{
+  font-family:var(--mono);font-size:13px;font-weight:700;color:var(--ink-2);
+  letter-spacing:.03em;font-variant-numeric:tabular-nums;
+}
+.floorhead .prog{font-size:11.5px;color:var(--ink-3);font-variant-numeric:tabular-nums}
+.floorhead .ln{flex:1;height:1px;background:var(--line-2)}
+.floorhead .addf{
+  width:30px;height:30px;border-radius:10px;color:var(--ink-3);
+  display:grid;place-items:center;background:var(--surface);
+  border:1px solid var(--line);box-shadow:var(--shadow-1);
+  transition:transform .1s,color .15s;
+}
+.floorhead .addf:active{transform:scale(.9);color:var(--brand)}
+
+.plates{display:grid;grid-template-columns:repeat(auto-fill,minmax(78px,1fr));gap:8px}
+.plate{
+  position:relative;overflow:hidden;text-align:left;
+  min-height:74px;padding:11px 9px 10px 13px;
+  background:var(--surface);border:1px solid var(--line);border-radius:var(--r-md);
+  display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:2px;
+  box-shadow:var(--shadow-1);
+  transition:transform .1s var(--ease),box-shadow .15s;
+}
+.plate::before{
+  content:"";position:absolute;left:0;right:0;top:0;height:1px;background:var(--hi);
+}
+.plate::after{
+  content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--pc);
+}
+.plate:active{transform:scale(.94)}
+.plate.visited{background:var(--pcbg)}
+.plate .no{
+  font-family:var(--mono);font-size:19px;font-weight:600;line-height:1.15;
+  letter-spacing:.01em;font-variant-numeric:tabular-nums;
+}
+.plate .st{font-size:10.5px;font-weight:700;color:var(--pc);letter-spacing:.02em}
+.plate .dt{font-size:10px;color:var(--ink-3);font-variant-numeric:tabular-nums}
+.plate.due{box-shadow:0 0 0 2px var(--st-consider) inset,var(--shadow-1)}
+
+/* ================= 部屋詳細 ================= */
+.roomhead{
+  position:relative;overflow:hidden;margin:8px 0 18px;padding:20px 18px;
+  border-radius:var(--r-lg);background:var(--pcbg);border:1px solid var(--line);
+  box-shadow:var(--shadow-1);
+  display:flex;align-items:center;gap:16px;
+}
+.roomhead::after{content:"";position:absolute;left:0;top:0;bottom:0;width:5px;background:var(--pc)}
+.roomhead .big{
+  font-family:var(--mono);font-size:34px;font-weight:700;line-height:1;
+  letter-spacing:-.02em;font-variant-numeric:tabular-nums;
+}
+.roomhead .where{display:block;font-size:12.5px;color:var(--ink-2);margin-top:7px}
+
+.visit{
+  padding:14px 15px;background:var(--surface);border:1px solid var(--line);
+  border-radius:var(--r-md);margin-bottom:9px;box-shadow:var(--shadow-1);
+}
+.visit .top{display:flex;align-items:center;gap:9px}
+.visit .date{font-family:var(--mono);font-size:13px;color:var(--ink-2);font-variant-numeric:tabular-nums}
+.visit .del{margin-left:auto;color:var(--ink-3);padding:5px;border-radius:8px;transition:color .15s}
+.visit .del:active{color:var(--st-refuse)}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;font-size:14px;margin:10px 0 0}
+.kv dt{color:var(--ink-3);font-size:12.5px;padding-top:2px;white-space:nowrap}
+.kv dd{margin:0;overflow-wrap:anywhere;white-space:pre-wrap;-webkit-user-select:text;user-select:text}
+.kv a{color:var(--brand);font-weight:700;text-decoration:none}
+.next{
+  display:inline-flex;align-items:center;gap:6px;margin-top:11px;
+  font-size:12.5px;font-weight:700;color:var(--st-consider);
+  background:var(--st-consider-bg);padding:5px 11px;border-radius:999px;
+}
+
+/* ================= sheet ================= */
+.scrim{
+  position:fixed;inset:0;z-index:50;background:var(--scrim);
+  opacity:0;pointer-events:none;transition:opacity .3s var(--ease);
+}
+.scrim.on{opacity:1;pointer-events:auto}
+.sheet{
+  position:fixed;left:0;right:0;bottom:0;z-index:60;
+  margin:0 auto;max-width:620px;max-height:92%;
+  background:var(--ground);border-radius:var(--r-lg) var(--r-lg) 0 0;
+  box-shadow:var(--shadow-3);
+  transform:translateY(101%);transition:transform .38s var(--ease);
+  display:flex;flex-direction:column;
+}
+.sheet.on{transform:translateY(0)}
+.sheet .grab{width:36px;height:5px;border-radius:3px;background:var(--line);margin:8px auto 0;flex:0 0 auto}
+.sheet .head{
+  display:flex;align-items:center;gap:8px;padding:10px 12px 12px;flex:0 0 auto;
+}
+.sheet .head h3{flex:1;margin:0;text-align:center;font-size:16px;font-weight:700;letter-spacing:-.01em}
+.sheet .head button{
+  min-width:56px;height:36px;border-radius:10px;font-size:15px;color:var(--brand);
+  display:flex;align-items:center;justify-content:center;
+}
+.sheet .head button.done{font-weight:700}
+.sheet .head button:active{background:var(--surface-2)}
+.sheet .body{
+  flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;
+  padding:2px 16px calc(24px + env(safe-area-inset-bottom));
+}
+
+/* 結果ピッカー */
+.picker{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.picker button{
+  min-height:62px;border-radius:var(--r-md);background:var(--surface);
+  border:1px solid var(--line);box-shadow:var(--shadow-1);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;
+  font-size:14px;font-weight:700;color:var(--ink-2);
+  transition:transform .12s var(--ease),background .18s,color .18s,box-shadow .18s;
+}
+.picker button::before{
+  content:"";width:10px;height:10px;border-radius:50%;background:var(--pc);
+  transition:transform .18s var(--ease);
+}
+.picker button:active{transform:scale(.95)}
+.picker button[aria-pressed="true"]{
+  background:var(--pc);color:#fff;border-color:transparent;box-shadow:var(--shadow-2);
+}
+.picker button[aria-pressed="true"]::before{background:#fff;transform:scale(1.15)}
+
+.chips{display:flex;gap:7px;overflow-x:auto;margin:9px -16px 0;padding:0 16px 2px;scrollbar-width:none}
+.chips::-webkit-scrollbar{display:none}
+.chips button{
+  min-height:36px;padding:0 13px;border-radius:10px;white-space:nowrap;
+  font-size:13px;font-weight:600;color:var(--ink-2);
+  background:var(--surface);border:1px solid var(--line);box-shadow:var(--shadow-1);
+  transition:transform .1s;
+}
+.chips button:active{transform:scale(.94);color:var(--brand)}
+
+.note{
+  display:flex;gap:9px;padding:12px 13px;border-radius:var(--r-md);
+  background:var(--surface-2);font-size:12.5px;line-height:1.6;color:var(--ink-2);
+}
+.note b{color:var(--ink);font-weight:700}
+.warn{
+  display:flex;gap:9px;padding:12px 13px;border-radius:var(--r-md);margin-bottom:14px;
+  background:var(--st-refuse-bg);color:var(--st-refuse);font-size:12.5px;font-weight:600;line-height:1.6;
+}
+.nudge{
+  display:flex;align-items:center;gap:12px;margin-top:20px;
+  padding:13px 14px;border-radius:var(--r-md);
+  background:var(--st-consider-bg);border:1px solid var(--line);
+}
+.nudge .t{flex:1;min-width:0;font-size:12.5px;line-height:1.55;color:var(--st-consider);font-weight:600}
+.nudge button{
+  flex:0 0 auto;min-height:36px;padding:0 14px;border-radius:10px;
+  font-size:13px;font-weight:700;color:var(--brand-ink);background:var(--st-consider);
+  transition:transform .1s;
+}
+.nudge button:active{transform:scale(.95)}
+
+/* ================= toast ================= */
+.toast{
+  position:fixed;left:50%;bottom:calc(34px + env(safe-area-inset-bottom));z-index:90;
+  transform:translateX(-50%) translateY(14px) scale(.96);
+  display:flex;align-items:center;gap:8px;
+  background:var(--ink);color:var(--ground);
+  padding:11px 18px;border-radius:999px;
+  font-size:14px;font-weight:700;box-shadow:var(--shadow-2);
+  opacity:0;pointer-events:none;transition:opacity .22s var(--ease),transform .22s var(--ease);
+}
+.toast.on{opacity:1;transform:translateX(-50%) translateY(0) scale(1)}
+</style>
+
+<div class="app" id="app" data-view="home">
+  <header class="bar">
+    <div class="inner">
+      <button class="navbtn" id="back" hidden aria-label="戻る"></button>
+      <h1 id="title">訪販カルテ</h1>
+      <button class="navbtn" id="menu" aria-label="データ管理"></button>
+    </div>
+  </header>
+
+  <div class="stage">
+    <!-- ========= 物件一覧 ========= -->
+    <section class="screen on" id="sc-home">
+      <h1 class="largetitle">訪販カルテ</h1>
+      <div class="searchbar">
+        <span class="ic" id="searchIcon"></span>
+        <input class="field" id="q" type="search" placeholder="マンション名を入力" autocomplete="off" enterkeyhint="go">
+      </div>
+      <div id="newbldg"></div>
+      <div id="due"></div>
+      <div id="blist"></div>
+    </section>
+
+    <!-- ========= 部屋一覧 ========= -->
+    <section class="screen" id="sc-rooms">
+      <div class="segwrap">
+        <div class="seg" id="rfilters">
+          <button data-f="all" aria-pressed="true">すべて</button>
+          <button data-f="due" aria-pressed="false">要フォロー</button>
+          <button data-f="contract" aria-pressed="false">契約</button>
+          <button data-f="consider" aria-pressed="false">検討</button>
+          <button data-f="refuse" aria-pressed="false">断り</button>
+          <button data-f="absent" aria-pressed="false">不在</button>
+          <button data-f="none" aria-pressed="false">未訪問</button>
+        </div>
+      </div>
+      <div id="plates"></div>
+      <div class="row" style="margin-top:20px">
+        <button class="btn primary" id="addfloor">＋1フロア</button>
+        <button class="btn" id="addper">全階に＋1部屋</button>
+      </div>
+      <button class="btn sm plain" id="moreadd" style="margin-top:10px">部屋番号の追加・整理</button>
+      <div class="hairline"></div>
+      <div class="row">
+        <button class="btn sm" id="renameb">名前を変更</button>
+        <button class="btn sm danger" id="delb">マンションを削除</button>
+      </div>
+    </section>
+
+    <!-- ========= 部屋詳細 ========= -->
+    <section class="screen" id="sc-room">
+      <div class="roomhead" id="rhead"></div>
+      <button class="btn primary" id="newvisit">訪問を記録する</button>
+      <div class="grouphead"><h2>訪問履歴</h2><span class="n" id="vcount"></span></div>
+      <div id="vlist"></div>
+      <div class="hairline"></div>
+      <button class="btn sm danger" id="delroom">この部屋の記録を削除</button>
+    </section>
+  </div>
+</div>
+
+<div class="scrim" id="scrim"></div>
+<div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
+  <div class="grab"></div>
+  <div class="head">
+    <button id="sheetCancel">キャンセル</button>
+    <h3 id="sheetTitle"></h3>
+    <button class="done" id="sheetDone"></button>
+  </div>
+  <div class="body" id="sheetBody"></div>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(() => {
+"use strict";
+
+/* ================= アイコン ================= */
+const SVG = (d, extra) => `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+const ICON = {
+  back:    SVG(`<path d="M15 5l-7 7 7 7"/>`),
+  chev:    `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.5 5l7 7-7 7"/></svg>`,
+  more:    SVG(`<circle cx="5" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.6" fill="currentColor" stroke="none"/>`),
+  search:  `<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.6-3.6"/></svg>`,
+  plus:    SVG(`<path d="M12 5.5v13M5.5 12h13"/>`),
+  cal:     `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="5.5" width="17" height="15" rx="3"/><path d="M8 3v4M16 3v4M3.5 10.5h17"/></svg>`,
+  trash:   `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M9.5 7V4.8h5V7M6.5 7l.9 12.2h9.2L17.5 7"/></svg>`,
+  save:    SVG(`<path d="M12 4v11m0 0l-4-4m4 4l4-4M4.5 19.5h15"/>`),
+  copy:    SVG(`<rect x="9" y="9" width="11" height="11" rx="2.5"/><path d="M5.5 15H5a1.5 1.5 0 01-1.5-1.5v-9A1.5 1.5 0 015 3h9A1.5 1.5 0 0115.5 4.5V5"/>`),
+  table:   SVG(`<rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><path d="M3.5 9.5h17M9.5 9.5v10"/>`),
+  restore: SVG(`<path d="M4 9.5A8 8 0 1112 20a8 8 0 01-7.4-5"/><path d="M3.5 4.5v5h5"/>`),
+  build:   `<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 21V5.5A1.5 1.5 0 016.5 4h11A1.5 1.5 0 0119 5.5V21M3 21h18"/><path d="M9 8h1.5M13.5 8H15M9 12h1.5M13.5 12H15M9 16h1.5M13.5 16H15"/></svg>`
+};
+
+/* ================= 定数 ================= */
+const RESULTS = [
+  {k:"absent",   label:"不在", color:"var(--st-absent)",   bg:"var(--st-absent-bg)"},
+  {k:"refuse",   label:"断り", color:"var(--st-refuse)",   bg:"var(--st-refuse-bg)"},
+  {k:"consider", label:"検討", color:"var(--st-consider)", bg:"var(--st-consider-bg)"},
+  {k:"contract", label:"契約", color:"var(--st-contract)", bg:"var(--st-contract-bg)"}
+];
+const R = Object.fromEntries(RESULTS.map(r => [r.k, r]));
+const NONE = {k:"none", label:"未訪問", color:"var(--st-none)", bg:"var(--st-none-bg)"};
+const CARRIERS = ["ドコモ光","auひかり","ソフトバンク光","NURO光","eo光","コミュファ光","J:COM","フレッツ光","楽天ひかり","ケーブルTV","ポケットWi-Fi","なし","不明"];
+const DEF_FLOORS = 10, DEF_PER = 8;
+
+/* ================= 保存 ================= */
+const KEY = "hohan_karte_v1";
+let memOnly = false;
+let DB = {v:1, buildings:[]};
+
+function load(){
+  try {
+    const raw = localStorage.getItem(KEY);
+    if (raw) DB = JSON.parse(raw);
+    localStorage.setItem(KEY + "_probe", "1");
+    localStorage.removeItem(KEY + "_probe");
+  } catch (e) { memOnly = true; }
+  if (!DB || !Array.isArray(DB.buildings)) DB = {v:1, buildings:[]};
+  if (!DB.meta) DB.meta = {};
+}
+/* 何日前か。日付が無ければ null */
+function daysSince(d){
+  if (!d) return null;
+  const ms = new Date(today()) - new Date(d);
+  return Math.max(0, Math.round(ms / 86400000));
+}
+function markBackedUp(){ DB.meta.lastBackup = today(); save(); if (view === "home") renderHome(); }
+/* 記録が1件でもあるか */
+function hasData(){
+  return DB.buildings.some(b => (b.rooms || []).some(r => r.visits && r.visits.length));
+}
+function save(){
+  if (memOnly) return;
+  try { localStorage.setItem(KEY, JSON.stringify(DB)); }
+  catch (e) { memOnly = true; toast("保存できませんでした"); }
+}
+
+/* ================= 小道具 ================= */
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+const today = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+};
+const fmtDate = s => s ? s.slice(5).replace("-", "/") : "";
+let toastTimer = null;
+function toast(msg){
+  const t = $("#toast");
+  t.textContent = msg;
+  t.classList.add("on");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove("on"), 2100);
+}
+
+/* ================= 部屋・階の計算 ================= */
+function roomKey(no){
+  const m = String(no).match(/^\d+/);
+  return m ? [0, parseInt(m[0], 10), String(no)] : [1, 0, String(no)];
+}
+function sortRooms(rooms){
+  return rooms.slice().sort((a, b) => {
+    const x = roomKey(a.no), y = roomKey(b.no);
+    return x[0] - y[0] || x[1] - y[1] || x[2].localeCompare(y[2], "ja");
+  });
+}
+function lastVisit(room){
+  if (!room.visits || !room.visits.length) return null;
+  return room.visits.slice().sort((a, b) =>
+    a.date < b.date ? 1 : a.date > b.date ? -1 : String(b.at || "").localeCompare(String(a.at || "")))[0];
+}
+function statusOf(room){
+  const v = lastVisit(room);
+  return v ? (R[v.result] || NONE) : NONE;
+}
+function isDue(room){
+  const v = lastVisit(room);
+  return !!(v && v.next && v.next <= today());
+}
+function bStats(b){
+  const rooms = b.rooms || [];
+  const visited = rooms.filter(r => r.visits && r.visits.length);
+  const contracts = rooms.filter(r => statusOf(r).k === "contract").length;
+  const dues = rooms.filter(isDue).length;
+  let last = "";
+  visited.forEach(r => { const v = lastVisit(r); if (v && v.date > last) last = v.date; });
+  return {total: rooms.length, visited: visited.length, contracts, dues, last};
+}
+/* 101→1階, 1008→10階, 2001→20階 */
+function floorOf(no){
+  const s = String(no);
+  if (!/^\d{3,4}$/.test(s)) return null;
+  const f = Math.floor(parseInt(s, 10) / 100);
+  return f >= 1 ? f : null;
+}
+const roomNo = (floor, idx) => String(floor * 100 + idx);
+function byFloor(rooms){
+  const map = new Map();
+  rooms.forEach(r => {
+    const k = floorOf(r.no);
+    const key = k === null ? "other" : k;
+    if (!map.has(key)) map.set(key, []);
+    map.get(key).push(r);
+  });
+  return [...map.entries()].sort((a, b) => {
+    if (a[0] === "other") return 1;
+    if (b[0] === "other") return -1;
+    return a[0] - b[0];
+  });
+}
+function topFloor(b){
+  return (b.rooms || []).reduce((m, r) => Math.max(m, floorOf(r.no) || 0), 0);
+}
+function perFloor(b){
+  let m = 0;
+  byFloor(b.rooms || []).forEach(([k, list]) => { if (k !== "other") m = Math.max(m, list.length); });
+  return m || DEF_PER;
+}
+/* その階に、まだ無い番号を n 部屋ぶん足す */
+function fillFloor(b, floor, n){
+  let added = 0, idx = 1;
+  while (added < n && idx <= 99) {
+    const no = roomNo(floor, idx);
+    if (!b.rooms.some(r => r.no === no)) { b.rooms.push({id: uid(), no, visits: []}); added++; }
+    idx++;
+  }
+  return added;
+}
+/* その階の部屋数が target に届くまで足す */
+function ensureFloor(b, floor, target){
+  const have = b.rooms.filter(r => floorOf(r.no) === floor).length;
+  return have >= target ? 0 : fillFloor(b, floor, target - have);
+}
+function buildGrid(b, floors, per){
+  let added = 0;
+  for (let f = 1; f <= floors; f++) added += ensureFloor(b, f, per);
+  return added;
+}
+
+/* ================= 画面遷移 ================= */
+let view = "home", curB = null, curR = null, filter = "all", animating = false;
+const ORDER = {home: 0, rooms: 1, room: 2};
+
+function go(v, animate){
+  const from = $("#sc-" + view), to = $("#sc-" + v);
+  const dir = ORDER[v] > ORDER[view] ? "push" : "pop";
+  const same = v === view;
+  view = v;
+  $("#app").dataset.view = v;
+  $("#back").hidden = (v === "home");
+  render();
+
+  if (same || animate === false || animating) {
+    document.querySelectorAll(".screen").forEach(s => s.classList.remove("on", "leaving"));
+    to.classList.add("on");
+    syncBar();
+    return;
+  }
+  animating = true;
+  if (dir === "push") to.scrollTop = 0;
+  to.classList.add("on", "a-" + dir + "In");
+  from.classList.remove("on");
+  from.classList.add("leaving", "a-" + dir + "Out");
+
+  const done = () => {
+    from.classList.remove("leaving", "a-pushOut", "a-popOut");
+    to.classList.remove("a-pushIn", "a-popIn");
+    animating = false;
+    syncBar();
+  };
+  let n = 0;
+  const tick = () => { if (++n >= 2) done(); };
+  from.addEventListener("animationend", tick, {once: true});
+  to.addEventListener("animationend", tick, {once: true});
+  setTimeout(() => { if (animating) done(); }, 500);
+}
+function getB(){ return DB.buildings.find(b => b.id === curB) || null; }
+function getR(){ const b = getB(); return b ? (b.rooms.find(r => r.id === curR) || null) : null; }
+
+/* ヘッダーの境界線とタイトルの出し分け */
+function syncBar(){
+  const s = $("#sc-" + view);
+  $("#app").classList.toggle("compact", s.scrollTop > (view === "home" ? 34 : 6));
+}
+document.querySelectorAll(".screen").forEach(s => s.addEventListener("scroll", () => {
+  if (s.classList.contains("on")) syncBar();
+}, {passive: true}));
+
+/* ================= 描画 ================= */
+function render(){
+  if (view === "home") renderHome();
+  else if (view === "rooms") renderRooms();
+  else renderRoom();
+}
+const warnBanner = () => memOnly
+  ? `<div class="warn"><span>この端末では自動保存が使えません。閉じると消えるので、右上の… → バックアップで控えを取ってください。</span></div>` : "";
+
+/* ---- 物件一覧 ---- */
+function renderHome(){
+  $("#title").innerHTML = "訪販カルテ";
+  const q = $("#q").value.trim();
+  const list = DB.buildings
+    .filter(b => !q || b.name.toLowerCase().includes(q.toLowerCase()))
+    .sort((a, b) => {
+      const x = bStats(a).last, y = bStats(b).last;
+      return (y || "").localeCompare(x || "") || a.name.localeCompare(b.name, "ja");
+    });
+
+  const exact = DB.buildings.some(b => b.name === q);
+  $("#newbldg").innerHTML = (q && !exact)
+    ? `<button class="btn primary" id="createb" style="margin-top:12px">${ICON.plus}「${esc(q)}」を新規登録</button>`
+    : "";
+
+  const dues = [];
+  DB.buildings.forEach(b => (b.rooms || []).forEach(r => { if (isDue(r)) dues.push({b, r, v: lastVisit(r)}); }));
+  dues.sort((a, b) => String(a.v.next).localeCompare(String(b.v.next)));
+
+  const since = daysSince(DB.meta.lastBackup);
+  const nudge = (!q && hasData() && (since === null || since >= 14))
+    ? `<div class="nudge">
+        <span class="t">${since === null ? "まだ一度もバックアップしていません。" : `前回のバックアップから${since}日たちました。`}<br>控えを取っておくと機種変でも安心です。</span>
+        <button id="nudgeBtn">バックアップ</button>
+      </div>` : "";
+
+  $("#due").innerHTML = nudge + ((!q && dues.length) ? `
+    <div class="grouphead"><h2>再訪予定</h2><span class="n">${dues.length}件</span></div>
+    <div class="list">${dues.slice(0, 10).map(d => `
+      <button class="item" data-goto="${d.b.id}|${d.r.id}">
+        <span class="pill">${esc(fmtDate(d.v.next))}</span>
+        <span class="txt">
+          <span class="nm">${esc(d.b.name)}</span>
+          <span class="meta">${esc(d.r.no)}号室 ・ ${esc(d.v.name || R[d.v.result].label)}</span>
+        </span>
+        <span class="chev">${ICON.chev}</span>
+      </button>`).join("")}</div>` : "");
+
+  $("#blist").innerHTML = warnBanner() + (
+    list.length ? `
+      <div class="grouphead"><h2>マンション</h2><span class="n">${list.length}件</span></div>
+      <div class="list">${list.map(b => {
+        const s = bStats(b);
+        const bits = [`${s.visited}/${s.total}部屋`];
+        if (s.contracts) bits.push(`契約${s.contracts}`);
+        if (s.last) bits.push(`最終 ${fmtDate(s.last)}`);
+        return `<button class="item" data-b="${b.id}">
+          <span class="txt">
+            <span class="nm">${esc(b.name)}</span>
+            <span class="meta">${bits.join(" ・ ")}</span>
+          </span>
+          ${s.dues ? `<span class="pill">再訪${s.dues}</span>` : ""}
+          <span class="chev">${ICON.chev}</span>
+        </button>`;
+      }).join("")}</div>`
+    : `<div class="empty" style="margin-top:22px">
+        <span class="art">${ICON.build}</span>
+        <p>${q ? `「${esc(q)}」はまだ登録されていません。<br>上のボタンから登録できます。`
+              : "まだ登録がありません。<br>上の欄にマンション名を入れて始めましょう。"}</p>
+      </div>`
+  );
+}
+
+/* ---- 部屋一覧 ---- */
+function renderRooms(){
+  const b = getB();
+  if (!b) return go("home", false);
+  const s = bStats(b);
+  $("#title").innerHTML = `${esc(b.name)}<span class="sub">${s.visited}/${s.total}部屋 訪問済み ・ 契約${s.contracts}</span>`;
+  $("#rfilters").querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", String(x.dataset.f === filter)));
+
+  let rooms = sortRooms(b.rooms || []);
+  if (filter === "due") rooms = rooms.filter(isDue);
+  else if (filter !== "all") rooms = rooms.filter(r => statusOf(r).k === filter);
+
+  const plate = r => {
+    const st = statusOf(r), v = lastVisit(r);
+    return `<button class="plate${v ? " visited" : ""}${isDue(r) ? " due" : ""}" data-r="${r.id}" style="--pc:${st.color};--pcbg:${st.bg}">
+      <span class="no">${esc(r.no)}</span>
+      <span class="st">${st.label}</span>
+      ${v ? `<span class="dt">${fmtDate(v.date)}</span>` : ""}
+    </button>`;
+  };
+
+  $("#plates").innerHTML = rooms.length ? byFloor(rooms).map(([f, list]) => {
+    const done = list.filter(r => r.visits && r.visits.length).length;
+    return `<div class="floorhead">
+        <span class="fl">${f === "other" ? "その他" : f + "F"}</span>
+        <span class="prog">${done}/${list.length}</span>
+        <span class="ln"></span>
+        ${(f === "other" || filter !== "all") ? "" : `<button class="addf" data-addf="${f}" aria-label="${f}階に部屋を追加">${ICON.plus}</button>`}
+      </div>
+      <div class="plates">${sortRooms(list).map(plate).join("")}</div>`;
+  }).join("")
+  : `<div class="empty"><span class="art">${ICON.build}</span><p>${
+      filter === "all" ? "部屋番号がまだありません。<br>下のボタンから追加してください。" : "該当する部屋はありません。"
+    }</p></div>`;
+}
+
+/* ---- 部屋詳細 ---- */
+function renderRoom(){
+  const b = getB(), r = getR();
+  if (!b || !r) return go("rooms", false);
+  const st = statusOf(r);
+  $("#title").innerHTML = `${esc(r.no)}号室<span class="sub">${esc(b.name)}</span>`;
+
+  $("#rhead").setAttribute("style", `--pc:${st.color};--pcbg:${st.bg}`);
+  $("#rhead").innerHTML = `
+    <span class="big">${esc(r.no)}</span>
+    <span>
+      <span class="chip s-${st.k}">${st.label}</span>
+      <span class="where">${esc(b.name)}</span>
+    </span>`;
+
+  const visits = (r.visits || []).slice().sort((a, b2) =>
+    a.date < b2.date ? 1 : a.date > b2.date ? -1 : String(b2.at || "").localeCompare(String(a.at || "")));
+  $("#vcount").textContent = visits.length ? `${visits.length}件` : "";
+  $("#vlist").innerHTML = visits.length ? visits.map(v => {
+    const rr = R[v.result] || NONE;
+    const rows = [];
+    if (v.name) rows.push(["お名前", esc(v.name)]);
+    if (v.tel) rows.push(["電話", `<a href="tel:${esc(v.tel.replace(/[^\d+]/g, ""))}">${esc(v.tel)}</a>`]);
+    if (v.carrier) rows.push(["現在の回線", esc(v.carrier)]);
+    if (v.memo) rows.push(["メモ", esc(v.memo)]);
+    return `<div class="visit">
+      <div class="top">
+        <span class="date">${esc(v.date)}</span>
+        <span class="chip s-${rr.k}">${rr.label}</span>
+        <button class="del" data-delv="${v.id}" aria-label="この記録を削除">${ICON.trash}</button>
+      </div>
+      ${rows.length ? `<dl class="kv">${rows.map(x => `<dt>${x[0]}</dt><dd>${x[1]}</dd>`).join("")}</dl>` : ""}
+      ${v.next ? `<span class="next">${ICON.cal}次回 ${esc(v.next)}</span>` : ""}
+    </div>`;
+  }).join("") : `<div class="empty"><p>まだ訪問記録がありません。</p></div>`;
+}
+
+/* ================= シート ================= */
+let sheetDoneFn = null;
+function openSheet({title, done, cancel, html, onDone}){
+  $("#sheetTitle").textContent = title;
+  $("#sheetCancel").textContent = cancel || "キャンセル";
+  $("#sheetDone").textContent = done || "";
+  $("#sheetDone").style.visibility = done ? "visible" : "hidden";
+  $("#sheetBody").innerHTML = html;
+  $("#sheetBody").scrollTop = 0;
+  sheetDoneFn = onDone || null;
+  $("#scrim").classList.add("on");
+  $("#sheet").classList.add("on");
+}
+function closeSheet(){
+  $("#scrim").classList.remove("on");
+  $("#sheet").classList.remove("on");
+  sheetDoneFn = null;
+  if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+}
+$("#scrim").addEventListener("click", closeSheet);
+$("#sheetCancel").addEventListener("click", closeSheet);
+$("#sheetDone").addEventListener("click", () => { if (sheetDoneFn) sheetDoneFn(); });
+document.addEventListener("keydown", e => { if (e.key === "Escape") closeSheet(); });
+
+/* ---- 訪問フォーム ---- */
+function visitForm(){
+  const r = getR();
+  let picked = "";
+  openSheet({
+    title: `${r.no}号室の記録`,
+    done: "保存",
+    html: `
+    <div class="stack">
+      <div>
+        <span class="label">訪問結果</span>
+        <div class="picker" id="pick">
+          ${RESULTS.map(x => `<button type="button" data-k="${x.k}" aria-pressed="false" style="--pc:${x.color}">${x.label}</button>`).join("")}
+        </div>
+      </div>
+      <div>
+        <span class="label">訪問日</span>
+        <input class="field" type="date" id="f-date" value="${today()}">
+      </div>
+      <div>
+        <span class="label">お名前</span>
+        <input class="field" id="f-name" placeholder="例）田中様" autocomplete="off">
+      </div>
+      <div>
+        <span class="label">電話番号</span>
+        <input class="field" id="f-tel" type="tel" inputmode="tel" placeholder="090-0000-0000" autocomplete="off">
+      </div>
+      <div>
+        <span class="label">現在の回線・キャリア</span>
+        <input class="field" id="f-carrier" placeholder="例）ドコモ光" autocomplete="off">
+        <div class="chips" id="carchips">${CARRIERS.map(c => `<button type="button" data-c="${esc(c)}">${esc(c)}</button>`).join("")}</div>
+      </div>
+      <div>
+        <span class="label">メモ</span>
+        <textarea class="field" id="f-memo" placeholder="反応・家族構成・再訪のコツなど"></textarea>
+      </div>
+      <div>
+        <span class="label">次回訪問日</span>
+        <input class="field" type="date" id="f-next">
+      </div>
+      <p class="tiny" style="margin:-4px 3px 0">結果だけ選んで保存でもOK。あとから何度でも追記できます。</p>
+    </div>`,
+    onDone: () => {
+      if (!picked) return toast("訪問結果を選んでください");
+      const room = getR();
+      room.visits = room.visits || [];
+      room.visits.push({
+        id: uid(),
+        date: $("#f-date").value || today(),
+        result: picked,
+        name: $("#f-name").value.trim(),
+        tel: $("#f-tel").value.trim(),
+        carrier: $("#f-carrier").value.trim(),
+        memo: $("#f-memo").value.trim(),
+        next: $("#f-next").value || "",
+        at: new Date().toISOString()
+      });
+      save(); closeSheet(); render(); toast("記録しました");
+    }
+  });
+
+  $("#pick").addEventListener("click", e => {
+    const btn = e.target.closest("button[data-k]");
+    if (!btn) return;
+    picked = btn.dataset.k;
+    $("#pick").querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", String(x === btn)));
+  });
+  $("#carchips").addEventListener("click", e => {
+    const btn = e.target.closest("button[data-c]");
+    if (btn) $("#f-carrier").value = btn.dataset.c;
+  });
+}
+
+/* ---- 部屋番号の追加・整理 ---- */
+function roomForm(){
+  const b = getB();
+  openSheet({
+    title: "部屋番号の追加・整理",
+    cancel: "閉じる",
+    html: `
+    <div class="stack">
+      <div class="note"><span>いま <b>${topFloor(b)}階建て</b>・各階 最大<b>${perFloor(b)}部屋</b>（全${(b.rooms || []).length}部屋）</span></div>
+      <div>
+        <span class="label">階数と部屋数でまとめて用意</span>
+        <div class="row">
+          <input class="field" id="g-floors" type="number" inputmode="numeric" min="1" max="60" value="${Math.max(topFloor(b), DEF_FLOORS)}" aria-label="階数">
+          <input class="field" id="g-per" type="number" inputmode="numeric" min="1" max="30" value="${perFloor(b)}" aria-label="各階の部屋数">
+        </div>
+        <p class="tiny" style="margin:7px 3px 0">左が階数、右が1フロアあたりの部屋数。すでにある番号と記録はそのまま残ります。</p>
+        <button class="btn primary" id="g-run" style="margin-top:10px">この形で用意する</button>
+      </div>
+      <div>
+        <span class="label">番号を直接入力して追加</span>
+        <textarea class="field" id="f-rooms" placeholder="101 102 103&#10;201-208&#10;1201A" autocomplete="off"></textarea>
+        <p class="tiny" style="margin:7px 3px 0">スペース・カンマ・改行で区切り。<b style="color:var(--ink)">201-208</b> と書けば連番で作れます。</p>
+        <button class="btn" id="f-save" style="margin-top:10px">追加する</button>
+      </div>
+      <div class="hairline" style="margin:2px 0"></div>
+      <button class="btn danger" id="g-clean">${ICON.trash}記録のない部屋を消す</button>
+    </div>`
+  });
+
+  $("#g-run").addEventListener("click", () => {
+    const floors = Math.min(60, Math.max(1, parseInt($("#g-floors").value, 10) || DEF_FLOORS));
+    const per = Math.min(30, Math.max(1, parseInt($("#g-per").value, 10) || DEF_PER));
+    const n = buildGrid(getB(), floors, per);
+    save(); closeSheet(); render();
+    toast(n ? `${n}部屋を追加しました` : "すでに揃っています");
+  });
+
+  $("#g-clean").addEventListener("click", () => {
+    const bb = getB();
+    const gone = bb.rooms.filter(r => !r.visits || !r.visits.length).length;
+    if (!gone) return toast("消せる部屋はありません");
+    if (!confirm(`訪問記録のない ${gone}部屋 を一覧から消します。記録のある部屋は残ります。よろしいですか？`)) return;
+    bb.rooms = bb.rooms.filter(r => r.visits && r.visits.length);
+    save(); closeSheet(); render(); toast(`${gone}部屋を消しました`);
+  });
+
+  $("#f-save").addEventListener("click", () => {
+    const b2 = getB();
+    const tokens = $("#f-rooms").value.split(/[\s,、，\n]+/).filter(Boolean);
+    const nums = [];
+    tokens.forEach(t => {
+      const m = t.match(/^(\d+)\s*[-–~〜]\s*(\d+)$/);
+      if (m) {
+        let a = parseInt(m[1], 10), z = parseInt(m[2], 10);
+        if (a > z) [a, z] = [z, a];
+        if (z - a > 500) z = a + 500;
+        const w = m[1].length;
+        for (let i = a; i <= z; i++) nums.push(String(i).padStart(w, "0"));
+      } else nums.push(t);
+    });
+    let added = 0;
+    nums.forEach(no => {
+      if (b2.rooms.some(r => r.no === no)) return;
+      b2.rooms.push({id: uid(), no, visits: []});
+      added++;
+    });
+    save(); closeSheet(); render();
+    toast(added ? `${added}部屋を追加しました` : "追加できる番号がありませんでした");
+  });
+}
+
+/* ---- データ管理 ---- */
+function menuSheet(){
+  openSheet({
+    title: "データ管理",
+    cancel: "閉じる",
+    html: `
+    <div class="stack">
+      <div class="note"><span>記録はこの端末の中に保存されています。機種変の前と、月に一度はバックアップを。<br>
+        最終バックアップ: <b>${DB.meta.lastBackup ? `${DB.meta.lastBackup}（${daysSince(DB.meta.lastBackup)}日前）` : "まだありません"}</b></span></div>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <button class="btn" id="m-backup">${ICON.save}バックアップを保存</button>
+        <button class="btn" id="m-copy">${ICON.copy}バックアップをコピー</button>
+        <button class="btn" id="m-sheet">${ICON.table}表計算に貼る形でコピー</button>
+      </div>
+      <div>
+        <span class="label">復元</span>
+        <textarea class="field" id="m-restore" placeholder="コピーしておいたバックアップを貼り付け"></textarea>
+        <button class="btn" id="m-load" style="margin-top:10px">${ICON.restore}読み込んで復元</button>
+      </div>
+    </div>`
+  });
+
+  $("#m-backup").addEventListener("click", async () => {
+    const data = JSON.stringify(DB, null, 2);
+    try {
+      const blob = new Blob([data], {type: "application/json"});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `訪販カルテ_${today()}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+      markBackedUp();
+      toast("ファイルに保存しました");
+    } catch (e) {
+      await copy(data); markBackedUp();
+      toast("コピーしました。メモ帳に貼って保存を");
+    }
+  });
+  $("#m-copy").addEventListener("click", async () => {
+    await copy(JSON.stringify(DB));
+    markBackedUp();
+    toast("バックアップをコピーしました");
+  });
+  $("#m-sheet").addEventListener("click", async () => {
+    const head = ["マンション","部屋番号","訪問日","結果","お名前","電話番号","現在の回線","メモ","次回訪問日"];
+    const rows = [head.join("\t")];
+    DB.buildings.forEach(b => sortRooms(b.rooms || []).forEach(r => (r.visits || []).forEach(v => {
+      rows.push([b.name, r.no, v.date, (R[v.result] || NONE).label, v.name, v.tel, v.carrier,
+                 String(v.memo || "").replace(/\s+/g, " "), v.next].map(x => String(x ?? "")).join("\t"));
+    })));
+    if (rows.length === 1) return toast("記録がまだありません");
+    await copy(rows.join("\n"));
+    toast(`${rows.length - 1}件コピーしました`);
+  });
+  $("#m-load").addEventListener("click", () => {
+    const txt = $("#m-restore").value.trim();
+    if (!txt) return toast("バックアップを貼り付けてください");
+    let parsed;
+    try { parsed = JSON.parse(txt); } catch (e) { return toast("形式が違うようです"); }
+    if (!parsed || !Array.isArray(parsed.buildings)) return toast("中身が読み取れませんでした");
+    if (!confirm(`今のデータを、この内容（マンション${parsed.buildings.length}件）に置き換えます。よろしいですか？`)) return;
+    DB = parsed;
+    if (!DB.meta) DB.meta = {};
+    save(); closeSheet(); curB = curR = null; go("home", false); toast("復元しました");
+  });
+}
+async function copy(text){
+  try { await navigator.clipboard.writeText(text); return true; }
+  catch (e) {
+    const ta = document.createElement("textarea");
+    ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
+    document.body.appendChild(ta); ta.select();
+    try { document.execCommand("copy"); } catch (e2) {}
+    document.body.removeChild(ta);
+    return true;
+  }
+}
+
+/* ================= イベント ================= */
+$("#back").innerHTML = ICON.back;
+$("#menu").innerHTML = ICON.more;
+$("#searchIcon").innerHTML = ICON.search;
+
+$("#q").addEventListener("input", renderHome);
+$("#q").addEventListener("keydown", e => {
+  if (e.key === "Enter") { e.preventDefault(); const b = $("#createb"); if (b) b.click(); else $("#q").blur(); }
+});
+
+document.addEventListener("click", e => {
+  const t = e.target;
+
+  if (t.closest("#createb")) {
+    const name = $("#q").value.trim();
+    if (!name) return;
+    const b = {id: uid(), name, rooms: [], createdAt: new Date().toISOString()};
+    buildGrid(b, DEF_FLOORS, DEF_PER);
+    DB.buildings.push(b); save();
+    $("#q").value = ""; $("#q").blur();
+    curB = b.id; filter = "all"; go("rooms");
+    toast(`101〜${roomNo(DEF_FLOORS, DEF_PER)}を用意しました`);
+    return;
+  }
+  if (t.closest("#nudgeBtn")) { menuSheet(); return; }
+
+  const goto = t.closest("[data-goto]");
+  if (goto) {
+    const [bid, rid] = goto.dataset.goto.split("|");
+    curB = bid; curR = rid; filter = "all"; go("room");
+    return;
+  }
+  const bcard = t.closest("[data-b]");
+  if (bcard) { curB = bcard.dataset.b; filter = "all"; go("rooms"); return; }
+
+  const addf = t.closest("[data-addf]");
+  if (addf) {
+    const f = parseInt(addf.dataset.addf, 10);
+    fillFloor(getB(), f, 1);
+    save(); renderRooms(); toast(`${f}階に1部屋追加しました`);
+    return;
+  }
+  const plate = t.closest("[data-r]");
+  if (plate) { curR = plate.dataset.r; go("room"); return; }
+
+  const delv = t.closest("[data-delv]");
+  if (delv) {
+    if (!confirm("この訪問記録を削除しますか？")) return;
+    const r = getR();
+    r.visits = r.visits.filter(v => v.id !== delv.dataset.delv);
+    save(); render(); toast("削除しました");
+    return;
+  }
+});
+
+$("#back").addEventListener("click", () => go(view === "room" ? "rooms" : "home"));
+$("#menu").addEventListener("click", menuSheet);
+$("#moreadd").addEventListener("click", roomForm);
+$("#newvisit").addEventListener("click", visitForm);
+
+$("#rfilters").addEventListener("click", e => {
+  const btn = e.target.closest("button[data-f]");
+  if (!btn) return;
+  filter = btn.dataset.f;
+  renderRooms();
+});
+
+/* ＋1フロア: 最上階の次の階を、いまと同じ部屋数ぶん作る */
+$("#addfloor").addEventListener("click", () => {
+  const b = getB();
+  const f = topFloor(b) + 1;
+  if (f > 60) return toast("60階までです");
+  fillFloor(b, f, perFloor(b));
+  save(); filter = "all"; render();
+  toast(`${f}階を追加しました`);
+});
+/* 全階に＋1部屋 */
+$("#addper").addEventListener("click", () => {
+  const b = getB();
+  const floors = byFloor(b.rooms || []).map(x => x[0]).filter(x => x !== "other");
+  if (!floors.length) return toast("先にフロアを追加してください");
+  let n = 0;
+  floors.forEach(f => { n += fillFloor(b, f, 1); });
+  save(); render(); toast(`${n}部屋を追加しました`);
+});
+
+$("#renameb").addEventListener("click", () => {
+  const b = getB();
+  const name = prompt("マンション名", b.name);
+  if (name && name.trim()) { b.name = name.trim(); save(); render(); toast("変更しました"); }
+});
+$("#delb").addEventListener("click", () => {
+  const b = getB();
+  if (!confirm(`「${b.name}」の記録をすべて削除します。元に戻せません。よろしいですか？`)) return;
+  DB.buildings = DB.buildings.filter(x => x.id !== b.id);
+  save(); curB = curR = null; go("home");
+});
+$("#delroom").addEventListener("click", () => {
+  const b = getB(), r = getR();
+  if (!confirm(`${r.no}号室の記録を削除します。よろしいですか？`)) return;
+  b.rooms = b.rooms.filter(x => x.id !== r.id);
+  save(); curR = null; go("rooms");
+});
+
+/* ================= 起動 ================= */
+load();
+render();
+syncBar();
+})();
+</script>
+
+<script>
+/* オフライン動作 */
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("./sw.js").catch(() => {});
+  });
+}
+/* 保存領域を「消さないで」とブラウザに申請する */
+if (navigator.storage && navigator.storage.persist) {
+  navigator.storage.persist().catch(() => {});
+}
+</script>
+</body>
+</html>
