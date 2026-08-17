@@ -1253,6 +1253,56 @@ function tombBuilding(name){ if (name && !DB.meta.deleted.buildings.includes(nam
 
 window.addEventListener("online", () => queueSync());
 
+/* ---- はじめての人に出る画面 ---- */
+function welcomeSheet(){
+  DB.meta.welcomed = true; save();
+  openSheet({
+    title: "はじめに",
+    cancel: "あとで",
+    done: "はじめる",
+    html: `
+    <div class="stack">
+      <div class="note"><span>マンションごとに訪問結果を記録するアプリです。<br>
+        チームで使う場合は、下の2つを入れると<b>全員の記録が共有</b>されます。</span></div>
+      <div>
+        <span class="label">自分の担当名</span>
+        <input class="field" id="w-owner" placeholder="例）竹内" autocomplete="off">
+        <p class="tiny" style="margin:7px 3px 0">訪問を記録するとき、担当欄にこの名前が最初から入ります。</p>
+      </div>
+      <div>
+        <span class="label">同期URL</span>
+        <input class="field" id="w-url" placeholder="担当者から届いたURL" autocomplete="off" spellcheck="false">
+        <button class="btn sm" id="w-paste" style="margin-top:9px">${ICON.copy}クリップボードから貼り付け</button>
+        <p class="tiny" style="margin:8px 3px 0">案内ページで「同期URLをコピー」を押してから、このボタンを押してください。<br>
+          ひとりで使う場合は空のままで大丈夫です（あとから設定できます）。</p>
+      </div>
+    </div>`,
+    onDone: async () => {
+      DB.meta.owner = $("#w-owner").value.trim();
+      const u = $("#w-url").value.trim();
+      if (u) setSyncUrl(u);
+      save(); closeSheet(); render();
+      if (u) await doSync(true); else toast("準備できました");
+    }
+  });
+  bindPaste("#w-paste", "#w-url");
+}
+
+/* クリップボードから読み取って欄に入れる */
+function bindPaste(btnSel, targetSel){
+  const btn = $(btnSel);
+  if (!btn) return;
+  btn.addEventListener("click", async () => {
+    try {
+      const t = await navigator.clipboard.readText();
+      if (t && t.trim()) { $(targetSel).value = t.trim(); toast("貼り付けました"); }
+      else toast("クリップボードが空です");
+    } catch (e) {
+      toast("欄を長押しして「ペースト」を選んでください");
+    }
+  });
+}
+
 /* ---- 設定 ---- */
 function menuSheet(){
   openSheet({
@@ -1270,7 +1320,8 @@ function menuSheet(){
 
       <div>
         <span class="label">スプレッドシート同期</span>
-        <input class="field" id="m-url" value="${esc(DB.meta.syncUrl || "")}" placeholder="GASのウェブアプリURL（/exec で終わるもの）" autocomplete="off" spellcheck="false">
+        <input class="field" id="m-url" value="${esc(DB.meta.syncUrl || "")}" placeholder="担当者から届いたURL" autocomplete="off" spellcheck="false">
+        <button class="btn sm" id="m-paste" style="margin-top:9px">${ICON.copy}クリップボードから貼り付け</button>
         <div class="switchrow">
           <span>記録するたび自動で同期する</span>
           <button class="sw" id="m-auto" aria-pressed="${DB.meta.autoSync !== false}">${DB.meta.autoSync !== false ? "ON" : "OFF"}</button>
@@ -1306,6 +1357,7 @@ function menuSheet(){
   $("#m-url").addEventListener("change", () => {
     setSyncUrl($("#m-url").value); save(); setSyncLabel("");
   });
+  bindPaste("#m-paste", "#m-url");
   $("#m-auto").addEventListener("click", () => {
     DB.meta.autoSync = !(DB.meta.autoSync !== false);
     save();
@@ -1494,6 +1546,8 @@ render();
 syncBar();
 /* 起動直後に一度だけ、他の人の記録を取りに行く */
 if (DB.meta.syncUrl) setTimeout(() => doSync(false), 1200);
+/* まだ何も設定していない人には、案内を出す */
+else if (!DB.meta.welcomed && !DB.buildings.length) setTimeout(welcomeSheet, 600);
 })();
 </script>
 
