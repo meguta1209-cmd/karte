@@ -454,6 +454,19 @@ textarea.field{min-height:92px;resize:none;line-height:1.6}
 }
 .nudge button:active{transform:scale(.95)}
 
+.switchrow{
+  display:flex;align-items:center;gap:12px;margin-top:12px;
+  font-size:13.5px;color:var(--ink-2);
+}
+.switchrow .sw{
+  margin-left:auto;flex:0 0 auto;min-width:56px;height:34px;border-radius:999px;
+  font-size:12.5px;font-weight:800;letter-spacing:.06em;
+  background:var(--sunken);color:var(--ink-3);border:1px solid var(--line);
+  transition:background .18s,color .18s,transform .1s;
+}
+.switchrow .sw[aria-pressed="true"]{background:var(--st-contract);color:#fff;border-color:transparent}
+.switchrow .sw:active{transform:scale(.94)}
+
 /* ================= toast ================= */
 .toast{
   position:fixed;left:50%;bottom:calc(34px + env(safe-area-inset-bottom));z-index:90;
@@ -558,6 +571,7 @@ const ICON = {
   copy:    SVG(`<rect x="9" y="9" width="11" height="11" rx="2.5"/><path d="M5.5 15H5a1.5 1.5 0 01-1.5-1.5v-9A1.5 1.5 0 015 3h9A1.5 1.5 0 0115.5 4.5V5"/>`),
   table:   SVG(`<rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><path d="M3.5 9.5h17M9.5 9.5v10"/>`),
   restore: SVG(`<path d="M4 9.5A8 8 0 1112 20a8 8 0 01-7.4-5"/><path d="M3.5 4.5v5h5"/>`),
+  sync:    SVG(`<path d="M20.5 12a8.5 8.5 0 01-14.6 5.9"/><path d="M3.5 12a8.5 8.5 0 0114.6-5.9"/><path d="M18.5 2.5v4h-4M5.5 21.5v-4h4"/>`),
   build:   `<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 21V5.5A1.5 1.5 0 016.5 4h11A1.5 1.5 0 0119 5.5V21M3 21h18"/><path d="M9 8h1.5M13.5 8H15M9 12h1.5M13.5 12H15M9 16h1.5M13.5 16H15"/></svg>`
 };
 
@@ -586,7 +600,24 @@ function load(){
     localStorage.removeItem(KEY + "_probe");
   } catch (e) { memOnly = true; }
   if (!DB || !Array.isArray(DB.buildings)) DB = {v:1, buildings:[]};
+  normalize();
+}
+/* 保存データに足りない欄を補う（古いバックアップを読み込んだ時のため） */
+function normalize(){
   if (!DB.meta) DB.meta = {};
+  if (!DB.meta.deleted) DB.meta.deleted = {visits: [], buildings: []};
+  if (!Array.isArray(DB.meta.deleted.visits)) DB.meta.deleted.visits = [];
+  if (!Array.isArray(DB.meta.deleted.buildings)) DB.meta.deleted.buildings = [];
+  if (DB.meta.autoSync === undefined) DB.meta.autoSync = true;
+}
+/* これまでに登場した担当名 */
+function knownOwners(){
+  const seen = new Set();
+  if (DB.meta.owner) seen.add(DB.meta.owner);
+  DB.buildings.forEach(b => (b.rooms || []).forEach(r => (r.visits || []).forEach(v => {
+    if (v.owner) seen.add(v.owner);
+  })));
+  return [...seen];
 }
 /* 何日前か。日付が無ければ null */
 function daysSince(d){
@@ -886,6 +917,7 @@ function renderRoom(){
   $("#vlist").innerHTML = visits.length ? visits.map(v => {
     const rr = R[v.result] || NONE;
     const rows = [];
+    if (v.owner) rows.push(["担当", esc(v.owner)]);
     if (v.name) rows.push(["お名前", esc(v.name)]);
     if (v.tel) rows.push(["電話", `<a href="tel:${esc(v.tel.replace(/[^\d+]/g, ""))}">${esc(v.tel)}</a>`]);
     if (v.carrier) rows.push(["現在の回線", esc(v.carrier)]);
@@ -942,6 +974,11 @@ function visitForm(){
         </div>
       </div>
       <div>
+        <span class="label">担当</span>
+        <input class="field" id="f-owner" value="${esc(DB.meta.owner || "")}" placeholder="訪問した人の名前" autocomplete="off">
+        ${knownOwners().length ? `<div class="chips" id="ownerchips">${knownOwners().map(o => `<button type="button" data-o="${esc(o)}">${esc(o)}</button>`).join("")}</div>` : ""}
+      </div>
+      <div>
         <span class="label">訪問日</span>
         <input class="field" type="date" id="f-date" value="${today()}">
       </div>
@@ -971,11 +1008,13 @@ function visitForm(){
     onDone: () => {
       if (!picked) return toast("訪問結果を選んでください");
       const room = getR();
+      const owner = $("#f-owner").value.trim();
       room.visits = room.visits || [];
       room.visits.push({
         id: uid(),
         date: $("#f-date").value || today(),
         result: picked,
+        owner: owner,
         name: $("#f-name").value.trim(),
         tel: $("#f-tel").value.trim(),
         carrier: $("#f-carrier").value.trim(),
@@ -983,8 +1022,16 @@ function visitForm(){
         next: $("#f-next").value || "",
         at: new Date().toISOString()
       });
-      save(); closeSheet(); render(); toast("記録しました");
+      /* 次から既定で入るように、自分の担当名として覚える */
+      if (owner && !DB.meta.owner) DB.meta.owner = owner;
+      save(); closeSheet(); render(); queueSync(); toast("記録しました");
     }
+  });
+
+  const oc = $("#ownerchips");
+  if (oc) oc.addEventListener("click", e => {
+    const btn = e.target.closest("button[data-o]");
+    if (btn) $("#f-owner").value = btn.dataset.o;
   });
 
   $("#pick").addEventListener("click", e => {
@@ -1070,19 +1117,179 @@ function roomForm(){
   });
 }
 
-/* ---- データ管理 ---- */
+/* ================= スプレッドシート同期 =================
+   訪問記録は「追加」と「削除」しかないので、
+   みんなの記録を全部足して、削除済みのぶんを引くだけで
+   どの端末でも同じ結果になる。上書き事故が起きない。
+   ======================================================== */
+let syncing = false, syncTimer = null;
+
+/* 端末の中身を、送る形にまとめる */
+function collectPayload(){
+  const visits = [];
+  DB.buildings.forEach(b => (b.rooms || []).forEach(r => (r.visits || []).forEach(v => {
+    visits.push({
+      id: v.id, building: b.name, room: r.no,
+      date: v.date || "", result: v.result || "", owner: v.owner || "",
+      name: v.name || "", tel: v.tel || "", carrier: v.carrier || "",
+      memo: v.memo || "", next: v.next || "", at: v.at || ""
+    });
+  })));
+  return {
+    key: DB.meta.syncKey || "",
+    owner: DB.meta.owner || "",
+    buildings: DB.buildings.map(b => ({name: b.name})),
+    visits: visits,
+    deleted: DB.meta.deleted
+  };
+}
+
+/* 同期URLを覚える。末尾の ?k=合言葉 は取り出して別に持っておく
+   （途中で転送が入っても合言葉が消えないように、本文にも入れて送るため） */
+function setSyncUrl(raw){
+  const url = String(raw || "").trim();
+  DB.meta.syncUrl = url;
+  const m = url.match(/[?&]k=([^&#]+)/);
+  DB.meta.syncKey = m ? decodeURIComponent(m[1]) : "";
+}
+
+/* 物件を名前で探す。無ければ作る */
+function ensureBuilding(name){
+  let b = DB.buildings.find(x => x.name === name);
+  if (!b) {
+    b = {id: uid(), name: name, rooms: [], createdAt: new Date().toISOString()};
+    buildGrid(b, DEF_FLOORS, DEF_PER);
+    DB.buildings.push(b);
+  }
+  return b;
+}
+
+/* サーバーから返ってきた全記録を端末に取り込む */
+function applyServer(res){
+  const delV = new Set((res.deleted && res.deleted.visits) || []);
+  const delB = new Set((res.deleted && res.deleted.buildings) || []);
+  DB.meta.deleted = {visits: [...delV], buildings: [...delB]};
+
+  /* 誰かが消したものを、この端末からも消す */
+  DB.buildings = DB.buildings.filter(b => !delB.has(b.name));
+  DB.buildings.forEach(b => (b.rooms || []).forEach(r => {
+    r.visits = (r.visits || []).filter(v => !delV.has(v.id));
+  }));
+
+  (res.buildings || []).forEach(name => { if (name && !delB.has(name)) ensureBuilding(name); });
+
+  let got = 0;
+  (res.visits || []).forEach(v => {
+    if (!v.id || delV.has(v.id) || !v.building || delB.has(v.building)) return;
+    const b = ensureBuilding(v.building);
+    const no = String(v.room);
+    let r = b.rooms.find(x => x.no === no);
+    if (!r) { r = {id: uid(), no: no, visits: []}; b.rooms.push(r); }
+    if (r.visits.some(x => x.id === v.id)) return;
+    r.visits.push({
+      id: v.id, date: v.date || "", result: v.result || "", owner: v.owner || "",
+      name: v.name || "", tel: v.tel || "", carrier: v.carrier || "",
+      memo: v.memo || "", next: v.next || "", at: v.at || ""
+    });
+    got++;
+  });
+
+  DB.meta.lastSync = new Date().toISOString();
+  save();
+  return got;
+}
+
+/* 同期を実行。manual=true なら結果をトーストで知らせる */
+async function doSync(manual){
+  const url = String(DB.meta.syncUrl || "").trim();
+  if (!url) { if (manual) toast("同期先が未設定です"); return; }
+  if (syncing) return;
+  if (navigator.onLine === false) { if (manual) toast("オフラインです。電波のある所でどうぞ"); return; }
+
+  syncing = true;
+  setSyncLabel("同期中…");
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      /* text/plain にしておくと余計な事前確認が飛ばず、GASにそのまま届く */
+      headers: {"Content-Type": "text/plain;charset=utf-8"},
+      body: JSON.stringify(collectPayload()),
+      redirect: "follow"
+    });
+    const data = await res.json();
+    if (!data || !data.ok) throw new Error((data && data.error) || "サーバーが受け付けませんでした");
+    const got = applyServer(data);
+    render();
+    setSyncLabel("");
+    if (manual) toast(got ? `${got}件を受け取りました` : "最新の状態です");
+  } catch (e) {
+    setSyncLabel("");
+    if (manual) toast("同期できませんでした。URLを確認してください");
+  } finally {
+    syncing = false;
+  }
+}
+
+/* 記録するたびに呼ばれる。少し待ってからまとめて送る */
+function queueSync(){
+  if (!DB.meta.syncUrl || DB.meta.autoSync === false) return;
+  clearTimeout(syncTimer);
+  syncTimer = setTimeout(() => doSync(false), 3000);
+}
+
+function setSyncLabel(text){
+  const el = $("#syncState");
+  if (el) el.textContent = text || syncSummary();
+}
+function syncSummary(){
+  if (!DB.meta.syncUrl) return "未設定";
+  if (!DB.meta.lastSync) return "まだ同期していません";
+  const d = new Date(DB.meta.lastSync);
+  return `最終同期 ${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
+}
+/* 消したものを覚えておく。他の端末にも削除を伝えるため */
+function tombVisit(id){ if (id && !DB.meta.deleted.visits.includes(id)) DB.meta.deleted.visits.push(id); }
+function tombBuilding(name){ if (name && !DB.meta.deleted.buildings.includes(name)) DB.meta.deleted.buildings.push(name); }
+
+window.addEventListener("online", () => queueSync());
+
+/* ---- 設定 ---- */
 function menuSheet(){
   openSheet({
-    title: "データ管理",
+    title: "設定",
     cancel: "閉じる",
     html: `
     <div class="stack">
-      <div class="note"><span>記録はこの端末の中に保存されています。機種変の前と、月に一度はバックアップを。<br>
-        最終バックアップ: <b>${DB.meta.lastBackup ? `${DB.meta.lastBackup}（${daysSince(DB.meta.lastBackup)}日前）` : "まだありません"}</b></span></div>
-      <div style="display:flex;flex-direction:column;gap:10px">
-        <button class="btn" id="m-backup">${ICON.save}バックアップを保存</button>
-        <button class="btn" id="m-copy">${ICON.copy}バックアップをコピー</button>
-        <button class="btn" id="m-sheet">${ICON.table}表計算に貼る形でコピー</button>
+      <div>
+        <span class="label">自分の担当名</span>
+        <input class="field" id="m-owner" value="${esc(DB.meta.owner || "")}" placeholder="例）竹内" autocomplete="off">
+        <p class="tiny" style="margin:7px 3px 0">訪問を記録するとき、担当欄にこの名前が最初から入ります。</p>
+      </div>
+
+      <div class="hairline" style="margin:2px 0"></div>
+
+      <div>
+        <span class="label">スプレッドシート同期</span>
+        <input class="field" id="m-url" value="${esc(DB.meta.syncUrl || "")}" placeholder="GASのウェブアプリURL（/exec で終わるもの）" autocomplete="off" spellcheck="false">
+        <div class="switchrow">
+          <span>記録するたび自動で同期する</span>
+          <button class="sw" id="m-auto" aria-pressed="${DB.meta.autoSync !== false}">${DB.meta.autoSync !== false ? "ON" : "OFF"}</button>
+        </div>
+        <button class="btn primary" id="m-sync" style="margin-top:10px">${ICON.sync}今すぐ同期する</button>
+        <p class="tiny" style="margin:8px 3px 0" id="syncState">${syncSummary()}</p>
+      </div>
+
+      <div class="hairline" style="margin:2px 0"></div>
+
+      <div>
+        <span class="label">バックアップ</span>
+        <div class="note" style="margin-bottom:10px"><span>同期していても、端末単体の控えは別で取っておくと安心です。<br>
+          最終バックアップ: <b>${DB.meta.lastBackup ? `${DB.meta.lastBackup}（${daysSince(DB.meta.lastBackup)}日前）` : "まだありません"}</b></span></div>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <button class="btn" id="m-backup">${ICON.save}バックアップを保存</button>
+          <button class="btn" id="m-copy">${ICON.copy}バックアップをコピー</button>
+          <button class="btn" id="m-sheet">${ICON.table}表計算に貼る形でコピー</button>
+        </div>
       </div>
       <div>
         <span class="label">復元</span>
@@ -1090,6 +1297,28 @@ function menuSheet(){
         <button class="btn" id="m-load" style="margin-top:10px">${ICON.restore}読み込んで復元</button>
       </div>
     </div>`
+  });
+
+  /* 担当名と同期URLは、打ったそばから覚える */
+  $("#m-owner").addEventListener("change", () => {
+    DB.meta.owner = $("#m-owner").value.trim(); save();
+  });
+  $("#m-url").addEventListener("change", () => {
+    setSyncUrl($("#m-url").value); save(); setSyncLabel("");
+  });
+  $("#m-auto").addEventListener("click", () => {
+    DB.meta.autoSync = !(DB.meta.autoSync !== false);
+    save();
+    const on = DB.meta.autoSync !== false;
+    $("#m-auto").setAttribute("aria-pressed", String(on));
+    $("#m-auto").textContent = on ? "ON" : "OFF";
+  });
+  $("#m-sync").addEventListener("click", async () => {
+    DB.meta.owner = $("#m-owner").value.trim();
+    setSyncUrl($("#m-url").value);
+    save();
+    await doSync(true);
+    setSyncLabel("");
   });
 
   $("#m-backup").addEventListener("click", async () => {
@@ -1117,10 +1346,10 @@ function menuSheet(){
     toast("バックアップをコピーしました");
   });
   $("#m-sheet").addEventListener("click", async () => {
-    const head = ["マンション","部屋番号","訪問日","結果","お名前","電話番号","現在の回線","メモ","次回訪問日"];
+    const head = ["マンション","部屋番号","訪問日","結果","担当","お名前","電話番号","現在の回線","メモ","次回訪問日"];
     const rows = [head.join("\t")];
     DB.buildings.forEach(b => sortRooms(b.rooms || []).forEach(r => (r.visits || []).forEach(v => {
-      rows.push([b.name, r.no, v.date, (R[v.result] || NONE).label, v.name, v.tel, v.carrier,
+      rows.push([b.name, r.no, v.date, (R[v.result] || NONE).label, v.owner, v.name, v.tel, v.carrier,
                  String(v.memo || "").replace(/\s+/g, " "), v.next].map(x => String(x ?? "")).join("\t"));
     })));
     if (rows.length === 1) return toast("記録がまだありません");
@@ -1135,7 +1364,7 @@ function menuSheet(){
     if (!parsed || !Array.isArray(parsed.buildings)) return toast("中身が読み取れませんでした");
     if (!confirm(`今のデータを、この内容（マンション${parsed.buildings.length}件）に置き換えます。よろしいですか？`)) return;
     DB = parsed;
-    if (!DB.meta) DB.meta = {};
+    normalize();
     save(); closeSheet(); curB = curR = null; go("home", false); toast("復元しました");
   });
 }
@@ -1171,7 +1400,7 @@ document.addEventListener("click", e => {
     buildGrid(b, DEF_FLOORS, DEF_PER);
     DB.buildings.push(b); save();
     $("#q").value = ""; $("#q").blur();
-    curB = b.id; filter = "all"; go("rooms");
+    curB = b.id; filter = "all"; go("rooms"); queueSync();
     toast(`101〜${roomNo(DEF_FLOORS, DEF_PER)}を用意しました`);
     return;
   }
@@ -1200,8 +1429,9 @@ document.addEventListener("click", e => {
   if (delv) {
     if (!confirm("この訪問記録を削除しますか？")) return;
     const r = getR();
+    tombVisit(delv.dataset.delv);
     r.visits = r.visits.filter(v => v.id !== delv.dataset.delv);
-    save(); render(); toast("削除しました");
+    save(); render(); queueSync(); toast("削除しました");
     return;
   }
 });
@@ -1245,20 +1475,25 @@ $("#renameb").addEventListener("click", () => {
 $("#delb").addEventListener("click", () => {
   const b = getB();
   if (!confirm(`「${b.name}」の記録をすべて削除します。元に戻せません。よろしいですか？`)) return;
+  tombBuilding(b.name);
+  (b.rooms || []).forEach(r => (r.visits || []).forEach(v => tombVisit(v.id)));
   DB.buildings = DB.buildings.filter(x => x.id !== b.id);
-  save(); curB = curR = null; go("home");
+  save(); curB = curR = null; go("home"); queueSync();
 });
 $("#delroom").addEventListener("click", () => {
   const b = getB(), r = getR();
   if (!confirm(`${r.no}号室の記録を削除します。よろしいですか？`)) return;
+  (r.visits || []).forEach(v => tombVisit(v.id));
   b.rooms = b.rooms.filter(x => x.id !== r.id);
-  save(); curR = null; go("rooms");
+  save(); curR = null; go("rooms"); queueSync();
 });
 
 /* ================= 起動 ================= */
 load();
 render();
 syncBar();
+/* 起動直後に一度だけ、他の人の記録を取りに行く */
+if (DB.meta.syncUrl) setTimeout(() => doSync(false), 1200);
 })();
 </script>
 
