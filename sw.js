@@ -1,6 +1,6 @@
 /* 訪販カルテ — オフライン用サービスワーカー
    アプリを更新したら CACHE の数字を1つ上げること */
-const CACHE = "hohan-karte-v3";
+const CACHE = "hohan-karte-v4";
 const ASSETS = [
   "./",
   "./index.html",
