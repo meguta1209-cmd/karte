@@ -1,0 +1,1231 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>auひかり申込テンプレ</title>
+<meta name="description" content="BIGLOBE auひかりマンションタイプの上位店提出テンプレを自動で作る営業ツール">
+<meta name="theme-color" content="#EDEFF3" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0D1117" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="auテンプレ">
+<meta name="format-detection" content="telephone=no">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="apple-touch-icon" href="./icons/icon-180.png">
+<link rel="icon" href="./icons/icon-192.png">
+</head>
+<body>
+<style>
+/* ============================================================
+   auひかり申込テンプレ
+   用途: 獲得直後にスマホで入力 → 上位店に送るテンプレ文を生成
+   色  : 冷たいグレーの地 ＋ auオレンジ1色を操作色に
+   字  : UI=ゴシック / 金額・番号・出力=等幅（伝票の桁揃え）
+   ============================================================ */
+:root{
+  --ground:#EDEFF3;
+  --surface:#FFFFFF;
+  --surface-2:#F5F7FA;
+  --sunken:#E3E7ED;
+  --line:rgba(16,22,31,.13);
+  --line-soft:rgba(16,22,31,.07);
+  --ink:#111721;
+  --ink-2:#586274;
+  --ink-3:#8C96A6;
+  --accent:#D9500C;
+  --accent-ink:#FFFFFF;
+  --accent-soft:#FBE7D9;
+  --accent-line:rgba(217,80,12,.38);
+  --ok:#0F7A4E;
+  --ok-soft:#DEF3E8;
+  --warn:#8F5300;
+  --warn-soft:#FAEBD2;
+  --bar:rgba(255,255,255,.88);
+  --scrim:rgba(10,14,20,.46);
+  --shadow:0 1px 2px rgba(16,22,31,.05),0 10px 28px rgba(16,22,31,.08);
+  --sans:-apple-system,BlinkMacSystemFont,"Hiragino Kaku Gothic ProN","Hiragino Sans","Yu Gothic Medium",Meiryo,system-ui,sans-serif;
+  --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,"Roboto Mono",monospace;
+  --r:14px;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --ground:#0D1117;
+    --surface:#151B24;
+    --surface-2:#1A212C;
+    --sunken:#0F151D;
+    --line:rgba(180,196,216,.17);
+    --line-soft:rgba(180,196,216,.09);
+    --ink:#E8EDF4;
+    --ink-2:#9BA6B6;
+    --ink-3:#6C7787;
+    --accent:#FF7C36;
+    --accent-ink:#1B0B02;
+    --accent-soft:rgba(255,124,54,.15);
+    --accent-line:rgba(255,124,54,.42);
+    --ok:#4FD190;
+    --ok-soft:rgba(79,209,144,.15);
+    --warn:#E9B265;
+    --warn-soft:rgba(233,178,101,.15);
+    --bar:rgba(21,27,36,.88);
+    --scrim:rgba(4,7,11,.62);
+    --shadow:0 1px 2px rgba(0,0,0,.3),0 10px 28px rgba(0,0,0,.34);
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#0D1117;
+  --surface:#151B24;
+  --surface-2:#1A212C;
+  --sunken:#0F151D;
+  --line:rgba(180,196,216,.17);
+  --line-soft:rgba(180,196,216,.09);
+  --ink:#E8EDF4;
+  --ink-2:#9BA6B6;
+  --ink-3:#6C7787;
+  --accent:#FF7C36;
+  --accent-ink:#1B0B02;
+  --accent-soft:rgba(255,124,54,.15);
+  --accent-line:rgba(255,124,54,.42);
+  --ok:#4FD190;
+  --ok-soft:rgba(79,209,144,.15);
+  --warn:#E9B265;
+  --warn-soft:rgba(233,178,101,.15);
+  --bar:rgba(21,27,36,.88);
+  --scrim:rgba(4,7,11,.62);
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 10px 28px rgba(0,0,0,.34);
+}
+
+*{box-sizing:border-box}
+body{
+  margin:0;
+  background:var(--ground);
+  color:var(--ink);
+  font-family:var(--sans);
+  font-size:16px;
+  line-height:1.6;
+  -webkit-text-size-adjust:100%;
+  padding-bottom:calc(96px + env(safe-area-inset-bottom));
+}
+
+/* ---------- 上部バー ---------- */
+.topbar{
+  position:sticky;top:0;z-index:30;
+  background:var(--bar);
+  -webkit-backdrop-filter:saturate(180%) blur(14px);
+  backdrop-filter:saturate(180%) blur(14px);
+  border-bottom:1px solid var(--line-soft);
+  padding:10px 16px;
+  padding-top:calc(10px + env(safe-area-inset-top));
+}
+.topbar-in{
+  max-width:620px;margin:0 auto;
+  display:flex;align-items:center;gap:10px;
+}
+.brand{display:flex;flex-direction:column;gap:1px;min-width:0;flex:1}
+.brand b{font-size:15px;font-weight:700;letter-spacing:.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.brand small{font-size:11px;color:var(--ink-3);letter-spacing:.06em;font-family:var(--mono)}
+.chip{
+  font-family:var(--mono);font-size:11.5px;font-weight:600;
+  padding:4px 9px;border-radius:999px;white-space:nowrap;
+  background:var(--warn-soft);color:var(--warn);
+}
+.chip.done{background:var(--ok-soft);color:var(--ok)}
+.ghost{
+  appearance:none;-webkit-appearance:none;
+  border:1px solid var(--line);background:var(--surface);
+  color:var(--ink-2);font-family:var(--sans);font-size:12.5px;font-weight:600;
+  padding:7px 11px;border-radius:9px;cursor:pointer;white-space:nowrap;
+}
+.ghost:active{background:var(--sunken)}
+.ghost:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* ---------- 本体 ---------- */
+main{max-width:620px;margin:0 auto;padding:14px 16px 0;display:flex;flex-direction:column;gap:12px}
+
+.card{
+  background:var(--surface);
+  border:1px solid var(--line-soft);
+  border-radius:var(--r);
+  box-shadow:var(--shadow);
+  overflow:hidden;
+}
+.card > .body{padding:12px 14px 14px;display:flex;flex-direction:column;gap:10px}
+
+.head{
+  display:flex;align-items:center;gap:9px;
+  padding:11px 14px 0;
+}
+.no{
+  font-family:var(--mono);font-size:12px;font-weight:700;
+  min-width:26px;height:24px;padding:0 5px;
+  display:flex;align-items:center;justify-content:center;
+  background:var(--accent-soft);color:var(--accent);
+  border-radius:7px;letter-spacing:-.02em;flex:none;
+}
+.head h2{margin:0;font-size:14.5px;font-weight:700;letter-spacing:.01em;line-height:1.35}
+.note{margin:0;font-size:12px;color:var(--ink-3);line-height:1.55}
+.note.warn{color:var(--warn)}
+.note.danger{color:var(--accent);font-weight:600}
+
+label.lbl{display:block;font-size:12px;font-weight:600;color:var(--ink-2);margin-bottom:5px;letter-spacing:.02em}
+
+/* 入力 */
+input[type=text],input[type=tel],input[type=number],input[type=date],select,textarea{
+  width:100%;font-family:var(--sans);font-size:16px;color:var(--ink);
+  background:var(--surface-2);
+  border:1px solid var(--line);border-radius:10px;
+  padding:11px 12px;min-height:46px;
+  appearance:none;-webkit-appearance:none;
+}
+input[type=tel],input[type=number],input[type=date]{font-family:var(--mono);font-variant-numeric:tabular-nums}
+textarea{min-height:88px;resize:vertical;line-height:1.6}
+select{
+  background-image:linear-gradient(45deg,transparent 50%,var(--ink-3) 50%),linear-gradient(135deg,var(--ink-3) 50%,transparent 50%);
+  background-position:calc(100% - 17px) 21px,calc(100% - 12px) 21px;
+  background-size:5px 5px,5px 5px;background-repeat:no-repeat;
+  padding-right:34px;
+}
+input:focus-visible,select:focus-visible,textarea:focus-visible{
+  outline:2px solid var(--accent);outline-offset:1px;
+}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.suffix{position:relative}
+.suffix > span{
+  position:absolute;right:12px;top:50%;transform:translateY(-50%);
+  font-size:13px;color:var(--ink-3);pointer-events:none;
+}
+.suffix input{padding-right:38px}
+
+/* セグメント（2〜3択） */
+.seg{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:6px}
+.seg.col{grid-auto-flow:row;grid-auto-columns:auto}
+.seg label{position:relative;display:block;cursor:pointer}
+.seg input{position:absolute;opacity:0;width:100%;height:100%;margin:0;cursor:pointer}
+.seg span{
+  display:flex;align-items:center;justify-content:center;text-align:center;
+  min-height:46px;padding:8px 6px;
+  background:var(--surface-2);border:1px solid var(--line);border-radius:10px;
+  font-size:14.5px;font-weight:600;color:var(--ink-2);
+  transition:background .12s ease,color .12s ease,border-color .12s ease;
+}
+.seg input:checked + span{
+  background:var(--accent);border-color:var(--accent);color:var(--accent-ink);
+}
+.seg input:focus-visible + span{outline:2px solid var(--accent);outline-offset:2px}
+
+/* 特典（縦積みラジオカード） */
+.pick{display:flex;flex-direction:column;gap:8px}
+.pick label{position:relative;display:block;cursor:pointer}
+.pick input{position:absolute;opacity:0;width:100%;height:100%;margin:0;cursor:pointer}
+.pick .box{
+  border:1px solid var(--line);border-radius:11px;background:var(--surface-2);
+  padding:11px 12px;display:flex;flex-direction:column;gap:5px;
+  transition:background .12s ease,border-color .12s ease;
+}
+.pick .box b{font-size:14px;font-weight:600;line-height:1.5}
+.pick .box code{
+  font-family:var(--mono);font-size:11.5px;font-weight:700;letter-spacing:.06em;
+  color:var(--ink-3);
+}
+.pick input:checked + .box{border-color:var(--accent);background:var(--accent-soft)}
+.pick input:checked + .box code{color:var(--accent)}
+.pick input:focus-visible + .box{outline:2px solid var(--accent);outline-offset:2px}
+
+/* あり／なし行 */
+.opts{display:flex;flex-direction:column;border:1px solid var(--line);border-radius:11px;overflow:hidden}
+.opt{position:relative;display:block;cursor:pointer;border-bottom:1px solid var(--line-soft)}
+.opt:last-child{border-bottom:0}
+.opt input{position:absolute;opacity:0;width:100%;height:100%;margin:0;cursor:pointer}
+.opt .in{
+  display:flex;align-items:center;gap:10px;
+  padding:10px 12px;background:var(--surface-2);min-height:52px;
+  transition:background .12s ease;
+}
+.opt .txt{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+.opt .txt b{font-size:13.5px;font-weight:600;line-height:1.4}
+.opt .txt small{font-size:11px;color:var(--ink-3)}
+.opt .yen{font-family:var(--mono);font-size:13px;font-weight:700;color:var(--ink-2);font-variant-numeric:tabular-nums;flex:none}
+.opt .state{
+  font-size:12px;font-weight:700;flex:none;width:36px;text-align:center;
+  padding:4px 0;border-radius:7px;background:var(--sunken);color:var(--ink-3);
+}
+.opt input:checked + .in{background:var(--accent-soft)}
+.opt input:checked + .in .state{background:var(--accent);color:var(--accent-ink)}
+.opt input:checked + .in .yen{color:var(--accent)}
+.opt input:focus-visible + .in{outline:2px solid var(--accent);outline-offset:-2px}
+.solo{border:1px solid var(--line);border-radius:11px;overflow:hidden}
+
+/* 自動計算 */
+.calc{
+  background:var(--sunken);border-radius:11px;padding:11px 12px;
+  display:flex;flex-direction:column;gap:8px;
+}
+.calc .line{display:flex;align-items:baseline;justify-content:space-between;gap:10px;font-size:13px}
+.calc .line span{color:var(--ink-2)}
+.calc .line b{font-family:var(--mono);font-variant-numeric:tabular-nums;font-weight:700}
+.calc .total{border-top:1px dashed var(--line);padding-top:8px;font-size:14px}
+.calc .total b{font-size:19px;color:var(--accent)}
+.calc .bd{
+  font-family:var(--mono);font-size:11.5px;line-height:1.75;color:var(--ink-3);
+  word-break:break-all;
+}
+.auto{
+  display:inline-flex;align-items:center;
+  font-family:var(--mono);font-size:10.5px;font-weight:700;letter-spacing:.06em;
+  color:var(--ok);background:var(--ok-soft);padding:2px 6px;border-radius:5px;
+  margin-left:6px;
+}
+
+/* 固定電話オプションの追加行 */
+.extra{display:grid;grid-template-columns:1fr 104px 46px;gap:8px;align-items:center}
+.extra button{
+  appearance:none;-webkit-appearance:none;
+  border:1px solid var(--line);background:var(--surface-2);
+  color:var(--ink-3);border-radius:10px;min-height:46px;font-size:18px;cursor:pointer;
+}
+.extra button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.addbtn{
+  appearance:none;-webkit-appearance:none;
+  border:1px dashed var(--line);background:transparent;
+  color:var(--accent);font-family:var(--sans);font-size:13px;font-weight:700;
+  padding:11px;border-radius:10px;cursor:pointer;width:100%;
+}
+.addbtn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+.hide{display:none !important}
+.miss{outline:2px solid var(--accent);outline-offset:3px;border-radius:11px}
+
+.card.alert{border-color:var(--accent-line)}
+.card.alert .head .no{background:var(--accent);color:var(--accent-ink)}
+
+/* ---------- 下部バー ---------- */
+.actionbar{
+  position:fixed;left:0;right:0;bottom:0;z-index:30;
+  background:var(--bar);
+  -webkit-backdrop-filter:saturate(180%) blur(14px);
+  backdrop-filter:saturate(180%) blur(14px);
+  border-top:1px solid var(--line-soft);
+  padding:10px 16px calc(10px + env(safe-area-inset-bottom));
+}
+.actionbar-in{max-width:620px;margin:0 auto;display:flex;align-items:center;gap:12px}
+.sum{display:flex;flex-direction:column;flex:none}
+.sum small{font-size:10.5px;color:var(--ink-3);letter-spacing:.08em;font-family:var(--mono)}
+.sum b{font-family:var(--mono);font-size:20px;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.primary{
+  flex:1;appearance:none;-webkit-appearance:none;border:0;cursor:pointer;
+  background:var(--accent);color:var(--accent-ink);
+  font-family:var(--sans);font-size:15.5px;font-weight:700;letter-spacing:.02em;
+  min-height:52px;border-radius:12px;
+}
+.primary:active{transform:translateY(1px)}
+.primary:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+
+/* ---------- 出力シート ---------- */
+.sheet{
+  position:fixed;inset:0;z-index:50;
+  background:var(--scrim);
+  display:flex;align-items:flex-end;justify-content:center;
+}
+.sheet-in{
+  width:100%;max-width:620px;max-height:92vh;
+  background:var(--surface);
+  border-radius:18px 18px 0 0;
+  display:flex;flex-direction:column;overflow:hidden;
+  animation:up .22s cubic-bezier(.2,.7,.3,1);
+}
+@keyframes up{from{transform:translateY(18px);opacity:.4}to{transform:none;opacity:1}}
+@media (prefers-reduced-motion:reduce){.sheet-in{animation:none}}
+.sheet-head{
+  display:flex;align-items:center;gap:10px;
+  padding:14px 16px 10px;border-bottom:1px solid var(--line-soft);
+}
+.sheet-head h2{margin:0;flex:1;font-size:15px;font-weight:700}
+.out{
+  flex:1;overflow:auto;-webkit-overflow-scrolling:touch;
+  margin:0;padding:14px 16px;
+  font-family:var(--mono);font-size:12.5px;line-height:1.85;
+  white-space:pre-wrap;word-break:break-word;
+  color:var(--ink);background:var(--sunken);
+  -webkit-user-select:text;user-select:text;
+}
+.sheet-foot{
+  padding:12px 16px calc(14px + env(safe-area-inset-bottom));
+  display:flex;flex-direction:column;gap:8px;
+  border-top:1px solid var(--line-soft);
+}
+
+/* トースト */
+.toast{
+  position:fixed;left:50%;transform:translateX(-50%);
+  bottom:calc(104px + env(safe-area-inset-bottom));z-index:60;
+  max-width:min(560px,calc(100% - 32px));
+  background:var(--ink);color:var(--ground);
+  padding:11px 15px;border-radius:11px;font-size:13.5px;font-weight:600;
+  box-shadow:var(--shadow);display:flex;align-items:center;gap:14px;
+}
+.toast button{
+  appearance:none;-webkit-appearance:none;border:0;background:transparent;
+  color:var(--accent);font-family:var(--sans);font-size:13.5px;font-weight:700;
+  cursor:pointer;padding:2px 0;white-space:nowrap;
+}
+</style>
+
+<header class="topbar">
+  <div class="topbar-in">
+    <div class="brand">
+      <b>auひかり申込テンプレ</b>
+      <small>BIGLOBE / マンションタイプ お得プラン</small>
+    </div>
+    <span class="chip" id="chip">未入力 —</span>
+    <button class="ghost" id="reset" type="button">クリア</button>
+  </div>
+</header>
+
+<main>
+
+  <section class="card">
+    <div class="head"><span class="no">1</span><h2>ネット＋光電話 or ネットのみ</h2></div>
+    <div class="body">
+      <div class="seg" id="f1">
+        <label><input type="radio" name="k1" value="ネット＋光電話"><span>ネット＋光電話</span></label>
+        <label><input type="radio" name="k1" value="ネットのみ"><span>ネットのみ</span></label>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="head"><span class="no">2</span><h2>携帯キャリア</h2></div>
+    <div class="body">
+      <select id="f2">
+        <option value="">選択してください</option>
+        <option>au</option><option>UQモバイル</option><option>povo</option>
+        <option>ドコモ</option><option>ソフトバンク</option><option>ワイモバイル</option>
+        <option>楽天モバイル</option><option>格安SIM</option><option>その他</option>
+      </select>
+      <div id="f2ow" class="hide"><input type="text" id="f2o" placeholder="キャリア名を入力"></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="head"><span class="no">3·4</span><h2>性別 ／ 住居</h2></div>
+    <div class="body">
+      <div>
+        <label class="lbl">男性 or 女性</label>
+        <div class="seg" id="f3">
+          <label><input type="radio" name="k3" value="男性"><span>男性</span></label>
+          <label><input type="radio" name="k3" value="女性"><span>女性</span></label>
+        </div>
+      </div>
+      <div>
+        <label class="lbl">持家 or 賃貸</label>
+        <div class="seg" id="f4">
+          <label><input type="radio" name="k4" value="持家"><span>持家</span></label>
+          <label><input type="radio" name="k4" value="賃貸"><span>賃貸</span></label>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="head"><span class="no">5·6</span><h2>階数</h2></div>
+    <div class="body">
+      <div class="row2">
+        <div>
+          <label class="lbl" for="f5">建物総階数</label>
+          <div class="suffix"><input type="number" id="f5" inputmode="numeric" min="1" max="99" placeholder="10"><span>階</span></div>
+        </div>
+        <div>
+          <label class="lbl" for="f6">回線設置階数</label>
+          <div class="suffix"><input type="number" id="f6" inputmode="numeric" min="1" max="99" placeholder="3"><span>階</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="head"><span class="no">7·8</span><h2>申し込みサービス ／ 速度タイプ</h2></div>
+    <div class="body">
+      <div>
+        <label class="lbl" for="f7">申し込みサービス</label>
+        <select id="f7">
+          <option value="">選択してください</option>
+          <option>タイプV（お得プランA）</option>
+          <option>タイプG（お得プラン）</option>
+          <option>タイプE（お得プランA）</option>
+          <option>タイプF（お得プランA）</option>
+          <option>タイプミニギガ（お得プランA）</option>
+          <option>タイプギガ（お得プランA）</option>
+          <option>都市機構西日本（お得プランA）</option>
+          <option>都市機構東日本（お得プランA）</option>
+          <option>都市機構G（お得プラン）</option>
+        </select>
+      </div>
+      <div id="f7uw" class="hide">
+        <label class="lbl">戸数区分<span class="auto">料金に反映</span></label>
+        <div class="seg" id="f7u">
+          <label><input type="radio" name="k7u" value="16契約以上"><span>16契約以上</span></label>
+          <label><input type="radio" name="k7u" value="8契約以上"><span>8契約以上</span></label>
+        </div>
+      </div>
+      <div>
+        <label class="lbl" for="f8">速度タイプ<span class="auto">自動</span></label>
+        <select id="f8">
+          <option value="">選択してください</option>
+          <option>1G</option><option>664M</option><option>100M</option><option>その他</option>
+        </select>
+        <p class="note" style="margin-top:6px">提供判定に出た値と違ったら手で直してな</p>
+      </div>
+      <div id="f8ow" class="hide"><input type="text" id="f8o" placeholder="例：320M"></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="head"><span class="no">9·10</span><h2>新規発番 or 番ポ</h2></div>
+    <div class="body">
+      <div class="seg" id="f9">
+        <label><input type="radio" name="k9" value="新規発番"><span>新規発番</span></label>
+        <label><input type="radio" name="k9" value="番ポ"><span>番ポ</span></label>
+      </div>
+      <div id="mnp" class="hide" style="display:flex;flex-direction:column;gap:10px">
+        <p class="note warn">番ポありなら下は全部必須</p>
+        <div>
+          <label class="lbl" for="m1">番ポ電話番号</label>
+          <input type="tel" id="m1" inputmode="tel" placeholder="06-1234-5678">
+        </div>
+        <div class="row2">
+          <div>
+            <label class="lbl" for="m2">契約者氏名（漢字）</label>
+            <input type="text" id="m2" placeholder="竹内 太郎">
+          </div>
+          <div>
+            <label class="lbl" for="m3">契約者氏名（カナ）</label>
+            <input type="text" id="m3" placeholder="タケウチ タロウ">
+          </div>
+        </div>
+        <div>
+          <label class="lbl" for="m4">契約者生年月日（番ポ名義人）</label>
+          <input type="date" id="m4">
+        </div>
+        <div>
+          <label class="lbl">設置先住所</label>
+          <div class="seg" id="m5s">
+            <label><input type="radio" name="km5" value="設場住所"><span>設場住所と同じ</span></label>
+            <label><input type="radio" name="km5" value="別"><span>別の住所</span></label>
+          </div>
+          <div id="m5w" class="hide" style="margin-top:8px"><input type="text" id="m5" placeholder="住所を入力"></div>
+        </div>
+        <div>
+          <label class="lbl" for="m6">番ポ元の事業者名</label>
+          <select id="m6">
+            <option value="">選択してください</option>
+            <option>KDDI</option><option>NTT</option><option>NURO</option>
+            <option>JCOM</option><option>ソフトバンク</option><option>その他</option>
+          </select>
+          <div id="m6ow" class="hide" style="margin-top:8px"><input type="text" id="m6o" placeholder="事業者名を入力"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="head"><span class="no">11·12</span><h2>スタートサポート ／ スマバリ</h2></div>
+    <div class="body">
+      <div>
+        <label class="lbl">乗り換えスタートサポート</label>
+        <div class="seg" id="f11">
+          <label><input type="radio" name="k11" value="あり"><span>あり</span></label>
+          <label><input type="radio" name="k11" value="なし"><span>なし</span></label>
+        </div>
+        <p class="note warn" style="margin-top:6px">auスマートバリュー適用回線からの奪還時は利用不可</p>
+      </div>
+      <div>
+        <label class="lbl">スマバリ<span class="auto">Wi-Fiパック料金に反映</span></label>
+        <div class="seg" id="f12">
+          <label><input type="radio" name="k12" value="あり"><span>あり</span></label>
+          <label><input type="radio" name="k12" value="なし"><span>なし</span></label>
+        </div>
+      </div>
+      <label class="opt solo">
+        <input type="checkbox" id="uq">
+        <span class="in">
+          <span class="txt"><b>UQ自宅セット割 あり</b><small>これもWi-Fiパックが330円になる条件</small></span>
+          <span class="state">なし</span>
+        </span>
+      </label>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="head"><span class="no">13</span><h2>無線ルータレンタル</h2></div>
+    <div class="body">
+      <div class="seg col" id="f13">
+        <label><input type="radio" name="k13" value="なし"><span>なし</span></label>
+        <label><input type="radio" name="k13" value="Wi-Fiパック"><span id="wfLabel">Wi-Fiパック 660円</span></label>
+        <label><input type="radio" name="k13" value="おうちWi-Fi"><span>おうちWi-Fi 880円</span></label>
+      </div>
+      <p class="note" id="wfNote">Wi-Fiパックはスマバリ・UQ自宅セット割ありで330円、なしで660円</p>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="head"><span class="no">14</span><h2>ひかりTV</h2></div>
+    <div class="body">
+      <div class="seg" id="f14">
+        <label><input type="radio" name="k14" value="あり"><span>あり</span></label>
+        <label><input type="radio" name="k14" value="なし"><span>なし</span></label>
+      </div>
+      <div id="tvw" class="hide" style="display:flex;flex-direction:column;gap:10px">
+        <div>
+          <label class="lbl" for="tvp">チャンネルパック名</label>
+          <input type="text" id="tvp" placeholder="例：お値打ちプラン">
+        </div>
+        <div>
+          <label class="lbl" for="tvy">チャンネルパック金額（税込）</label>
+          <div class="suffix"><input type="number" id="tvy" inputmode="numeric" placeholder="2750"><span>円</span></div>
+        </div>
+        <label class="opt solo">
+          <input type="checkbox" id="stb">
+          <span class="in">
+            <span class="txt"><b>STBレンタル</b><small>ひかりTVは別途かかる</small></span>
+            <span class="yen">550円</span>
+            <span class="state">なし</span>
+          </span>
+        </label>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="head"><span class="no">15</span><h2>オプション</h2></div>
+    <div class="body">
+      <div class="opts" id="opts">
+        <label class="opt"><input type="checkbox" data-opt="インターネット端末保証サービス550円（無料期間なし）" data-yen="550">
+          <span class="in"><span class="txt"><b>インターネット端末保証サービス</b><small>無料期間なし</small></span><span class="yen">550円</span><span class="state">なし</span></span></label>
+        <label class="opt"><input type="checkbox" data-opt="トータルネットセキュリティ638円（2ヶ月無料）" data-yen="638">
+          <span class="in"><span class="txt"><b>トータルネットセキュリティ</b><small>2ヶ月無料</small></span><span class="yen">638円</span><span class="state">なし</span></span></label>
+        <label class="opt"><input type="checkbox" data-opt="お助けサポート742円（2ヶ月無料）" data-yen="742">
+          <span class="in"><span class="txt"><b>お助けサポート</b><small>2ヶ月無料</small></span><span class="yen">742円</span><span class="state">なし</span></span></label>
+        <label class="opt"><input type="checkbox" data-opt="暮らしのあんしん相談748円（開通月無料）" data-yen="748">
+          <span class="in"><span class="txt"><b>暮らしのあんしん相談</b><small>開通月無料</small></span><span class="yen">748円</span><span class="state">なし</span></span></label>
+        <label class="opt"><input type="checkbox" data-opt="あんしんバックアップ550円（開通月無料）" data-yen="550">
+          <span class="in"><span class="txt"><b>あんしんバックアップ</b><small>開通月無料</small></span><span class="yen">550円</span><span class="state">なし</span></span></label>
+        <label class="opt"><input type="checkbox" data-opt="エンジョイプラス539円（開通月無料）" data-yen="539">
+          <span class="in"><span class="txt"><b>エンジョイプラス</b><small>開通月無料</small></span><span class="yen">539円</span><span class="state">なし</span></span></label>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="head"><span class="no">16</span><h2>特典</h2></div>
+    <div class="body">
+      <div class="pick" id="f16">
+        <label>
+          <input type="radio" name="k16" value="2200円×5か月割引＋訪問設定サポート無料（Wi-FI設定やPC設定など）ISPコード2：BDC">
+          <span class="box"><b>2200円×5か月割引 ＋ 訪問設定サポート無料</b><code>ISPコード2：BDC</code></span>
+        </label>
+        <label>
+          <input type="radio" name="k16" value="2200円×5か月割引＋4か月後20,000円キャッシュバック　ISPコード2：ACB">
+          <span class="box"><b>2200円×5か月割引 ＋ 4か月後20,000円キャッシュバック</b><code>ISPコード2：ACB</code></span>
+        </label>
+        <label>
+          <input type="radio" name="k16" value="2200円×5か月割引＋7～17か月目902円割引　ISPコード2：NBT">
+          <span class="box"><b>2200円×5か月割引 ＋ 7〜17か月目902円割引</b><code>ISPコード2：NBT</code></span>
+        </label>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="head"><span class="no">17</span><h2>固定電話オプション</h2></div>
+    <div class="body">
+      <p class="note">あるときだけ入力。金額は月額合計にも足される</p>
+      <div id="extras" data-skip style="display:flex;flex-direction:column;gap:8px"></div>
+      <button class="addbtn" id="addExtra" type="button">＋ オプションを追加</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="head"><span class="no">18·19</span><h2>現状の回線 ／ ISP</h2></div>
+    <div class="body">
+      <div>
+        <label class="lbl" for="f18">現状の回線</label>
+        <select id="f18">
+          <option value="">選択してください</option>
+          <option>ドコモ光</option><option>ソフトバンク光</option><option>NURO光</option>
+          <option>フレッツ光</option><option>JCOM</option><option>eo光</option>
+          <option>BIGLOBE光</option><option>楽天ひかり</option><option>ケーブルテレビ</option>
+          <option>回線なし</option><option>auひかり</option><option>その他</option>
+        </select>
+        <div id="f18ow" class="hide" style="margin-top:8px"><input type="text" id="f18o" placeholder="回線名を入力"></div>
+        <p class="note danger hide" id="auWarn" style="margin-top:6px">現在auひかり利用中からの獲得は不可</p>
+      </div>
+      <div>
+        <label class="lbl" for="f19">現状のISP</label>
+        <select id="f19">
+          <option value="">選択してください</option>
+          <option>ドコモ</option><option>OCN</option><option>So-net</option>
+          <option>BIGLOBE</option><option>ぷらら</option><option>Yahoo!BB</option>
+          <option>@nifty</option><option>GMOとくとくBB</option><option>NURO</option>
+          <option>JCOM</option><option>eo</option><option>わからない</option><option>その他</option>
+        </select>
+        <div id="f19ow" class="hide" style="margin-top:8px"><input type="text" id="f19o" placeholder="ISP名を入力"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="head"><span class="no">20</span><h2>月額費用<span class="auto">自動計算</span></h2></div>
+    <div class="body">
+      <div>
+        <label class="lbl" for="net">ネット基本料（税込）<span class="auto">料金表から自動</span></label>
+        <div class="suffix"><input type="number" id="net" inputmode="numeric" placeholder="4180"><span>円</span></div>
+        <p class="note" style="margin-top:6px">タイプと戸数区分から自動で入る。違う金額なら上書きしてな</p>
+      </div>
+      <div class="calc">
+        <div class="line"><span>内訳</span><b id="cCount">—</b></div>
+        <div class="bd" id="cBreak">タイプを選んだら出るで</div>
+        <div class="line total"><span>総額（2200円割引は含めない）</span><b id="cTotal">¥0</b></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card alert">
+    <div class="head"><span class="no">⚠</span><h2>70歳以上（第三者情報）</h2></div>
+    <div class="body">
+      <label class="opt solo">
+        <input type="checkbox" id="old">
+        <span class="in">
+          <span class="txt"><b>お客様が70歳以上</b><small>高齢者扱い。意思確認書類の返送が必要</small></span>
+          <span class="state">なし</span>
+        </span>
+      </label>
+      <div id="oldw" class="hide" style="display:flex;flex-direction:column;gap:10px">
+        <p class="note warn">後日カスタマーソリューション社から意思確認の書類が届く。返送されへんと工事日調整に進まん</p>
+        <div class="row2">
+          <div><label class="lbl" for="o1">続柄</label><input type="text" id="o1" placeholder="長男"></div>
+          <div><label class="lbl" for="o2">名前</label><input type="text" id="o2" placeholder="竹内 次郎"></div>
+        </div>
+        <div><label class="lbl" for="o3">生年月日</label><input type="date" id="o3"></div>
+        <div>
+          <label class="lbl">同居 or 別居</label>
+          <div class="seg" id="o4">
+            <label><input type="radio" name="ko4" value="同居"><span>同居</span></label>
+            <label><input type="radio" name="ko4" value="別居"><span>別居</span></label>
+          </div>
+        </div>
+        <div><label class="lbl" for="o5">連絡先</label><input type="tel" id="o5" inputmode="tel" placeholder="090-0000-0000"></div>
+        <div>
+          <label class="lbl">65歳未満のご家族様の了承</label>
+          <div class="seg" id="o6">
+            <label><input type="radio" name="ko6" value="了承済み"><span>了承済み</span></label>
+            <label><input type="radio" name="ko6" value="未了承"><span>未了承</span></label>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="head"><span class="no">■</span><h2>特記事項</h2></div>
+    <div class="body">
+      <textarea id="memo" placeholder="他に何かあれば記載"></textarea>
+    </div>
+  </section>
+
+  <p class="note" style="text-align:center;padding:2px 0 10px">料金は「タイプ別・設置可能戸数別 料金表」基準。<br>改定があったら金額を上書きしてな</p>
+</main>
+
+<div class="actionbar">
+  <div class="actionbar-in">
+    <div class="sum"><small>月額合計</small><b id="barTotal">¥0</b></div>
+    <button class="primary" id="make" type="button">テンプレを作る</button>
+  </div>
+</div>
+
+<script>
+(function(){
+"use strict";
+var $=function(id){return document.getElementById(id)};
+var KEY="au-hikari-template-v1";
+
+/* 料金表：タイプ別・戸数区分別の「ネットのみ」税込 */
+var PRICE={
+  "タイプV（お得プランA）":{u:{"16契約以上":4180,"8契約以上":4510},sp:"100M"},
+  "タイプG（お得プラン）":{u:{"16契約以上":4180,"8契約以上":4510},sp:"664M"},
+  "タイプE（お得プランA）":{u:{"16契約以上":3740,"8契約以上":4070},sp:"100M"},
+  "タイプF（お得プランA）":{f:4290,sp:"1G"},
+  "タイプミニギガ（お得プランA）":{f:5500,sp:"1G"},
+  "タイプギガ（お得プランA）":{f:4455,sp:"1G"},
+  "都市機構西日本（お得プランA）":{f:4180,sp:"100M"},
+  "都市機構東日本（お得プランA）":{f:4180,sp:"100M"},
+  "都市機構G（お得プラン）":{f:4180,sp:"664M"}
+};
+var TEL=770;
+
+var yen=function(n){return "¥"+Number(n||0).toLocaleString("ja-JP")};
+var num=function(n){return Number(n||0).toLocaleString("ja-JP")};
+var radio=function(name){var el=document.querySelector('input[name="'+name+'"]:checked');return el?el.value:""};
+var setRadio=function(name,v){
+  var list=document.getElementsByName(name);
+  for(var i=0;i<list.length;i++){if(list[i].value===v){list[i].checked=true;return}}
+};
+var show=function(el,on){el.classList.toggle("hide",!on)};
+var jdate=function(v){
+  if(!v)return "";
+  var p=v.split("-");
+  if(p.length!==3)return v;
+  return Number(p[0])+"年"+Number(p[1])+"月"+Number(p[2])+"日";
+};
+
+/* 固定電話オプションの行 */
+function addExtra(name,price){
+  var wrap=document.createElement("div");
+  wrap.className="extra";
+  var a=document.createElement("input");
+  a.type="text";a.placeholder="オプション名";a.className="ex-name";a.value=name||"";
+  var b=document.createElement("input");
+  b.type="number";b.inputMode="numeric";b.placeholder="金額";b.className="ex-yen";
+  b.value=(price||price===0)?price:"";
+  var c=document.createElement("button");
+  c.type="button";c.textContent="×";c.setAttribute("aria-label","この行を消す");
+  c.addEventListener("click",function(){wrap.remove();refresh()});
+  wrap.appendChild(a);wrap.appendChild(b);wrap.appendChild(c);
+  $("extras").appendChild(wrap);
+}
+function readExtras(){
+  var out=[];
+  var rows=document.querySelectorAll("#extras .extra");
+  for(var i=0;i<rows.length;i++){
+    var n=rows[i].querySelector(".ex-name").value.trim();
+    var p=rows[i].querySelector(".ex-yen").value;
+    if(n||p)out.push([n,p===""?0:Number(p)]);
+  }
+  return out;
+}
+
+/* 入力値をまとめて金額を計算 */
+function build(){
+  var s={};
+  s.k1=radio("k1");
+  s.k2=$("f2").value==="その他"?$("f2o").value.trim():$("f2").value;
+  s.k3=radio("k3");
+  s.k4=radio("k4");
+  s.k5=$("f5").value;
+  s.k6=$("f6").value;
+  s.k7=$("f7").value;
+  s.k7u=radio("k7u");
+  s.k8=$("f8").value==="その他"?$("f8o").value.trim():$("f8").value;
+  s.k9=radio("k9");
+  s.k11=radio("k11");
+  s.k12=radio("k12");
+  s.uq=$("uq").checked;
+  s.k13=radio("k13");
+  s.k14=radio("k14");
+  s.k16=radio("k16");
+  s.k18=$("f18").value==="その他"?$("f18o").value.trim():$("f18").value;
+  s.k19=$("f19").value==="その他"?$("f19o").value.trim():$("f19").value;
+
+  var parts=[];
+  var netBase=Number($("net").value||0);
+  var total=0;
+  if(netBase>0){parts.push("ネット"+num(netBase)+"円");total+=netBase}
+  if(s.k1==="ネット＋光電話"){parts.push("電話"+num(TEL)+"円");total+=TEL}
+
+  s.wifiText="なし";
+  if(s.k13==="Wi-Fiパック"){
+    var half=(s.k12==="あり"||s.uq);
+    var wp=half?330:660;
+    s.wifiText="Wi-Fiパック"+wp+"円"+(half?"（スマバリ・UQ自宅セット割ありのため330円）":"");
+    parts.push("Wi-Fiパック"+num(wp)+"円");total+=wp;
+  }else if(s.k13==="おうちWi-Fi"){
+    s.wifiText="おうちWi-Fi880円";
+    parts.push("おうちWi-Fi"+num(880)+"円");total+=880;
+  }
+
+  s.tvPack="";s.tvYen=0;s.stb=false;
+  if(s.k14==="あり"){
+    s.tvPack=$("tvp").value.trim();
+    s.tvYen=Number($("tvy").value||0);
+    s.stb=$("stb").checked;
+    if(s.tvYen>0){
+      parts.push("ひかりTV"+(s.tvPack?"（"+s.tvPack+"）":"")+num(s.tvYen)+"円");
+      total+=s.tvYen;
+    }
+    if(s.stb){parts.push("STBレンタル550円");total+=550}
+  }
+
+  s.opts=[];
+  var boxes=document.querySelectorAll("#opts input[type=checkbox]");
+  for(var i=0;i<boxes.length;i++){
+    var el=boxes[i];
+    s.opts.push([el.getAttribute("data-opt"),el.checked]);
+    if(el.checked){
+      var y=Number(el.getAttribute("data-yen"));
+      parts.push(el.parentElement.querySelector(".txt b").textContent+num(y)+"円");
+      total+=y;
+    }
+  }
+
+  s.extras=readExtras();
+  for(var j=0;j<s.extras.length;j++){
+    if(s.extras[j][1]>0){
+      parts.push(s.extras[j][0]+num(s.extras[j][1])+"円");
+      total+=s.extras[j][1];
+    }
+  }
+
+  s.parts=parts;s.total=total;s.netBase=netBase;
+  return s;
+}
+
+/* 未入力チェック */
+function missing(s){
+  var m=[];
+  var need=function(ok,el,label){if(!ok)m.push({el:el,label:label})};
+  need(s.k1,$("f1"),"1.ネット＋光電話orネットのみ");
+  need(s.k2,$("f2"),"2.携帯キャリア");
+  need(s.k3,$("f3"),"3.性別");
+  need(s.k4,$("f4"),"4.持家or賃貸");
+  need(s.k5,$("f5"),"5.建物総階数");
+  need(s.k6,$("f6"),"6.回線設置階数");
+  need(s.k7,$("f7"),"7.申し込みサービス");
+  if(s.k7&&PRICE[s.k7]&&PRICE[s.k7].u)need(s.k7u,$("f7u"),"7.戸数区分");
+  need(s.k8,$("f8"),"8.速度タイプ");
+  need(s.k9,$("f9"),"9.新規発番or番ポ");
+  if(s.k9==="番ポ"){
+    need($("m1").value.trim(),$("m1"),"10.番ポ電話番号");
+    need($("m2").value.trim(),$("m2"),"10.契約者氏名（漢字）");
+    need($("m3").value.trim(),$("m3"),"10.契約者氏名（カナ）");
+    need($("m4").value,$("m4"),"10.契約者生年月日");
+    need(radio("km5"),$("m5s"),"10.設置先住所");
+    if(radio("km5")==="別")need($("m5").value.trim(),$("m5"),"10.設置先住所");
+    need($("m6").value,$("m6"),"10.番ポ元の事業者名");
+    if($("m6").value==="その他")need($("m6o").value.trim(),$("m6o"),"10.番ポ元の事業者名");
+  }
+  need(s.k11,$("f11"),"11.乗り換えスタートサポート");
+  need(s.k12,$("f12"),"12.スマバリ");
+  need(s.k13,$("f13"),"13.無線ルータレンタル");
+  need(s.k14,$("f14"),"14.ひかりTV");
+  if(s.k14==="あり"){
+    need($("tvp").value.trim(),$("tvp"),"14.チャンネルパック名");
+    need(Number($("tvy").value)>0,$("tvy"),"14.チャンネルパック金額");
+  }
+  need(s.k16,$("f16"),"16.特典");
+  need(s.k18,$("f18"),"18.現状の回線");
+  need(s.k19,$("f19"),"19.現状のISP");
+  need(s.netBase>0,$("net"),"20.ネット基本料");
+  if($("old").checked){
+    need($("o1").value.trim(),$("o1"),"第三者情報・続柄");
+    need($("o2").value.trim(),$("o2"),"第三者情報・名前");
+    need($("o3").value,$("o3"),"第三者情報・生年月日");
+    need(radio("ko4"),$("o4"),"第三者情報・同居or別居");
+    need($("o5").value.trim(),$("o5"),"第三者情報・連絡先");
+    need(radio("ko6"),$("o6"),"第三者情報・了承");
+  }
+  return m;
+}
+
+/* テンプレ文を組み立て */
+function compose(s){
+  var L=[];
+  var P=function(x){L.push(x===undefined?"":x)};
+  var A=function(v){return "→"+(v||"")};
+
+  P("◾️※BIGLOBE※auひかりマンションタイプお得プランテンプレ");
+  P("※auひかりマンション設備導入済み物件に利用");
+  P("");
+  P("1.ネット＋光電話orネットのみ");P(A(s.k1));P("");
+  P("2.携帯キャリア");P(A(s.k2));P("");
+  P("3.男性or女性");P(A(s.k3));P("");
+  P("4.持家or賃貸");P(A(s.k4));P("");
+  P("5.建物総階数：");P(A(s.k5?s.k5+"階":""));P("");
+  P("6.回線設置階数：");P(A(s.k6?s.k6+"階":""));P("");
+  P("7.申し込みサービス");P(A(s.k7+(s.k7u?"　"+s.k7u:"")));P("");
+  P("8.速度タイプ");P(A(s.k8));P("");
+  P("9.新規発番 or 番ポ");P(A(s.k9));P("");
+
+  if(s.k9==="番ポ"){
+    var addr=radio("km5")==="設場住所"?"設場住所":$("m5").value.trim();
+    var from=$("m6").value==="その他"?$("m6o").value.trim():$("m6").value;
+    P("10.番ポ情報");
+    P("・番ポ電話番号："+$("m1").value.trim());
+    P("・契約者氏名（漢字・カナ）："+$("m2").value.trim()+"（"+$("m3").value.trim()+"）");
+    P("・契約者生年月日（番ポ名義人）："+jdate($("m4").value));
+    P("・設置先住所："+addr);
+    P("・番ポ元の事業者名："+from);
+    P("");
+  }
+
+  P("11.乗り換えスタートサポートありorなし");P(A(s.k11));P("");
+  P("12.スマバリ：あり or なし");P(A(s.k12+(s.uq?"（UQ自宅セット割あり）":"")));P("");
+  P("13.無線ルータレンタルについて");P(A(s.wifiText));P("");
+  P("14.ひかりTV：あり or なし");
+  if(s.k14==="あり"){
+    P(A("あり"));
+    P("・チャンネルパック："+s.tvPack+"　"+num(s.tvYen)+"円");
+    if(s.stb)P("・STBレンタル：550円");
+  }else{
+    P(A(s.k14));
+  }
+  P("");
+  P("15.オプション");
+  for(var i=0;i<s.opts.length;i++){P(s.opts[i][0]+"："+(s.opts[i][1]?"あり":"なし"))}
+  P("");
+  P("16.特典");P(A(s.k16));P("");
+  P("17.固定電話オプション");
+  if(s.extras.length){
+    for(var j=0;j<s.extras.length;j++){P("・"+s.extras[j][0]+"　"+num(s.extras[j][1])+"円")}
+  }else{
+    P(A("なし"));
+  }
+  P("");
+  P("18.現状の回線");P(A(s.k18));P("");
+  P("19.現状のISP");P(A(s.k19));P("");
+  P("20.月額費用");
+  P("総額"+num(s.total)+"円(2200円×5ヶ月割は自動適用のため2200円割引含めない金額)");
+  P(s.parts.join("+"));
+
+  if($("old").checked){
+    P("");
+    P("⚠️70歳以上のため第三者情報⚠️");
+    P("※後日カスタマーソリューション社より申し込み意思確認の書類が届きます");
+    P("第三者情報");
+    P("続柄："+$("o1").value.trim());
+    P("名前：（"+$("o2").value.trim()+"）");
+    P("生年月日："+jdate($("o3").value));
+    P("同居or別居："+radio("ko4"));
+    P("連絡先："+$("o5").value.trim());
+    P("65歳未満のご家族様の了承："+radio("ko6"));
+  }
+
+  P("");
+  P("■特記事項");
+  P($("memo").value.trim()||"特になし");
+
+  return L.join("\n");
+}
+
+/* 画面更新 */
+function refresh(){
+  var svc=$("f7").value;
+  show($("f7uw"),!!(svc&&PRICE[svc]&&PRICE[svc].u));
+  show($("f2ow"),$("f2").value==="その他");
+  show($("f8ow"),$("f8").value==="その他");
+  show($("mnp"),radio("k9")==="番ポ");
+  show($("m5w"),radio("km5")==="別");
+  show($("m6ow"),$("m6").value==="その他");
+  show($("tvw"),radio("k14")==="あり");
+  show($("f18ow"),$("f18").value==="その他");
+  show($("f19ow"),$("f19").value==="その他");
+  show($("oldw"),$("old").checked);
+  show($("auWarn"),$("f18").value==="auひかり");
+
+  var wf=(radio("k12")==="あり"||$("uq").checked)?330:660;
+  $("wfLabel").textContent="Wi-Fiパック "+wf+"円";
+  $("wfNote").textContent=(wf===330)
+    ?"スマバリ・UQ自宅セット割ありなので330円で計算中"
+    :"Wi-Fiパックはスマバリ・UQ自宅セット割ありで330円、なしで660円";
+
+  var boxes=document.querySelectorAll('input[type=checkbox]');
+  for(var i=0;i<boxes.length;i++){
+    var st=boxes[i].parentElement.querySelector(".state");
+    if(st)st.textContent=boxes[i].checked?"あり":"なし";
+  }
+
+  var s=build();
+  $("cCount").textContent=s.parts.length?s.parts.length+"項目":"—";
+  $("cBreak").textContent=s.parts.length?s.parts.join(" ＋ "):"タイプを選んだら出るで";
+  $("cTotal").textContent=yen(s.total);
+  $("barTotal").textContent=yen(s.total);
+
+  var m=missing(s);
+  var chip=$("chip");
+  if(m.length){chip.textContent="未入力 "+m.length;chip.classList.remove("done")}
+  else{chip.textContent="入力OK";chip.classList.add("done")}
+
+  save();
+}
+
+function autoNet(){
+  var p=PRICE[$("f7").value];
+  if(!p)return;
+  var v=p.f;
+  if(p.u){var u=radio("k7u");if(!u)return;v=p.u[u]}
+  $("net").value=v;
+}
+function autoSpeed(){
+  var p=PRICE[$("f7").value];
+  if(p&&p.sp)$("f8").value=p.sp;
+}
+
+/* 保存・復元 */
+function save(){
+  try{
+    var o={r:{},v:{},c:{},e:readExtras()};
+    var rs=document.querySelectorAll("input[type=radio]");
+    for(var i=0;i<rs.length;i++){if(rs[i].checked)o.r[rs[i].name]=rs[i].value}
+    var cs=document.querySelectorAll("input[type=checkbox]");
+    for(var j=0;j<cs.length;j++){if(cs[j].id)o.c[cs[j].id]=cs[j].checked}
+    var vs=document.querySelectorAll("input:not([type=radio]):not([type=checkbox]),select,textarea");
+    for(var k=0;k<vs.length;k++){
+      if(vs[k].id&&!vs[k].closest("[data-skip]"))o.v[vs[k].id]=vs[k].value;
+    }
+    localStorage.setItem(KEY,JSON.stringify(o));
+  }catch(e){}
+}
+function load(){
+  try{
+    var raw=localStorage.getItem(KEY);
+    if(!raw)return;
+    var o=JSON.parse(raw);
+    var r=o.r||{},c=o.c||{},v=o.v||{},e=o.e||[];
+    for(var k1 in r){if(r.hasOwnProperty(k1))setRadio(k1,r[k1])}
+    for(var k2 in c){if(c.hasOwnProperty(k2)){var e2=$(k2);if(e2)e2.checked=c[k2]}}
+    for(var k3 in v){if(v.hasOwnProperty(k3)){var e3=$(k3);if(e3)e3.value=v[k3]}}
+    for(var i=0;i<e.length;i++)addExtra(e[i][0],e[i][1]);
+  }catch(e){}
+}
+
+/* トースト */
+var toastEl=null,toastT=null;
+function toast(msg,actionLabel,action){
+  if(toastEl){toastEl.remove();toastEl=null}
+  clearTimeout(toastT);
+  var t=document.createElement("div");
+  t.className="toast";
+  var sp=document.createElement("span");sp.textContent=msg;
+  t.appendChild(sp);
+  if(actionLabel){
+    var b=document.createElement("button");
+    b.type="button";b.textContent=actionLabel;
+    b.addEventListener("click",function(){t.remove();toastEl=null;action()});
+    t.appendChild(b);
+  }
+  document.body.appendChild(t);
+  toastEl=t;
+  toastT=setTimeout(function(){if(toastEl===t){t.remove();toastEl=null}},actionLabel?9000:2600);
+}
+
+/* 出力シート */
+function openSheet(text){
+  var sheet=document.createElement("div");
+  sheet.className="sheet";
+
+  var inner=document.createElement("div");
+  inner.className="sheet-in";
+  inner.setAttribute("role","dialog");
+  inner.setAttribute("aria-modal","true");
+  inner.setAttribute("aria-label","できたテンプレ");
+
+  var head=document.createElement("div");
+  head.className="sheet-head";
+  var h=document.createElement("h2");h.textContent="できたテンプレ";
+  var close=document.createElement("button");
+  close.type="button";close.className="ghost";close.textContent="閉じる";
+  close.addEventListener("click",function(){sheet.remove()});
+  head.appendChild(h);head.appendChild(close);
+
+  var pre=document.createElement("pre");
+  pre.className="out";pre.textContent=text;
+
+  var foot=document.createElement("div");
+  foot.className="sheet-foot";
+  var cp=document.createElement("button");
+  cp.type="button";cp.className="primary";cp.textContent="コピーする";
+  cp.addEventListener("click",function(){
+    copy(text,function(ok){
+      cp.textContent=ok?"コピーしました":"長押しでコピーしてな";
+      setTimeout(function(){cp.textContent="コピーする"},2200);
+    });
+  });
+  var tip=document.createElement("p");
+  tip.className="note";tip.style.textAlign="center";tip.style.margin="0";
+  tip.textContent="コピーでけへん時は本文を長押しして全選択してな";
+  foot.appendChild(cp);foot.appendChild(tip);
+
+  inner.appendChild(head);inner.appendChild(pre);inner.appendChild(foot);
+  sheet.appendChild(inner);
+  sheet.addEventListener("click",function(ev){if(ev.target===sheet)sheet.remove()});
+  document.body.appendChild(sheet);
+  close.focus();
+}
+
+function copy(text,cb){
+  function fallback(){
+    try{
+      var ta=document.createElement("textarea");
+      ta.value=text;ta.setAttribute("readonly","");
+      ta.style.position="fixed";ta.style.top="0";ta.style.opacity="0";
+      document.body.appendChild(ta);
+      ta.select();ta.setSelectionRange(0,text.length);
+      var ok=document.execCommand("copy");
+      ta.remove();cb(!!ok);
+    }catch(e){cb(false)}
+  }
+  if(navigator.clipboard&&navigator.clipboard.writeText){
+    navigator.clipboard.writeText(text).then(function(){cb(true)},fallback);
+  }else{
+    fallback();
+  }
+}
+
+/* イベント */
+document.addEventListener("input",function(e){
+  if(e.target.id==="f7"){autoNet();autoSpeed()}
+  refresh();
+});
+document.addEventListener("change",function(e){
+  if(e.target.id==="f7"){autoNet();autoSpeed()}
+  if(e.target.name==="k7u")autoNet();
+  refresh();
+});
+
+$("addExtra").addEventListener("click",function(){addExtra("","");refresh()});
+
+$("make").addEventListener("click",function(){
+  var s=build();
+  var m=missing(s);
+  var marked=document.querySelectorAll(".miss");
+  for(var i=0;i<marked.length;i++)marked[i].classList.remove("miss");
+  if(m.length){
+    for(var j=0;j<m.length;j++)m[j].el.classList.add("miss");
+    m[0].el.scrollIntoView({block:"center",behavior:"smooth"});
+    toast("未入力が"+m.length+"件（"+m[0].label+"など）","このまま作る",function(){
+      openSheet(compose(build()));
+    });
+    return;
+  }
+  openSheet(compose(s));
+});
+
+$("reset").addEventListener("click",function(){
+  toast("入力を全部消す？","消す",function(){
+    try{localStorage.removeItem(KEY)}catch(e){}
+    var a=document.querySelectorAll("input[type=radio],input[type=checkbox]");
+    for(var i=0;i<a.length;i++)a[i].checked=false;
+    var b=document.querySelectorAll("input:not([type=radio]):not([type=checkbox]),select,textarea");
+    for(var j=0;j<b.length;j++)b[j].value="";
+    $("extras").innerHTML="";
+    var c=document.querySelectorAll(".miss");
+    for(var k=0;k<c.length;k++)c[k].classList.remove("miss");
+    refresh();
+    window.scrollTo({top:0,behavior:"smooth"});
+  });
+});
+
+load();
+refresh();
+})();
+</script>
+
+<script>
+/* オフラインでも開けるようにサービスワーカーを登録 */
+if("serviceWorker" in navigator){
+  window.addEventListener("load",function(){
+    navigator.serviceWorker.register("./sw.js").catch(function(){});
+  });
+}
+</script>
+</body>
+</html>
