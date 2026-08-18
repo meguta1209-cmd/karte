@@ -639,9 +639,15 @@ input:focus-visible,select:focus-visible,textarea:focus-visible{
   <section class="card">
     <div class="head"><span class="no">17</span><h2>固定電話オプション</h2></div>
     <div class="body">
-      <p class="note">あるときだけ入力。金額は月額合計にも足される</p>
-      <div id="extras" data-skip style="display:flex;flex-direction:column;gap:8px"></div>
-      <button class="addbtn" id="addExtra" type="button">＋ オプションを追加</button>
+      <div class="seg" id="f17">
+        <label><input type="radio" name="k17" value="なし"><span>なし</span></label>
+        <label><input type="radio" name="k17" value="あり"><span>あり</span></label>
+      </div>
+      <div id="ex17w" class="hide" style="display:flex;flex-direction:column;gap:8px">
+        <p class="note">オプション名と金額を入れてな。金額は月額合計にも足される</p>
+        <div id="extras" data-skip style="display:flex;flex-direction:column;gap:8px"></div>
+        <button class="addbtn" id="addExtra" type="button">＋ オプションを追加</button>
+      </div>
     </div>
   </section>
 
@@ -823,6 +829,7 @@ function build(){
   s.k13=radio("k13");
   s.k14=radio("k14");
   s.k16=radio("k16");
+  s.k17=radio("k17");
   s.k18=$("f18").value==="その他"?$("f18o").value.trim():$("f18").value;
   s.k19=$("f19").value==="その他"?$("f19o").value.trim():$("f19").value;
 
@@ -867,7 +874,8 @@ function build(){
     }
   }
 
-  s.extras=readExtras();
+  /* 「なし」なら行が残ってても金額に足さん */
+  s.extras=(s.k17==="あり")?readExtras():[];
   for(var j=0;j<s.extras.length;j++){
     if(s.extras[j][1]>0){
       parts.push(s.extras[j][0]+num(s.extras[j][1])+"円");
@@ -912,6 +920,8 @@ function missing(s){
     need(Number($("tvy").value)>0,$("tvy"),"14.チャンネルパック金額");
   }
   need(s.k16,$("f16"),"16.特典");
+  need(s.k17,$("f17"),"17.固定電話オプション");
+  if(s.k17==="あり")need(s.extras.length,$("ex17w"),"17.固定電話オプションの中身");
   need(s.k18,$("f18"),"18.現状の回線");
   need(s.k19,$("f19"),"19.現状のISP");
   need(s.netBase>0,$("net"),"20.ネット基本料");
@@ -1016,6 +1026,7 @@ function refresh(){
   show($("m5w"),radio("km5")==="別");
   show($("m6ow"),$("m6").value==="その他");
   show($("tvw"),radio("k14")==="あり");
+  show($("ex17w"),radio("k17")==="あり");
   show($("f18ow"),$("f18").value==="その他");
   show($("f19ow"),$("f19").value==="その他");
   show($("oldw"),$("old").checked);
@@ -1178,6 +1189,8 @@ document.addEventListener("input",function(e){
 document.addEventListener("change",function(e){
   if(e.target.id==="f7"){autoNet();autoSpeed()}
   if(e.target.name==="k7u")autoNet();
+  /* 「あり」にしたら入力欄を1行出しとく */
+  if(e.target.name==="k17"&&e.target.value==="あり"&&!document.querySelector("#extras .extra"))addExtra("","");
   refresh();
 });
 

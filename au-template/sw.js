@@ -1,6 +1,6 @@
 /* auひかり申込テンプレ — オフライン用サービスワーカー
    アプリを更新したら CACHE の数字を1つ上げること */
-const CACHE = "au-template-v1";
+const CACHE = "au-template-v2";
 const ASSETS = [
   "./",
   "./index.html",
