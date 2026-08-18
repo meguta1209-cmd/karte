@@ -1219,7 +1219,7 @@ async function doSync(manual){
     const data = await res.json();
     if (!data || !data.ok) throw new Error((data && data.error) || "サーバーが受け付けませんでした");
     const got = applyServer(data);
-    render();
+    reRender();
     setSyncLabel("");
     if (manual) toast(got ? `${got}件を受け取りました` : "最新の状態です");
   } catch (e) {
@@ -1253,6 +1253,51 @@ function tombBuilding(name){ if (name && !DB.meta.deleted.buildings.includes(nam
 
 window.addEventListener("online", () => queueSync());
 
+/* ---- 開いている間の自動取り込み（2026-08-18 追加） ----
+   他の担当が別の端末で入れた記録を、こちらから取りに行く。
+   ・アプリに戻ってきた時（iPhoneは開いたまま復帰するので、これが要る）
+   ・画面を見ている間は3分おき
+   入力中に横から書き換わらないよう、フォームを開いている間は見送る。 */
+const PULL_EVERY = 3 * 60 * 1000;   /* 見ている間に取りに行く間隔 */
+const PULL_GAP   = 30 * 1000;       /* 直前に同期済みなら、戻ってきても見送る */
+let pullTimer = null;
+
+function autoSyncOn(){ return !!DB.meta.syncUrl && DB.meta.autoSync !== false; }
+function sheetOpen(){ const s = $("#sheet"); return !!s && s.classList.contains("on"); }
+function sinceLastSync(){
+  const t = Date.parse(DB.meta.lastSync || "");
+  return isNaN(t) ? Infinity : Date.now() - t;
+}
+function pullNow(){
+  if (!autoSyncOn() || syncing || sheetOpen()) return;
+  if (document.hidden || navigator.onLine === false) return;
+  doSync(false);
+}
+function startPull(){
+  stopPull();
+  if (!autoSyncOn()) return;
+  pullTimer = setInterval(pullNow, PULL_EVERY);
+}
+function stopPull(){ clearInterval(pullTimer); pullTimer = null; }
+
+/* 裏に回っている間は止めて、戻ってきたら取りに行く */
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) { stopPull(); return; }
+  startPull();
+  if (sinceLastSync() > PULL_GAP) pullNow();
+});
+/* Safariのタブで前の画面から戻ってきた時も同じ扱い */
+window.addEventListener("pageshow", e => { if (e.persisted) { startPull(); pullNow(); } });
+
+/* 裏で描き直しても、見ていた位置は動かさない */
+function reRender(){
+  const s = document.querySelector(".screen.on");
+  const y = s ? s.scrollTop : 0;
+  render();
+  const s2 = document.querySelector(".screen.on");
+  if (s2 && y) s2.scrollTop = y;
+}
+
 /* ---- はじめての人に出る画面 ---- */
 function welcomeSheet(){
   DB.meta.welcomed = true; save();
@@ -1282,7 +1327,7 @@ function welcomeSheet(){
       const u = $("#w-url").value.trim();
       if (u) setSyncUrl(u);
       save(); closeSheet(); render();
-      if (u) await doSync(true); else toast("準備できました");
+      if (u) { await doSync(true); startPull(); } else toast("準備できました");
     }
   });
   bindPaste("#w-paste", "#w-url");
@@ -1323,9 +1368,10 @@ function menuSheet(){
         <input class="field" id="m-url" value="${esc(DB.meta.syncUrl || "")}" placeholder="担当者から届いたURL" autocomplete="off" spellcheck="false">
         <button class="btn sm" id="m-paste" style="margin-top:9px">${ICON.copy}クリップボードから貼り付け</button>
         <div class="switchrow">
-          <span>記録するたび自動で同期する</span>
+          <span>自動で同期する</span>
           <button class="sw" id="m-auto" aria-pressed="${DB.meta.autoSync !== false}">${DB.meta.autoSync !== false ? "ON" : "OFF"}</button>
         </div>
+        <p class="tiny" style="margin:8px 3px 0">記録した時・アプリに戻ってきた時・見ている間は3分おきに、自動でやりとりします。</p>
         <button class="btn primary" id="m-sync" style="margin-top:10px">${ICON.sync}今すぐ同期する</button>
         <p class="tiny" style="margin:8px 3px 0" id="syncState">${syncSummary()}</p>
       </div>
@@ -1355,7 +1401,7 @@ function menuSheet(){
     DB.meta.owner = $("#m-owner").value.trim(); save();
   });
   $("#m-url").addEventListener("change", () => {
-    setSyncUrl($("#m-url").value); save(); setSyncLabel("");
+    setSyncUrl($("#m-url").value); save(); setSyncLabel(""); startPull();
   });
   bindPaste("#m-paste", "#m-url");
   $("#m-auto").addEventListener("click", () => {
@@ -1364,6 +1410,7 @@ function menuSheet(){
     const on = DB.meta.autoSync !== false;
     $("#m-auto").setAttribute("aria-pressed", String(on));
     $("#m-auto").textContent = on ? "ON" : "OFF";
+    if (on) { startPull(); pullNow(); } else stopPull();
   });
   $("#m-sync").addEventListener("click", async () => {
     DB.meta.owner = $("#m-owner").value.trim();
@@ -1545,7 +1592,10 @@ load();
 render();
 syncBar();
 /* 起動直後に一度だけ、他の人の記録を取りに行く */
-if (DB.meta.syncUrl) setTimeout(() => doSync(false), 1200);
+if (DB.meta.syncUrl) {
+  if (autoSyncOn()) setTimeout(() => doSync(false), 1200);
+  startPull();
+}
 /* まだ何も設定していない人には、案内を出す */
 else if (!DB.meta.welcomed && !DB.buildings.length) setTimeout(welcomeSheet, 600);
 })();
