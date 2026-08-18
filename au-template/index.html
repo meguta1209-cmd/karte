@@ -486,7 +486,9 @@ input:focus-visible,select:focus-visible,textarea:focus-visible{
       <div class="seg" id="f9">
         <label><input type="radio" name="k9" value="新規発番"><span>新規発番</span></label>
         <label><input type="radio" name="k9" value="番ポ"><span>番ポ</span></label>
+        <label><input type="radio" name="k9" value="なし"><span>なし</span></label>
       </div>
+      <p class="note" id="n9">1番で「ネットのみ」を選んだら自動で「なし」になる</p>
       <div id="mnp" class="hide" style="display:flex;flex-direction:column;gap:10px">
         <p class="note warn">番ポありなら下は全部必須</p>
         <div>
@@ -1065,6 +1067,15 @@ function autoNet(){
   if(p.u){var u=radio("k7u");if(!u)return;v=p.u[u]}
   $("net").value=v;
 }
+/* 1番と9番の食い違いを防ぐ（光電話なしなら発番も番ポも無い） */
+function syncPhone(){
+  var k1=radio("k1"),k9=radio("k9");
+  if(k1==="ネットのみ"&&k9!=="なし"){setRadio("k9","なし");return}
+  if(k1==="ネット＋光電話"&&k9==="なし"){
+    var el=document.querySelector('input[name="k9"]:checked');
+    if(el)el.checked=false;
+  }
+}
 function autoSpeed(){
   var p=PRICE[$("f7").value];
   if(p&&p.sp)$("f8").value=p.sp;
@@ -1189,6 +1200,7 @@ document.addEventListener("input",function(e){
 document.addEventListener("change",function(e){
   if(e.target.id==="f7"){autoNet();autoSpeed()}
   if(e.target.name==="k7u")autoNet();
+  if(e.target.name==="k1")syncPhone();
   /* 「あり」にしたら入力欄を1行出しとく */
   if(e.target.name==="k17"&&e.target.value==="あり"&&!document.querySelector("#extras .extra"))addExtra("","");
   refresh();
