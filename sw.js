@@ -1,6 +1,10 @@
 /* 訪販カルテ — オフライン用サービスワーカー
-   アプリを更新したら CACHE の数字を1つ上げること */
-const CACHE = "hohan-karte-v5";
+   アプリを更新したら CACHE の数字を1つ上げること
+
+   このSWのスコープは /karte/ 全体なので、サブフォルダの別アプリ
+   （au-template/ や beat/）まで巻き込まないよう2箇所ガードしている。
+   下の「他のアプリを巻き込まない」コメント参照。 */
+const CACHE = "hohan-karte-v6";
 const ASSETS = [
   "./",
   "./index.html",
@@ -23,7 +27,13 @@ self.addEventListener("install", e => {
 self.addEventListener("activate", e => {
   e.waitUntil(
     caches.keys()
-      .then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k))))
+      /* 他のアプリを巻き込まない①: caches.keys() はこのドメイン全部の
+         キャッシュを返す。名前で絞らずに消すと、beat/ など別アプリの
+         キャッシュまで削除してしまう。 */
+      .then(keys => Promise.all(
+        keys.filter(k => k.startsWith("hohan-karte-") && k !== CACHE)
+            .map(k => caches.delete(k))
+      ))
       .then(() => self.clients.claim())
   );
 });
@@ -34,6 +44,15 @@ self.addEventListener("fetch", e => {
 
   /* 画面そのものは「まず新しいのを取りに行く。圏外ならキャッシュ」 */
   if (req.mode === "navigate") {
+    /* 他のアプリを巻き込まない②: このスコープは /karte/ 全体なので、
+       ガードが無いと au-template/ や beat/ を開いたときに、その中身を
+       訪販カルテのトップページとしてキャッシュに上書きしてしまう。
+       圏外時もそれらのURLに訪販カルテを返してしまう。
+       スコープ直下のページ以外は、SWが何もせずネットワークに任せる。 */
+    const base = new URL("./", self.location).pathname;
+    const rest = new URL(req.url).pathname.slice(base.length);
+    if (rest.indexOf("/") !== -1) return;
+
     e.respondWith(
       fetch(req)
         .then(res => {
