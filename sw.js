@@ -51,7 +51,7 @@ self.addEventListener("fetch", e => {
        スコープ直下のページ以外は、SWが何もせずネットワークに任せる。 */
     const base = new URL("./", self.location).pathname;
     const rest = new URL(req.url).pathname.slice(base.length);
-    if (rest.indexOf("/") !== -1) return;
+    if (rest !== "" && rest !== "index.html" && rest !== "setup.html") return;
 
     e.respondWith(
       fetch(req)

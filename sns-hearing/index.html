@@ -1,0 +1,888 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>店舗SNS聞き取りシート</title>
+<meta name="description" content="訪問先で店舗のSNSと通信の現状を聞き取って、そのまま相談に貼れるテキストにまとめる営業用シート">
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#E9EEF4" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0C141E" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="聞き取り">
+<meta name="format-detection" content="telephone=no">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="apple-touch-icon" href="./icons/icon-180.png">
+<link rel="icon" href="./icons/icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=BIZ+UDPGothic:wght@400;700&family=Zen+Kaku+Gothic+New:wght@400;500;700&family=Roboto+Mono:wght@400;500&display=swap">
+<style>
+/* ============================================================
+   店舗SNS 聞き取りシート
+   用途: 訪問先で店舗のSNS・集客・通信の現状を聞き取り、
+         そのまま相談に貼れるテキストに変換する
+   色  : 複写式伝票のカーボン青 ＋ 朱色は「未入力」の警告だけに使う
+   字  : 見出し/ラベル=BIZ UDPGothic（帳票用UD書体）
+         本文=Zen Kaku Gothic New / 数字と出力=Roboto Mono
+   ============================================================ */
+:root{
+  color-scheme:light dark;
+  --paper:#E9EEF4; --card:#FBFCFE; --card2:#F2F6FA;
+  --ink:#14304E; --ink2:#4B667F; --ink3:#8299AF;
+  --rule:#C6D5E3; --rule2:#A3B9CE;
+  --blue:#1E4E86; --blue-soft:#DBE7F5;
+  --red:#B8392C; --red-soft:#F8E4E1;
+  --ok:#1F7256; --ok-soft:#DDEFE7;
+  --on-blue:#FFFFFF;
+  --shadow:0 1px 0 rgba(20,48,78,.06), 0 2px 10px rgba(20,48,78,.05);
+  --body:"Zen Kaku Gothic New","Hiragino Kaku Gothic ProN","Yu Gothic",sans-serif;
+  --form:"BIZ UDPGothic","Hiragino Kaku Gothic ProN","Yu Gothic",sans-serif;
+  --mono:"Roboto Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --paper:#0C141E; --card:#151F2B; --card2:#1B2734;
+    --ink:#DDE7F1; --ink2:#9AAEC3; --ink3:#697F96;
+    --rule:#25344A; --rule2:#3A4E68;
+    --blue:#79ADE8; --blue-soft:#1A2C43;
+    --red:#E5796B; --red-soft:#37211E;
+    --ok:#5CC49D; --ok-soft:#14301F;
+    --on-blue:#0C141E;
+    --shadow:0 1px 0 rgba(0,0,0,.3), 0 2px 10px rgba(0,0,0,.25);
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#0C141E; --card:#151F2B; --card2:#1B2734;
+  --ink:#DDE7F1; --ink2:#9AAEC3; --ink3:#697F96;
+  --rule:#25344A; --rule2:#3A4E68;
+  --blue:#79ADE8; --blue-soft:#1A2C43;
+  --red:#E5796B; --red-soft:#37211E;
+  --ok:#5CC49D; --ok-soft:#14301F;
+  --on-blue:#0C141E;
+  --shadow:0 1px 0 rgba(0,0,0,.3), 0 2px 10px rgba(0,0,0,.25);
+}
+
+html,body{margin:0; padding:0;}
+img{max-width:100%;}
+[hidden]{display:none !important;}
+
+body{
+  background:var(--paper); color:var(--ink);
+  font-family:var(--body); font-size:15px; line-height:1.7;
+  -webkit-text-size-adjust:100%;
+  overflow-wrap:break-word;
+}
+.wrap{max-width:680px; margin:0 auto; padding-inline:16px; padding-block:0 140px;}
+
+/* 上部固定 ─ ノッチの下に中身が来るよう、バー自身が safe-area を持つ */
+.top{
+  position:sticky; top:0; z-index:30;
+  background:var(--paper); border-bottom:1px solid var(--rule);
+  padding-top:env(safe-area-inset-top,0px);
+}
+.top-in{max-width:680px; margin:0 auto; padding-inline:16px;}
+.top-row{display:flex; align-items:baseline; gap:10px; padding-block:9px 6px;}
+.brand{font-family:var(--form); font-weight:700; font-size:13px; letter-spacing:.08em; color:var(--blue); white-space:nowrap;}
+.who{font-size:12px; color:var(--ink2); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1;}
+.score{font-family:var(--mono); font-size:12px; font-weight:500; white-space:nowrap; padding:1px 7px; border-radius:3px; background:var(--red-soft); color:var(--red);}
+.score.full{background:var(--ok-soft); color:var(--ok);}
+.nav{display:flex; gap:5px; overflow-x:auto; padding-block:0 8px; scrollbar-width:none; -webkit-overflow-scrolling:touch;}
+.nav::-webkit-scrollbar{display:none;}
+.nav a{
+  flex:0 0 auto; font-family:var(--form); font-size:11.5px; text-decoration:none;
+  color:var(--ink2); background:var(--card); border:1px solid var(--rule);
+  padding:3px 9px; border-radius:3px;
+}
+.nav a:active{background:var(--blue-soft);}
+
+/* 見出し */
+.lede{padding-block:18px 4px;}
+.lede h1{font-family:var(--form); font-size:21px; font-weight:700; margin:0 0 8px; letter-spacing:.01em; text-wrap:balance;}
+.lede p{margin:0; color:var(--ink2); font-size:13.5px;}
+.lede p + p{margin-top:6px;}
+.lede b{color:var(--ink); font-weight:700;}
+
+/* セクション */
+.sec{
+  background:var(--card); border:1px solid var(--rule); border-left:3px solid var(--rule2);
+  border-radius:4px; box-shadow:var(--shadow); margin-top:14px;
+  scroll-margin-top:calc(104px + env(safe-area-inset-top,0px));
+}
+.sec-h{
+  display:flex; align-items:center; gap:9px;
+  padding:10px 14px; border-bottom:1px solid var(--rule); background:var(--card2);
+  border-radius:3px 3px 0 0;
+}
+.num{
+  font-family:var(--mono); font-size:11px; font-weight:500; color:var(--blue);
+  border:1px solid var(--rule2); border-radius:2px; padding:0 5px; line-height:18px; flex:0 0 auto;
+}
+.sec-h h2{font-family:var(--form); font-size:14.5px; font-weight:700; margin:0; letter-spacing:.02em;}
+.sec-h .tag{margin-left:auto; font-size:10.5px; font-family:var(--form); color:var(--ink3); white-space:nowrap;}
+.sec-b{padding:14px; display:flex; flex-direction:column; gap:15px;}
+
+/* フィールド */
+.f{display:flex; flex-direction:column; gap:5px;}
+.lab{font-family:var(--form); font-size:13px; font-weight:700; display:flex; align-items:center; gap:6px; flex-wrap:wrap;}
+.req{font-family:var(--mono); font-size:9.5px; color:var(--red); border:1px solid currentColor; border-radius:2px; padding:0 3px; line-height:14px;}
+.hint{font-size:12px; color:var(--ink2); background:var(--card2); border-left:2px solid var(--rule2); padding:6px 9px; border-radius:0 3px 3px 0; line-height:1.65;}
+.hint b{color:var(--blue); font-weight:700;}
+
+input[type=text],input[type=number],input[type=date],textarea,select{
+  font-family:var(--body); font-size:16px; color:var(--ink);
+  background:var(--paper); border:1px solid var(--rule2); border-radius:3px;
+  padding:8px 10px; width:100%; max-width:100%; box-sizing:border-box;
+}
+input[type=number]{font-family:var(--mono); font-variant-numeric:tabular-nums;}
+textarea{min-height:64px; resize:vertical; line-height:1.6;}
+input:focus-visible,textarea:focus-visible,select:focus-visible{outline:2px solid var(--blue); outline-offset:1px; border-color:var(--blue);}
+::placeholder{color:var(--ink3); opacity:1;}
+
+.row{display:flex; gap:8px; flex-wrap:wrap;}
+.row > *{flex:1 1 130px; min-width:0;}
+.unit{display:flex; align-items:center; gap:7px;}
+.unit input{flex:1; min-width:0;}
+.unit span{font-family:var(--form); font-size:12.5px; color:var(--ink2); flex:0 0 auto;}
+
+/* チップ */
+.chips{display:flex; flex-wrap:wrap; gap:6px;}
+.chip{cursor:pointer; position:relative;}
+.chip input{position:absolute; opacity:0; width:1px; height:1px;}
+.chip span{
+  display:block; font-family:var(--form); font-size:13px; line-height:1.4;
+  padding:7px 11px; border:1px solid var(--rule2); border-radius:3px;
+  background:var(--paper); color:var(--ink2); user-select:none; -webkit-user-select:none;
+}
+.chip input:checked + span{background:var(--blue); border-color:var(--blue); color:var(--on-blue); font-weight:700;}
+.chip input:focus-visible + span{outline:2px solid var(--blue); outline-offset:1px;}
+
+/* 割合 */
+.ratio{display:flex; flex-direction:column; gap:7px;}
+.rr{display:flex; align-items:center; gap:9px;}
+.rr label{font-family:var(--form); font-size:13px; flex:1; min-width:0;}
+.rr input{width:74px; flex:0 0 auto; text-align:right;}
+.rr .pc{font-size:12px; color:var(--ink3); flex:0 0 auto;}
+.sum{display:flex; align-items:center; gap:9px; padding-top:4px;}
+.bar{flex:1; height:7px; background:var(--card2); border:1px solid var(--rule); border-radius:4px; overflow:hidden; min-width:0;}
+.bar i{display:block; height:100%; width:0; background:var(--blue); transition:width .18s ease;}
+.bar.over i{background:var(--red);}
+.sum b{font-family:var(--mono); font-size:12px; font-weight:500; color:var(--ink2); flex:0 0 auto;}
+
+/* チェック */
+.checks{display:flex; flex-direction:column; gap:3px;}
+.ck{display:flex; align-items:flex-start; gap:10px; padding:7px 8px; border-radius:3px; cursor:pointer;}
+.ck:has(input:checked){background:var(--ok-soft);}
+.ck input{width:19px; height:19px; margin:3px 0 0; flex:0 0 auto; accent-color:var(--ok);}
+.ck span{font-family:var(--form); font-size:13.5px; line-height:1.5;}
+.ck em{display:block; font-style:normal; font-size:11.5px; color:var(--ink2); font-family:var(--body); line-height:1.55;}
+
+/* 出力 */
+.outbox{
+  font-family:var(--mono); font-size:12px; line-height:1.7; color:var(--ink);
+  background:var(--paper); border:1px solid var(--rule2); border-radius:4px;
+  padding:12px; margin:0; width:100%; max-height:420px; box-sizing:border-box;
+  white-space:pre-wrap; word-break:break-word; overflow:auto; -webkit-user-select:text; user-select:text;
+}
+.outbox.sample{color:var(--ink3);}
+.miss{font-size:12.5px; color:var(--red); background:var(--red-soft); border-radius:3px; padding:7px 10px; line-height:1.6;}
+.miss.ok{color:var(--ok); background:var(--ok-soft);}
+
+/* 下部固定バー */
+.bottom{
+  position:fixed; left:0; right:0; bottom:0; z-index:40;
+  background:var(--card); border-top:1px solid var(--rule2);
+  padding:10px 16px calc(10px + env(safe-area-inset-bottom,0px));
+}
+.bottom .inner{max-width:680px; margin:0 auto; width:100%; display:flex; gap:8px;}
+.btn{
+  font-family:var(--form); font-size:14.5px; font-weight:700; cursor:pointer;
+  border-radius:4px; padding:12px 14px; border:1px solid var(--rule2);
+  background:var(--paper); color:var(--ink2); white-space:nowrap;
+}
+.btn.main{flex:1; background:var(--blue); border-color:var(--blue); color:var(--on-blue);}
+.btn:active{transform:translateY(1px);}
+.btn:focus-visible{outline:2px solid var(--blue); outline-offset:2px;}
+
+.toast{
+  position:fixed; left:50%; transform:translateX(-50%);
+  bottom:calc(86px + env(safe-area-inset-bottom,0px)); z-index:50;
+  background:var(--ink); color:var(--paper); font-family:var(--form); font-size:13px; font-weight:700;
+  padding:9px 16px; border-radius:20px; box-shadow:0 4px 16px rgba(0,0,0,.25);
+  opacity:0; pointer-events:none; transition:opacity .2s ease; max-width:80vw; text-align:center;
+}
+.toast.on{opacity:1;}
+@media (prefers-reduced-motion:reduce){*{transition:none !important;}}
+
+.foot{margin-top:20px; padding-top:14px; border-top:1px solid var(--rule); font-size:12px; color:var(--ink3);}
+.foot p{margin:0 0 5px;}
+</style>
+</head>
+<body>
+
+<div class="top">
+  <div class="top-in">
+    <div class="top-row">
+      <span class="brand">聞き取りシート</span>
+      <span class="who" id="who">店名未入力</span>
+      <span class="score" id="score">★ 0/6</span>
+    </div>
+    <nav class="nav" aria-label="セクション">
+      <a href="#s0">基本</a><a href="#s1">商売</a><a href="#s2">集客</a><a href="#s3">体制</a>
+      <a href="#s4">IG外側</a><a href="#s5">数字</a><a href="#s6">GBP</a><a href="#s7">通信</a>
+      <a href="#s8">写真</a><a href="#s9">メモ</a><a href="#s10">注文</a><a href="#sout">出力</a>
+    </nav>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <div class="lede">
+    <h1>店舗SNS 聞き取りシート</h1>
+    <p>訪問先で上から順に埋めるだけ。灰色の枠は<b>そのまま口に出して使える聞き方</b>やから、SNSの知識はいらん。</p>
+    <p><span class="req">必須</span> の付いた6つが埋まれば診断は書ける。あとは埋まるほど精度が上がる。</p>
+  </div>
+
+  <section class="sec" id="s0">
+    <div class="sec-h"><span class="num">0</span><h2>基本</h2><span class="tag">名刺交換のあと</span></div>
+    <div class="sec-b">
+      <div class="f"><div class="lab"><label for="b_ten">店名</label></div><input type="text" id="b_ten" placeholder="例）炭火焼鳥 とり源"></div>
+      <div class="row">
+        <div class="f"><div class="lab"><label for="b_hi">訪問日</label></div><input type="date" id="b_hi"></div>
+        <div class="f"><div class="lab"><label for="b_tan">担当</label></div><input type="text" id="b_tan" placeholder="自分の名前"></div>
+      </div>
+      <div class="f" data-k="業種">
+        <div class="lab"><label for="b_gyo">業種</label> <span class="req">必須</span></div>
+        <input type="text" id="b_gyo" placeholder="例）居酒屋 / 美容室 / 整骨院">
+      </div>
+      <div class="f" data-k="エリア">
+        <div class="lab"><label for="b_area">エリア</label> <span class="req">必須</span></div>
+        <input type="text" id="b_area" placeholder="例）心斎橋・駅から徒歩3分・2F">
+      </div>
+      <div class="f" data-k="お店の規模"><div class="lab"><label for="b_kibo">規模</label></div><input type="text" id="b_kibo" placeholder="例）20席・スタッフ3名"></div>
+    </div>
+  </section>
+
+  <section class="sec" id="s1">
+    <div class="sec-h"><span class="num">1</span><h2>商売の中身</h2><span class="tag">ここが一番効く</span></div>
+    <div class="sec-b">
+      <div class="f" data-k="客単価">
+        <div class="lab"><label for="m_tanka">客単価</label> <span class="req">必須</span></div>
+        <div class="hint">「お一人あたり、だいたいおいくらぐらいのお会計になりますか？」<br><b>→ これが出ると「フォロワー1人＝◯円」の話ができるようになる。</b></div>
+        <div class="unit"><input type="number" id="m_tanka" inputmode="numeric" placeholder="3500"><span>円</span></div>
+      </div>
+      <div class="f" data-k="粗利のイメージ">
+        <div class="lab"><label for="m_ari">粗利のイメージ</label></div>
+        <div class="hint">「ざっくりでええんですけど、原価抜いたら何割ぐらい残る感じですか？」</div>
+        <div class="unit"><input type="number" id="m_ari" inputmode="numeric" placeholder="60"><span>%</span></div>
+      </div>
+      <div class="f" data-k="SNSで一番ほしい結果">
+        <div class="lab">SNSで一番ほしい結果 <span class="req">必須</span></div>
+        <div class="hint">「SNSがもし伸びたとして、一番ほしいのは何ですか？ 新規のお客さんか、予約か、それとも人の採用か」<br><b>→ 目的がズレたまま提案すると全部ムダになる。</b></div>
+        <div class="chips">
+          <label class="chip"><input type="checkbox" id="m_o1" value="新規客を増やす"><span>新規客</span></label>
+          <label class="chip"><input type="checkbox" id="m_o2" value="予約を増やす"><span>予約</span></label>
+          <label class="chip"><input type="checkbox" id="m_o3" value="リピート・常連化"><span>リピート</span></label>
+          <label class="chip"><input type="checkbox" id="m_o4" value="採用・求人"><span>採用</span></label>
+          <label class="chip"><input type="checkbox" id="m_o5" value="認知・イメージ"><span>認知</span></label>
+          <label class="chip"><input type="checkbox" id="m_o6" value="物販・EC"><span>物販</span></label>
+        </div>
+      </div>
+      <div class="f" data-k="客層・商圏">
+        <div class="lab"><label for="m_kyaku">客層・商圏</label></div>
+        <div class="hint">「今来てはるお客さん、どんな方が多いですか？ ご近所の方ですか、わざわざ来られる方ですか？」</div>
+        <input type="text" id="m_kyaku" placeholder="例）30〜40代の会社員、半径2km中心">
+      </div>
+      <div class="f" data-k="一番の困りごと">
+        <div class="lab"><label for="m_komari">一番の困りごと</label></div>
+        <div class="hint">「今、商売のうえで一番しんどいことって何ですか？」<br><b>→ 黙って聞く。ここで喋りすぎるのが一番の失敗。</b></div>
+        <textarea id="m_komari" placeholder="例）平日の18〜19時がガラガラ。土日は回ってる。"></textarea>
+      </div>
+      <div class="f" data-k="埋まってる日と空いてる日">
+        <div class="lab"><label for="m_han">埋まってる日／空いてる日</label></div>
+        <input type="text" id="m_han" placeholder="例）金土は満席、火水がしんどい">
+      </div>
+    </div>
+  </section>
+
+  <section class="sec" id="s2" data-mode="ratio">
+    <div class="sec-h"><span class="num">2</span><h2>お客さんの入口</h2><span class="tag">必須</span></div>
+    <div class="sec-b">
+      <div class="hint">「いま新しいお客さん、どこから来てはることが多いですか？ 通りがかりが何割ぐらい、みたいなざっくりで大丈夫です」<br><b>→ 合計100%にならんでも構へん。ここでSNSを伸ばすべき店かどうかが決まる。</b></div>
+      <div class="ratio">
+        <div class="rr f" data-k="Google検索・マップ"><label for="r1">Google検索・マップ</label><input type="number" id="r1" class="rt" inputmode="numeric" placeholder="0"><span class="pc">%</span></div>
+        <div class="rr f" data-k="ポータル（ホットペッパー・食べログ等）"><label for="r2">ポータル（HP・食べログ）</label><input type="number" id="r2" class="rt" inputmode="numeric" placeholder="0"><span class="pc">%</span></div>
+        <div class="rr f" data-k="Instagram"><label for="r3">Instagram</label><input type="number" id="r3" class="rt" inputmode="numeric" placeholder="0"><span class="pc">%</span></div>
+        <div class="rr f" data-k="X・TikTok・YouTube"><label for="r4">X・TikTok・YouTube</label><input type="number" id="r4" class="rt" inputmode="numeric" placeholder="0"><span class="pc">%</span></div>
+        <div class="rr f" data-k="LINE"><label for="r5">LINE（公式・個人）</label><input type="number" id="r5" class="rt" inputmode="numeric" placeholder="0"><span class="pc">%</span></div>
+        <div class="rr f" data-k="通りがかり・看板"><label for="r6">通りがかり・看板</label><input type="number" id="r6" class="rt" inputmode="numeric" placeholder="0"><span class="pc">%</span></div>
+        <div class="rr f" data-k="紹介・口コミ"><label for="r7">紹介・口コミ</label><input type="number" id="r7" class="rt" inputmode="numeric" placeholder="0"><span class="pc">%</span></div>
+        <div class="rr f" data-k="チラシ・その他"><label for="r8">チラシ・その他</label><input type="number" id="r8" class="rt" inputmode="numeric" placeholder="0"><span class="pc">%</span></div>
+        <div class="sum"><span class="bar" id="rbar"><i></i></span><b id="rsum">合計 0%</b></div>
+      </div>
+      <div class="f" data-k="月の広告費">
+        <div class="lab"><label for="r_kokoku">月にかけてる広告費</label></div>
+        <div class="hint">「ポータルさんとか広告に、月どのくらい払うてはります？」<br><b>→ 月5万以上なら、そこからSNSに振り替える提案が通りやすい。</b></div>
+        <div class="unit"><input type="number" id="r_kokoku" inputmode="numeric" placeholder="50000"><span>円/月</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec" id="s3">
+    <div class="sec-h"><span class="num">3</span><h2>運用できる体制</h2><span class="tag">盛られると全部狂う</span></div>
+    <div class="sec-b">
+      <div class="f" data-k="今の運用担当者">
+        <div class="lab"><label for="t_dare">今 誰が投稿してる？</label></div>
+        <input type="text" id="t_dare" placeholder="例）店長が気が向いた時だけ">
+      </div>
+      <div class="f" data-k="週に割ける時間">
+        <div class="lab">週に割ける時間 <span class="req">必須</span></div>
+        <div class="hint">「正直なとこ、週にどのくらいなら時間取れそうですか？ 少なめに言うてもろて大丈夫です」<br><b>→ 週1時間の店に毎日投稿を出したら100%続かん。少なめ申告を歓迎する聞き方をする。</b></div>
+        <div class="chips">
+          <label class="chip"><input type="radio" name="jikan" id="t_j1" value="ほぼ0"><span>ほぼ0</span></label>
+          <label class="chip"><input type="radio" name="jikan" id="t_j2" value="〜1時間"><span>〜1h</span></label>
+          <label class="chip"><input type="radio" name="jikan" id="t_j3" value="1〜3時間"><span>1〜3h</span></label>
+          <label class="chip"><input type="radio" name="jikan" id="t_j4" value="3〜5時間"><span>3〜5h</span></label>
+          <label class="chip"><input type="radio" name="jikan" id="t_j5" value="5時間以上"><span>5h以上</span></label>
+        </div>
+      </div>
+      <div class="f" data-k="写真・動画を撮れる人">
+        <div class="lab">写真・動画を撮れる人</div>
+        <div class="chips">
+          <label class="chip"><input type="radio" name="satsuei" id="t_s1" value="撮れる人がいる"><span>いる</span></label>
+          <label class="chip"><input type="radio" name="satsuei" id="t_s2" value="自分がなんとか撮る"><span>自分がなんとか</span></label>
+          <label class="chip"><input type="radio" name="satsuei" id="t_s3" value="撮れる人がいない"><span>いない</span></label>
+        </div>
+      </div>
+      <div class="f" data-k="今の投稿頻度">
+        <div class="lab">今の投稿頻度</div>
+        <div class="chips">
+          <label class="chip"><input type="radio" name="hindo" id="t_h1" value="止まってる"><span>止まってる</span></label>
+          <label class="chip"><input type="radio" name="hindo" id="t_h2" value="月1〜2回"><span>月1〜2</span></label>
+          <label class="chip"><input type="radio" name="hindo" id="t_h3" value="週1回"><span>週1</span></label>
+          <label class="chip"><input type="radio" name="hindo" id="t_h4" value="週2〜3回"><span>週2〜3</span></label>
+          <label class="chip"><input type="radio" name="hindo" id="t_h5" value="ほぼ毎日"><span>ほぼ毎日</span></label>
+        </div>
+      </div>
+      <div class="f" data-k="過去に試してやめたこと">
+        <div class="lab"><label for="t_kako">過去に試して やめたこと</label></div>
+        <div class="hint">「今まで何か試してみはったことあります？ なんでやめはったんですか？」<br><b>→ 同じ提案を繰り返さんための保険。</b></div>
+        <textarea id="t_kako" placeholder="例）業者に月5万払ってたけど効果わからずやめた"></textarea>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec" id="s4">
+    <div class="sec-h"><span class="num">4</span><h2>Instagram（外から見える分）</h2><span class="tag">スマホで一緒に見る</span></div>
+    <div class="sec-b">
+      <div class="hint">「アカウント、ちょっと一緒に見てもええですか？」と言うて開いてもらう。<b>数字を読み上げながら埋めると場が持つ。</b></div>
+      <div class="f" data-k="アカウントID"><div class="lab"><label for="o_id">@アカウントID</label></div><input type="text" id="o_id" placeholder="@torigen_shinsaibashi"></div>
+      <div class="row">
+        <div class="f" data-k="フォロワー数"><div class="lab"><label for="o_fo">フォロワー</label></div><input type="number" id="o_fo" inputmode="numeric" placeholder="820"></div>
+        <div class="f" data-k="フォロー中"><div class="lab"><label for="o_fw">フォロー中</label></div><input type="number" id="o_fw" inputmode="numeric" placeholder="1100"></div>
+        <div class="f" data-k="投稿数"><div class="lab"><label for="o_po">投稿数</label></div><input type="number" id="o_po" inputmode="numeric" placeholder="140"></div>
+      </div>
+      <div class="f" data-k="プロフィール文（bio）">
+        <div class="lab"><label for="o_bio">プロフィール文（bio）</label></div>
+        <div class="hint"><b>そのまま書き写す。</b>誰向けの店か・場所・予約導線が入ってるかを後で見る。</div>
+        <textarea id="o_bio" placeholder="例）心斎橋の焼鳥屋／毎日17時open／予約はDMまで"></textarea>
+      </div>
+      <div class="f" data-k="プロフィールのリンク先">
+        <div class="lab">リンク先</div>
+        <div class="chips">
+          <label class="chip"><input type="radio" name="link" id="o_l1" value="リンクなし"><span>なし</span></label>
+          <label class="chip"><input type="radio" name="link" id="o_l2" value="公式HP"><span>公式HP</span></label>
+          <label class="chip"><input type="radio" name="link" id="o_l3" value="予約ページ直"><span>予約ページ直</span></label>
+          <label class="chip"><input type="radio" name="link" id="o_l4" value="ポータルサイト"><span>ポータル</span></label>
+          <label class="chip"><input type="radio" name="link" id="o_l5" value="リンクまとめ（リットリンク等）"><span>リンクまとめ</span></label>
+        </div>
+      </div>
+      <div class="f" data-k="主な投稿の形式">
+        <div class="lab">主な投稿の形式</div>
+        <div class="chips">
+          <label class="chip"><input type="checkbox" id="o_f1" value="リール（動画）"><span>リール</span></label>
+          <label class="chip"><input type="checkbox" id="o_f2" value="写真1枚"><span>写真1枚</span></label>
+          <label class="chip"><input type="checkbox" id="o_f3" value="カルーセル（複数枚）"><span>カルーセル</span></label>
+          <label class="chip"><input type="checkbox" id="o_f4" value="ストーリーズのみ"><span>ストーリーズのみ</span></label>
+        </div>
+      </div>
+      <div class="f" data-k="直近10投稿のいいね数">
+        <div class="lab"><label for="o_like">直近10投稿のいいね数</label></div>
+        <div class="hint">一番下と一番上だけメモればええ。<b>フォロワー数との比率で健康状態がわかる。</b></div>
+        <input type="text" id="o_like" placeholder="例）5〜30（1本だけ200）">
+      </div>
+      <div class="f" data-k="一番伸びた投稿の中身">
+        <div class="lab"><label for="o_hit">一番伸びた投稿は何やった？</label></div>
+        <div class="hint">「これ、なんでこれだけ伸びたんでしょうね？」と一緒に見る。<b>勝ちパターンの種がここにある。</b></div>
+        <input type="text" id="o_hit" placeholder="例）新メニューの焼き上がり動画">
+      </div>
+      <div class="f" data-k="ハイライトの整備">
+        <div class="lab">ハイライト</div>
+        <div class="chips">
+          <label class="chip"><input type="radio" name="hl" id="o_h1" value="整ってる"><span>整ってる</span></label>
+          <label class="chip"><input type="radio" name="hl" id="o_h2" value="少しある"><span>少しある</span></label>
+          <label class="chip"><input type="radio" name="hl" id="o_h3" value="なし"><span>なし</span></label>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec" id="s5">
+    <div class="sec-h"><span class="num">5</span><h2>インサイト</h2><span class="tag">商談の温度計</span></div>
+    <div class="sec-b">
+      <div class="hint">「プロフェッショナルダッシュボードって画面、ちょっと見せてもらえますか？ <b>そこ見んと当てずっぽうになってまうので</b>」<br>プロフィール画面 →「プロフェッショナルダッシュボード」→「インサイト」。<b>過去30日</b>に切り替えて見る。</div>
+      <div class="f" data-k="インサイトを見せてもらえたか">
+        <div class="lab">見せてもらえた？</div>
+        <div class="hint"><b>ここが商談の温度計。</b>断られたら信用がまだ足りてない＝提案はまだ早い、というサイン。</div>
+        <div class="chips">
+          <label class="chip"><input type="radio" name="ins" id="i_a1" value="その場で見せてもらえた"><span>見せてもらえた</span></label>
+          <label class="chip"><input type="radio" name="ins" id="i_a2" value="あとで送ってもらう"><span>あとで送ってもらう</span></label>
+          <label class="chip"><input type="radio" name="ins" id="i_a3" value="断られた"><span>断られた</span></label>
+          <label class="chip"><input type="radio" name="ins" id="i_a4" value="アカウントがプロアカウントになっていなかった"><span>プロ用になってない</span></label>
+        </div>
+      </div>
+      <div class="row">
+        <div class="f" data-k="30日のリーチ数"><div class="lab"><label for="i_reach">30日のリーチ</label></div><input type="number" id="i_reach" inputmode="numeric" placeholder="4200"></div>
+        <div class="f" data-k="うち非フォロワーの割合"><div class="lab"><label for="i_nonfo">うち非フォロワー %</label></div><input type="number" id="i_nonfo" inputmode="numeric" placeholder="35"></div>
+      </div>
+      <div class="hint"><b>非フォロワー率が一番の診断ポイント。</b>ここが低い店は「身内に見せてるだけ」の状態。必ず取る。</div>
+      <div class="row">
+        <div class="f" data-k="プロフィールの閲覧数"><div class="lab"><label for="i_prof">プロフィール閲覧</label></div><input type="number" id="i_prof" inputmode="numeric" placeholder="260"></div>
+        <div class="f" data-k="リンクのクリック数"><div class="lab"><label for="i_click">リンククリック</label></div><input type="number" id="i_click" inputmode="numeric" placeholder="12"></div>
+        <div class="f" data-k="保存数の平均"><div class="lab"><label for="i_save">保存数（平均）</label></div><input type="number" id="i_save" inputmode="numeric" placeholder="4"></div>
+      </div>
+      <div class="f" data-k="フォロワーの年代・性別"><div class="lab"><label for="i_zoku">フォロワーの年代・性別</label></div><input type="text" id="i_zoku" placeholder="例）女性65%、25〜34歳が最多"></div>
+      <div class="f" data-k="フォロワーの多い地域">
+        <div class="lab"><label for="i_chiiki">フォロワーの多い地域</label></div>
+        <div class="hint"><b>ここが商圏とズレてたら大問題。</b>「大阪の店やのに東京のフォロワーが多い」は即ネタになる。</div>
+        <input type="text" id="i_chiiki" placeholder="例）大阪市42%、東京18%">
+      </div>
+      <div class="f" data-k="よく見られてる時間帯"><div class="lab"><label for="i_jikan">見られてる時間帯</label></div><input type="text" id="i_jikan" placeholder="例）21〜23時"></div>
+    </div>
+  </section>
+
+  <section class="sec" id="s6">
+    <div class="sec-h"><span class="num">6</span><h2>Googleビジネスプロフィール</h2><span class="tag">店舗は正直こっちが速い</span></div>
+    <div class="sec-b">
+      <div class="hint">その場で「<b>エリア名＋業種</b>」で検索して一緒に画面を見る。店舗の場合、インスタより先にここを直す方が売上に効くことが多い。</div>
+      <div class="f" data-k="オーナー登録の状況">
+        <div class="lab">オーナー登録してる？</div>
+        <div class="chips">
+          <label class="chip"><input type="radio" name="gbp" id="g_a1" value="オーナー確認済み"><span>登録済み</span></label>
+          <label class="chip"><input type="radio" name="gbp" id="g_a2" value="情報はあるがオーナー未取得"><span>未取得</span></label>
+          <label class="chip"><input type="radio" name="gbp" id="g_a3" value="そもそも出てこない"><span>出てこない</span></label>
+          <label class="chip"><input type="radio" name="gbp" id="g_a4" value="わからない"><span>わからん</span></label>
+        </div>
+      </div>
+      <div class="row">
+        <div class="f" data-k="口コミ件数"><div class="lab"><label for="g_ku">口コミ件数</label></div><input type="number" id="g_ku" inputmode="numeric" placeholder="38"></div>
+        <div class="f" data-k="平均評価"><div class="lab"><label for="g_ho">平均★</label></div><input type="number" id="g_ho" step="0.1" inputmode="decimal" placeholder="3.8"></div>
+        <div class="f" data-k="写真の枚数"><div class="lab"><label for="g_sha">写真枚数</label></div><input type="number" id="g_sha" inputmode="numeric" placeholder="22"></div>
+      </div>
+      <div class="f" data-k="口コミへの返信">
+        <div class="lab">口コミの返信</div>
+        <div class="chips">
+          <label class="chip"><input type="radio" name="hen" id="g_h1" value="全部返してる"><span>全部返してる</span></label>
+          <label class="chip"><input type="radio" name="hen" id="g_h2" value="たまに返す"><span>たまに</span></label>
+          <label class="chip"><input type="radio" name="hen" id="g_h3" value="返してない"><span>返してない</span></label>
+        </div>
+      </div>
+      <div class="f" data-k="エリア＋業種で検索した順位">
+        <div class="lab"><label for="g_jun">「エリア＋業種」で検索した順位</label></div>
+        <input type="text" id="g_jun" placeholder="例）心斎橋 焼鳥 → 地図の8番目">
+      </div>
+      <div class="f" data-k="情報のズレ">
+        <div class="lab"><label for="g_zure">情報のズレ</label></div>
+        <div class="hint">営業時間・定休日・電話番号・メニュー写真。<b>古いまま放置が一番多い。指摘すると必ず刺さる。</b></div>
+        <input type="text" id="g_zure" placeholder="例）営業時間が去年のまま">
+      </div>
+    </div>
+  </section>
+
+  <section class="sec" id="s7">
+    <div class="sec-h"><span class="num">7</span><h2>通信・設備</h2><span class="tag">クロスセルの種</span></div>
+    <div class="sec-b">
+      <div class="hint">SNSの流れで自然に聞ける項目だけ並べてる。<b>ここでは売り込まん。事実だけ拾って帰る。</b></div>
+      <div class="f" data-k="店のWi-Fi">
+        <div class="lab">店のWi-Fi</div>
+        <div class="hint">「リール上げる時、店のWi-Fiでサクサク上がります？」<br><b>→ 遅い店は動画投稿が続かん。SNSの課題として堂々と回線の話に入れる。</b></div>
+        <div class="chips">
+          <label class="chip"><input type="radio" name="wifi" id="w_w1" value="速い・問題なし"><span>速い</span></label>
+          <label class="chip"><input type="radio" name="wifi" id="w_w2" value="普通"><span>普通</span></label>
+          <label class="chip"><input type="radio" name="wifi" id="w_w3" value="遅い・不安定"><span>遅い・不安定</span></label>
+          <label class="chip"><input type="radio" name="wifi" id="w_w4" value="Wi-Fiがない"><span>ない</span></label>
+        </div>
+      </div>
+      <div class="f" data-k="お客様用フリーWi-Fi">
+        <div class="lab">お客様用フリーWi-Fi</div>
+        <div class="hint">「お客さんが店でストーリー上げてくれる時、電波どうです？」</div>
+        <div class="chips">
+          <label class="chip"><input type="radio" name="free" id="w_f1" value="あり"><span>あり</span></label>
+          <label class="chip"><input type="radio" name="free" id="w_f2" value="なし"><span>なし</span></label>
+          <label class="chip"><input type="radio" name="free" id="w_f3" value="検討中"><span>検討中</span></label>
+        </div>
+      </div>
+      <div class="row">
+        <div class="f" data-k="今の回線"><div class="lab"><label for="w_kai">今の回線</label></div><input type="text" id="w_kai" placeholder="例）フレッツ光（10年前から）"></div>
+        <div class="f" data-k="電気の契約"><div class="lab"><label for="w_den">電気</label></div><input type="text" id="w_den" placeholder="例）関電のまま"></div>
+      </div>
+      <div class="row">
+        <div class="f" data-k="決済端末"><div class="lab"><label for="w_kes">決済端末</label></div><input type="text" id="w_kes" placeholder="例）エアペイ / 現金のみ"></div>
+        <div class="f" data-k="契約の更新時期"><div class="lab"><label for="w_koh">更新時期</label></div><input type="text" id="w_koh" placeholder="例）来年3月"></div>
+      </div>
+      <div class="f" data-k="通信まわりで気づいたこと">
+        <div class="lab"><label for="w_memo">気づいたこと</label></div>
+        <textarea id="w_memo" placeholder="例）厨房まで電波届かんと言うてた／モバイルルーターで回してる"></textarea>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec" id="s8" data-mode="check">
+    <div class="sec-h"><span class="num">8</span><h2>スクショ撮影チェック</h2><span class="tag">帰る前に確認</span></div>
+    <div class="sec-b">
+      <div class="hint">撮ったスクショは、このテキストと<b>一緒に貼ってくれたら読める</b>。数字の書き写しミスも防げる。</div>
+      <div class="checks">
+        <label class="ck"><input type="checkbox" id="c1" value="プロフィール画面"><span>プロフィール画面<em>フォロワー数・bio・リンク・ハイライトが1枚に入る</em></span></label>
+        <label class="ck"><input type="checkbox" id="c2" value="投稿グリッド"><span>投稿グリッド<em>上から2スクロール分。見た目の第一印象がわかる</em></span></label>
+        <label class="ck"><input type="checkbox" id="c3" value="インサイト概要（30日）"><span>インサイト概要（30日）<em>リーチと非フォロワー比率</em></span></label>
+        <label class="ck"><input type="checkbox" id="c4" value="フォロワー属性"><span>フォロワー属性<em>年代・性別・地域・時間帯</em></span></label>
+        <label class="ck"><input type="checkbox" id="c5" value="投稿別リーチの上位"><span>投稿別リーチの上位<em>何が当たってるかの答えがここにある</em></span></label>
+        <label class="ck"><input type="checkbox" id="c6" value="Google検索結果の画面"><span>Google検索結果の画面<em>「エリア＋業種」で検索した状態</em></span></label>
+        <label class="ck"><input type="checkbox" id="c7" value="店内・商品の写真"><span>店内・商品の写真<em>投稿ネタを考える材料になる</em></span></label>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec" id="s9">
+    <div class="sec-h"><span class="num">9</span><h2>現場メモ</h2><span class="tag">車に戻ってすぐ</span></div>
+    <div class="sec-b">
+      <div class="f" data-k="決裁者">
+        <div class="lab">決めるのは誰？</div>
+        <div class="chips">
+          <label class="chip"><input type="radio" name="kes" id="n_k1" value="目の前の人が決裁者"><span>目の前の人</span></label>
+          <label class="chip"><input type="radio" name="kes" id="n_k2" value="別に決裁者がいる"><span>別にいる</span></label>
+          <label class="chip"><input type="radio" name="kes" id="n_k3" value="わからない"><span>わからん</span></label>
+        </div>
+      </div>
+      <div class="f" data-k="温度感">
+        <div class="lab">温度感</div>
+        <div class="chips">
+          <label class="chip"><input type="radio" name="ondo" id="n_o1" value="熱い"><span>熱い</span></label>
+          <label class="chip"><input type="radio" name="ondo" id="n_o2" value="普通"><span>普通</span></label>
+          <label class="chip"><input type="radio" name="ondo" id="n_o3" value="冷たい"><span>冷たい</span></label>
+        </div>
+      </div>
+      <div class="f" data-k="次のアクション"><div class="lab"><label for="n_next">次のアクション</label></div><input type="text" id="n_next" placeholder="例）診断シートを作って来週月曜に持参"></div>
+      <div class="f" data-k="次回の連絡日"><div class="lab"><label for="n_date">次回連絡日</label></div><input type="date" id="n_date"></div>
+      <div class="f" data-k="そのほかメモ">
+        <div class="lab"><label for="n_memo">そのほか</label></div>
+        <textarea id="n_memo" placeholder="例）娘さんが手伝いに来てる。息子が大学生でTikTok詳しいらしい。"></textarea>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec" id="s10" data-mode="want">
+    <div class="sec-h"><span class="num">10</span><h2>ほしいアウトプット</h2><span class="tag">貼るときの注文</span></div>
+    <div class="sec-b">
+      <div class="checks">
+        <label class="ck"><input type="checkbox" id="q1" value="現状の評価（効いてる所と穴になってる所）" checked><span>現状の評価<em>効いてる所／穴になってる所</em></span></label>
+        <label class="ck"><input type="checkbox" id="q2" value="改善ポイント3つ（優先順つき）" checked><span>改善ポイント3つ<em>優先順つき。多すぎると動けへん</em></span></label>
+        <label class="ck"><input type="checkbox" id="q3" value="30日ぶんの投稿ネタ・カレンダー（割ける時間に合わせた量で）" checked><span>30日ぶんの投稿ネタ<em>割ける時間に合わせた量で</em></span></label>
+        <label class="ck"><input type="checkbox" id="q4" value="Googleビジネスプロフィールの改善案"><span>GBPの改善案<em>店舗はここが一番速い</em></span></label>
+        <label class="ck"><input type="checkbox" id="q5" value="通信・設備につながる切り口と、その言い回し"><span>通信・設備の切り口<em>どう繋げるかの言い回しまで</em></span></label>
+        <label class="ck"><input type="checkbox" id="q6" value="お客様にそのまま渡せる診断シートの文面"><span>渡せる診断シートの文面<em>印刷して置いてこれる形</em></span></label>
+        <label class="ck"><input type="checkbox" id="q7" value="想定される断り文句と、その切り返し"><span>断り文句と切り返し<em>次回訪問の準備に</em></span></label>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec" id="sout">
+    <div class="sec-h"><span class="num">→</span><h2>貼りつけ用テキスト</h2><span class="tag">下のボタンでコピー</span></div>
+    <div class="sec-b">
+      <pre class="outbox sample" id="outbox" aria-live="polite"></pre>
+      <div class="miss" id="miss"></div>
+    </div>
+  </section>
+
+  <div class="foot">
+    <p>入力はこの端末のブラウザに自動保存される。閉じても残るけど、端末をまたいでは引き継がれへん。</p>
+    <p>1件終わってコピーしたら「新しい店」でまっさらに戻す。担当名だけは残る。</p>
+    <p>圏外でも開ける。ホーム画面に追加しとくと一発で立ち上がる。</p>
+  </div>
+
+</div>
+
+<div class="bottom">
+  <div class="inner">
+    <button class="btn main" id="copy" type="button">テキストをコピー</button>
+    <button class="btn" id="reset" type="button">新しい店</button>
+  </div>
+</div>
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+(function(){
+  "use strict";
+  var KEY = "sns-hearing-v1";
+  var $  = function(s,r){ return (r||document).querySelector(s); };
+  var $$ = function(s,r){ return Array.prototype.slice.call((r||document).querySelectorAll(s)); };
+
+  var SAMPLE = [
+    "▼ 出力イメージ ── 埋めていくとここが置き換わる",
+    "",
+    "# 店舗SNS 聞き取りシート",
+    "炭火焼鳥 とり源 ／ 2026-09-24 ／ 担当:竹内",
+    "",
+    "## 1. 商売の中身",
+    "- 客単価: 3500円",
+    "- SNSで一番ほしい結果: 新規客を増やす / 予約を増やす",
+    "- 一番の困りごと: 平日の18〜19時がガラガラ。土日は回ってる。",
+    "",
+    "## 2. お客さんの入口",
+    "- Google検索・マップ: 20%",
+    "- ポータル（ホットペッパー・食べログ等）: 45%",
+    "- 通りがかり・看板: 25%",
+    "- 月の広告費: 50000円/月",
+    "",
+    "## 3. 運用できる体制",
+    "- 週に割ける時間: 〜1時間",
+    "- 写真・動画を撮れる人: 自分がなんとか撮る",
+    "",
+    "（以下、埋めた項目だけが続く）"
+  ].join("\n");
+
+  var REQ = [
+    { id:"b_gyo",   name:"業種" },
+    { id:"b_area",  name:"エリア" },
+    { id:"m_tanka", name:"客単価" },
+    { id:"__mok",   name:"SNSで一番ほしい結果" },
+    { id:"__rat",   name:"お客さんの入口の内訳" },
+    { id:"__jik",   name:"週に割ける時間" }
+  ];
+
+  function val(el){ return el && el.value ? String(el.value).trim() : ""; }
+
+  function reqDone(r){
+    if(r.id === "__mok") return $$("#s1 input[type=checkbox]").some(function(c){ return c.checked; });
+    if(r.id === "__jik") return $$("input[name=jikan]").some(function(c){ return c.checked; });
+    if(r.id === "__rat") return $$(".rt").some(function(n){ return Number(n.value) > 0; });
+    return val($("#" + r.id)) !== "";
+  }
+
+  function fieldValue(f){
+    var parts = [];
+    $$("input[type=radio],input[type=checkbox]", f).forEach(function(c){
+      if(c.checked) parts.push(c.value);
+    });
+    $$("input:not([type=radio]):not([type=checkbox]),select,textarea", f).forEach(function(el){
+      var v = val(el);
+      if(v) parts.push(v);
+    });
+    return parts.join(" / ");
+  }
+
+  function build(){
+    var L = [];
+    var ten = val($("#b_ten")) || "（店名未入力）";
+    var hi  = val($("#b_hi"));
+    var tan = val($("#b_tan"));
+    L.push("# 店舗SNS 聞き取りシート");
+    L.push(ten + (hi ? " ／ " + hi : "") + (tan ? " ／ 担当:" + tan : ""));
+
+    $$("section.sec").forEach(function(sec){
+      if(sec.id === "sout") return;
+      var mode  = sec.dataset.mode || "";
+      var title = $("h2", sec).textContent;
+      var num   = $(".num", sec).textContent;
+      var lines = [];
+
+      if(mode === "ratio"){
+        $$(".f[data-k]", sec).forEach(function(f){
+          var n = $("input", f);
+          if(n && n.classList.contains("rt")){
+            if(n.value !== "" && Number(n.value) > 0) lines.push("- " + f.dataset.k + ": " + Number(n.value) + "%");
+          } else {
+            var v = fieldValue(f);
+            if(v) lines.push("- " + f.dataset.k + ": " + v);
+          }
+        });
+      } else if(mode === "check"){
+        var got = [], yet = [];
+        $$("input[type=checkbox]", sec).forEach(function(c){ (c.checked ? got : yet).push(c.value); });
+        if(got.length) lines.push("- 撮影済み: " + got.join(" / "));
+        if(yet.length) lines.push("- 未撮影: " + yet.join(" / "));
+      } else if(mode === "want"){
+        $$("input[type=checkbox]", sec).forEach(function(c){ if(c.checked) lines.push("- " + c.value); });
+      } else {
+        $$(".f[data-k]", sec).forEach(function(f){
+          var v = fieldValue(f);
+          if(v) lines.push("- " + f.dataset.k + ": " + v);
+        });
+      }
+
+      if(lines.length){
+        L.push("");
+        L.push("## " + num + ". " + title);
+        L.push.apply(L, lines);
+      }
+    });
+
+    var miss = REQ.filter(function(r){ return !reqDone(r); }).map(function(r){ return r.name; });
+    L.push("");
+    L.push("---");
+    if(miss.length) L.push("※ 聞けてない項目：" + miss.join(" / ") + "（推測せず、不明のまま扱ってください）");
+    L.push("この内容で診断をお願いします。数字の約束は避けて、根拠と前提を添えてください。");
+    return { text: L.join("\n"), miss: miss };
+  }
+
+  function anyInput(){
+    return $$("input,textarea,select").some(function(el){
+      if(el.id === "b_hi" || el.id === "b_tan") return false;
+      if(el.type === "radio" || el.type === "checkbox"){
+        return el.checked && !el.closest('[data-mode="want"]');
+      }
+      return val(el) !== "";
+    });
+  }
+
+  function render(){
+    var r = build();
+    var box = $("#outbox");
+    var live = anyInput();
+    box.textContent = live ? r.text : SAMPLE;
+    box.classList.toggle("sample", !live);
+
+    var done = REQ.length - r.miss.length;
+    var sc = $("#score");
+    sc.textContent = "★ " + done + "/" + REQ.length;
+    sc.classList.toggle("full", done === REQ.length);
+
+    var m = $("#miss");
+    if(r.miss.length){
+      m.textContent = "まだ聞けてない必須：" + r.miss.join(" / ");
+      m.classList.remove("ok");
+    } else {
+      m.textContent = "必須6項目そろってる。この内容なら根拠のある診断が書ける。";
+      m.classList.add("ok");
+    }
+
+    $("#who").textContent = val($("#b_ten")) || "店名未入力";
+
+    var sum = 0;
+    $$(".rt").forEach(function(n){ sum += Number(n.value) || 0; });
+    $("#rsum").textContent = "合計 " + sum + "%";
+    var bar = $("#rbar");
+    $("i", bar).style.width = Math.min(sum, 100) + "%";
+    bar.classList.toggle("over", sum > 100);
+  }
+
+  function save(){
+    try{
+      var d = {};
+      $$("input,textarea,select").forEach(function(el){
+        if(!el.id) return;
+        d[el.id] = (el.type === "checkbox" || el.type === "radio") ? el.checked : el.value;
+      });
+      localStorage.setItem(KEY, JSON.stringify(d));
+    }catch(e){}
+  }
+
+  function load(){
+    try{
+      var raw = localStorage.getItem(KEY);
+      if(!raw) return;
+      var d = JSON.parse(raw);
+      $$("input,textarea,select").forEach(function(el){
+        if(!el.id || !(el.id in d)) return;
+        if(el.type === "checkbox" || el.type === "radio") el.checked = !!d[el.id];
+        else el.value = d[el.id];
+      });
+    }catch(e){}
+  }
+
+  var timer;
+  function onChange(){
+    render();
+    clearTimeout(timer);
+    timer = setTimeout(save, 250);
+  }
+  document.addEventListener("input", onChange);
+  document.addEventListener("change", onChange);
+
+  function toast(msg){
+    var el = $("#toast");
+    el.textContent = msg;
+    el.classList.add("on");
+    setTimeout(function(){ el.classList.remove("on"); }, 1800);
+  }
+
+  function legacyCopy(s){
+    var done = false;
+    try{
+      var ta = document.createElement("textarea");
+      ta.value = s;
+      ta.setAttribute("readonly", "");
+      ta.style.position = "fixed";
+      ta.style.top = "-1000px";
+      document.body.appendChild(ta);
+      ta.select();
+      ta.setSelectionRange(0, s.length);
+      done = document.execCommand("copy");
+      document.body.removeChild(ta);
+    }catch(e){}
+    toast(done ? "コピーした" : "下の枠を長押しして選択してコピーして");
+  }
+
+  $("#copy").addEventListener("click", function(){
+    var txt = build().text;
+    try{
+      if(navigator.clipboard && navigator.clipboard.writeText){
+        navigator.clipboard.writeText(txt).then(
+          function(){ toast("コピーした"); },
+          function(){ legacyCopy(txt); }
+        );
+        return;
+      }
+    }catch(e){}
+    legacyCopy(txt);
+  });
+
+  $("#reset").addEventListener("click", function(){
+    if(!window.confirm("この店の入力を全部消して、新しい店を始める？")) return;
+    var keepTan = val($("#b_tan"));
+    $$("input,textarea,select").forEach(function(el){
+      if(el.type === "checkbox" || el.type === "radio") el.checked = false;
+      else el.value = "";
+    });
+    ["q1","q2","q3"].forEach(function(id){ var e = $("#" + id); if(e) e.checked = true; });
+    $("#b_tan").value = keepTan;
+    try{ localStorage.removeItem(KEY); }catch(e){}
+    setDefaults();
+    save();
+    render();
+    window.scrollTo({ top: 0, behavior: "smooth" });
+    toast("まっさらにした");
+  });
+
+  function setDefaults(){
+    var d = new Date();
+    var p = function(n){ return (n < 10 ? "0" : "") + n; };
+    var s = d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate());
+    if(!val($("#b_hi"))) $("#b_hi").value = s;
+  }
+
+  load();
+  setDefaults();
+  render();
+
+  if("serviceWorker" in navigator){
+    window.addEventListener("load", function(){
+      navigator.serviceWorker.register("./sw.js", { scope: "./" }).catch(function(){});
+    });
+  }
+})();
+</script>
+</body>
+</html>
