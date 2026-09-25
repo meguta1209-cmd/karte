@@ -1,0 +1,18 @@
+{
+  "name": "案件情報シート",
+  "short_name": "案件情報",
+  "description": "SNS無料運用のアポを案件情報フォーマットのテキストにまとめる入力シート",
+  "lang": "ja",
+  "dir": "auto",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#E9EEF4",
+  "theme_color": "#1E4E86",
+  "icons": [
+    { "src": "./icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "./icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "./icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

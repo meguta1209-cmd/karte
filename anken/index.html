@@ -1,0 +1,682 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>案件情報シート</title>
+<meta name="description" content="SNS無料運用のアポを、案件情報フォーマットそのままのテキストにまとめる入力シート">
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#E9EEF4" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0C141E" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="案件情報">
+<meta name="format-detection" content="telephone=no">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="apple-touch-icon" href="./icons/icon-180.png">
+<link rel="icon" href="./icons/icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=BIZ+UDPGothic:wght@400;700&family=Zen+Kaku+Gothic+New:wght@400;500;700&family=Roboto+Mono:wght@400;500&display=swap">
+<style>
+/* ============================================================
+   案件情報シート（SNS無料運用のアポ → 案件情報フォーマット）
+   用途: タップ中心の入力から、いつもの＜案件情報＞テキストを組み立てる
+   デザインは 聞き取りシート（../sns-hearing/）と共通
+   色  : 複写式伝票のカーボン青 ＋ 朱色は「未入力」の警告だけに使う
+   字  : 見出し/ラベル=BIZ UDPGothic（帳票用UD書体）
+         本文=Zen Kaku Gothic New / 数字と出力=Roboto Mono
+   ============================================================ */
+:root{
+  color-scheme:light dark;
+  --paper:#E9EEF4; --card:#FBFCFE; --card2:#F2F6FA;
+  --ink:#14304E; --ink2:#4B667F; --ink3:#8299AF;
+  --rule:#C6D5E3; --rule2:#A3B9CE;
+  --blue:#1E4E86; --blue-soft:#DBE7F5;
+  --red:#B8392C; --red-soft:#F8E4E1;
+  --ok:#1F7256; --ok-soft:#DDEFE7;
+  --on-blue:#FFFFFF;
+  --shadow:0 1px 0 rgba(20,48,78,.06), 0 2px 10px rgba(20,48,78,.05);
+  --body:"Zen Kaku Gothic New","Hiragino Kaku Gothic ProN","Yu Gothic",sans-serif;
+  --form:"BIZ UDPGothic","Hiragino Kaku Gothic ProN","Yu Gothic",sans-serif;
+  --mono:"Roboto Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --paper:#0C141E; --card:#151F2B; --card2:#1B2734;
+    --ink:#DDE7F1; --ink2:#9AAEC3; --ink3:#697F96;
+    --rule:#25344A; --rule2:#3A4E68;
+    --blue:#79ADE8; --blue-soft:#1A2C43;
+    --red:#E5796B; --red-soft:#37211E;
+    --ok:#5CC49D; --ok-soft:#14301F;
+    --on-blue:#0C141E;
+    --shadow:0 1px 0 rgba(0,0,0,.3), 0 2px 10px rgba(0,0,0,.25);
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#0C141E; --card:#151F2B; --card2:#1B2734;
+  --ink:#DDE7F1; --ink2:#9AAEC3; --ink3:#697F96;
+  --rule:#25344A; --rule2:#3A4E68;
+  --blue:#79ADE8; --blue-soft:#1A2C43;
+  --red:#E5796B; --red-soft:#37211E;
+  --ok:#5CC49D; --ok-soft:#14301F;
+  --on-blue:#0C141E;
+  --shadow:0 1px 0 rgba(0,0,0,.3), 0 2px 10px rgba(0,0,0,.25);
+}
+
+html,body{margin:0; padding:0;}
+img{max-width:100%;}
+[hidden]{display:none !important;}
+
+body{
+  background:var(--paper); color:var(--ink);
+  font-family:var(--body); font-size:15px; line-height:1.7;
+  -webkit-text-size-adjust:100%;
+  overflow-wrap:break-word;
+}
+.wrap{max-width:680px; margin:0 auto; padding-inline:16px; padding-block:0 140px;}
+
+/* 上部固定 ─ ノッチの下に中身が来るよう、バー自身が safe-area を持つ */
+.top{
+  position:sticky; top:0; z-index:30;
+  background:var(--paper); border-bottom:1px solid var(--rule);
+  padding-top:env(safe-area-inset-top,0px);
+}
+.top-in{max-width:680px; margin:0 auto; padding-inline:16px;}
+.top-row{display:flex; align-items:baseline; gap:10px; padding-block:9px 6px;}
+.brand{font-family:var(--form); font-weight:700; font-size:13px; letter-spacing:.08em; color:var(--blue); white-space:nowrap;}
+.who{font-size:12px; color:var(--ink2); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1;}
+.score{font-family:var(--mono); font-size:12px; font-weight:500; white-space:nowrap; padding:1px 7px; border-radius:3px; background:var(--red-soft); color:var(--red);}
+.score.full{background:var(--ok-soft); color:var(--ok);}
+.nav{display:flex; gap:5px; overflow-x:auto; padding-block:0 8px; scrollbar-width:none; -webkit-overflow-scrolling:touch;}
+.nav::-webkit-scrollbar{display:none;}
+.nav a{
+  flex:0 0 auto; font-family:var(--form); font-size:11.5px; text-decoration:none;
+  color:var(--ink2); background:var(--card); border:1px solid var(--rule);
+  padding:3px 9px; border-radius:3px;
+}
+.nav a:active{background:var(--blue-soft);}
+
+/* 見出し */
+.lede{padding-block:18px 4px;}
+.lede h1{font-family:var(--form); font-size:21px; font-weight:700; margin:0 0 8px; letter-spacing:.01em; text-wrap:balance;}
+.lede p{margin:0; color:var(--ink2); font-size:13.5px;}
+.lede p + p{margin-top:6px;}
+.lede b{color:var(--ink); font-weight:700;}
+
+/* セクション */
+.sec{
+  background:var(--card); border:1px solid var(--rule); border-left:3px solid var(--rule2);
+  border-radius:4px; box-shadow:var(--shadow); margin-top:14px;
+  scroll-margin-top:calc(104px + env(safe-area-inset-top,0px));
+}
+.sec-h{
+  display:flex; align-items:center; gap:9px;
+  padding:10px 14px; border-bottom:1px solid var(--rule); background:var(--card2);
+  border-radius:3px 3px 0 0;
+}
+.num{
+  font-family:var(--mono); font-size:11px; font-weight:500; color:var(--blue);
+  border:1px solid var(--rule2); border-radius:2px; padding:0 5px; line-height:18px; flex:0 0 auto;
+}
+.sec-h h2{font-family:var(--form); font-size:14.5px; font-weight:700; margin:0; letter-spacing:.02em;}
+.sec-h .tag{margin-left:auto; font-size:10.5px; font-family:var(--form); color:var(--ink3); white-space:nowrap;}
+.sec-b{padding:14px; display:flex; flex-direction:column; gap:15px;}
+
+/* フィールド */
+.f{display:flex; flex-direction:column; gap:5px;}
+.lab{font-family:var(--form); font-size:13px; font-weight:700; display:flex; align-items:center; gap:6px; flex-wrap:wrap;}
+.req{font-family:var(--mono); font-size:9.5px; color:var(--red); border:1px solid currentColor; border-radius:2px; padding:0 3px; line-height:14px;}
+.hint{font-size:12px; color:var(--ink2); background:var(--card2); border-left:2px solid var(--rule2); padding:6px 9px; border-radius:0 3px 3px 0; line-height:1.65;}
+.hint b{color:var(--blue); font-weight:700;}
+
+input[type=text],input[type=number],input[type=date],textarea,select{
+  font-family:var(--body); font-size:16px; color:var(--ink);
+  background:var(--paper); border:1px solid var(--rule2); border-radius:3px;
+  padding:8px 10px; width:100%; max-width:100%; box-sizing:border-box;
+}
+input[type=number]{font-family:var(--mono); font-variant-numeric:tabular-nums;}
+textarea{min-height:64px; resize:vertical; line-height:1.6;}
+input:focus-visible,textarea:focus-visible,select:focus-visible{outline:2px solid var(--blue); outline-offset:1px; border-color:var(--blue);}
+::placeholder{color:var(--ink3); opacity:1;}
+
+.row{display:flex; gap:8px; flex-wrap:wrap;}
+.row > *{flex:1 1 130px; min-width:0;}
+.unit{display:flex; align-items:center; gap:7px;}
+.unit input{flex:1; min-width:0;}
+.unit span{font-family:var(--form); font-size:12.5px; color:var(--ink2); flex:0 0 auto;}
+
+/* チップ */
+.chips{display:flex; flex-wrap:wrap; gap:6px;}
+.chip{cursor:pointer; position:relative;}
+.chip input{position:absolute; opacity:0; width:1px; height:1px;}
+.chip span{
+  display:block; font-family:var(--form); font-size:13px; line-height:1.4;
+  padding:7px 11px; border:1px solid var(--rule2); border-radius:3px;
+  background:var(--paper); color:var(--ink2); user-select:none; -webkit-user-select:none;
+}
+.chip input:checked + span{background:var(--blue); border-color:var(--blue); color:var(--on-blue); font-weight:700;}
+.chip input:focus-visible + span{outline:2px solid var(--blue); outline-offset:1px;}
+
+/* 割合 */
+.ratio{display:flex; flex-direction:column; gap:7px;}
+.rr{display:flex; align-items:center; gap:9px;}
+.rr label{font-family:var(--form); font-size:13px; flex:1; min-width:0;}
+.rr input{width:74px; flex:0 0 auto; text-align:right;}
+.rr .pc{font-size:12px; color:var(--ink3); flex:0 0 auto;}
+.sum{display:flex; align-items:center; gap:9px; padding-top:4px;}
+.bar{flex:1; height:7px; background:var(--card2); border:1px solid var(--rule); border-radius:4px; overflow:hidden; min-width:0;}
+.bar i{display:block; height:100%; width:0; background:var(--blue); transition:width .18s ease;}
+.bar.over i{background:var(--red);}
+.sum b{font-family:var(--mono); font-size:12px; font-weight:500; color:var(--ink2); flex:0 0 auto;}
+
+/* チェック */
+.checks{display:flex; flex-direction:column; gap:3px;}
+.ck{display:flex; align-items:flex-start; gap:10px; padding:7px 8px; border-radius:3px; cursor:pointer;}
+.ck:has(input:checked){background:var(--ok-soft);}
+.ck input{width:19px; height:19px; margin:3px 0 0; flex:0 0 auto; accent-color:var(--ok);}
+.ck span{font-family:var(--form); font-size:13.5px; line-height:1.5;}
+.ck em{display:block; font-style:normal; font-size:11.5px; color:var(--ink2); font-family:var(--body); line-height:1.55;}
+
+/* 出力 */
+.outbox{
+  font-family:var(--mono); font-size:12px; line-height:1.7; color:var(--ink);
+  background:var(--paper); border:1px solid var(--rule2); border-radius:4px;
+  padding:12px; margin:0; width:100%; max-height:420px; box-sizing:border-box;
+  white-space:pre-wrap; word-break:break-word; overflow:auto; -webkit-user-select:text; user-select:text;
+}
+.outbox.sample{color:var(--ink3);}
+.miss{font-size:12.5px; color:var(--red); background:var(--red-soft); border-radius:3px; padding:7px 10px; line-height:1.6;}
+.miss.ok{color:var(--ok); background:var(--ok-soft);}
+
+/* 下部固定バー */
+.bottom{
+  position:fixed; left:0; right:0; bottom:0; z-index:40;
+  background:var(--card); border-top:1px solid var(--rule2);
+  padding:10px 16px calc(10px + env(safe-area-inset-bottom,0px));
+}
+.bottom .inner{max-width:680px; margin:0 auto; width:100%; display:flex; gap:8px;}
+.btn{
+  font-family:var(--form); font-size:14.5px; font-weight:700; cursor:pointer;
+  border-radius:4px; padding:12px 14px; border:1px solid var(--rule2);
+  background:var(--paper); color:var(--ink2); white-space:nowrap;
+}
+.btn.main{flex:1; background:var(--blue); border-color:var(--blue); color:var(--on-blue);}
+.btn:active{transform:translateY(1px);}
+.btn:focus-visible{outline:2px solid var(--blue); outline-offset:2px;}
+
+.toast{
+  position:fixed; left:50%; transform:translateX(-50%);
+  bottom:calc(86px + env(safe-area-inset-bottom,0px)); z-index:50;
+  background:var(--ink); color:var(--paper); font-family:var(--form); font-size:13px; font-weight:700;
+  padding:9px 16px; border-radius:20px; box-shadow:0 4px 16px rgba(0,0,0,.25);
+  opacity:0; pointer-events:none; transition:opacity .2s ease; max-width:80vw; text-align:center;
+}
+.toast.on{opacity:1;}
+@media (prefers-reduced-motion:reduce){*{transition:none !important;}}
+
+.foot{margin-top:20px; padding-top:14px; border-top:1px solid var(--rule); font-size:12px; color:var(--ink3);}
+.foot p{margin:0 0 5px;}
+</style>
+<style>
+/* ── 案件情報シート用の追加分 ── */
+.pair{display:flex; flex-direction:column; gap:7px;}
+.kk{display:flex; align-items:center; gap:8px; flex-wrap:wrap;}
+.kk .kl{font-family:var(--form); font-size:13px; font-weight:700; width:108px; flex:0 0 auto;}
+.kk .chips{flex:0 0 auto;}
+.kk input[type=text]{flex:1 1 140px; min-width:0; padding:6px 9px; font-size:15px;}
+.chip.sm span{padding:6px 12px; font-size:14px;}
+.dt{display:flex; gap:8px;}
+.dt input[type=date]{flex:1 1 60%; min-width:0;}
+.dt input[type=time]{flex:1 1 40%; min-width:0;}
+input[type=time],input[type=tel],input[type=url]{
+  font-family:var(--body); font-size:16px; color:var(--ink);
+  background:var(--paper); border:1px solid var(--rule2); border-radius:3px;
+  padding:8px 10px; width:100%; max-width:100%; box-sizing:border-box;
+}
+input[type=tel]{font-family:var(--mono);}
+input[type=time]:focus-visible,input[type=tel]:focus-visible,input[type=url]:focus-visible{outline:2px solid var(--blue); outline-offset:1px; border-color:var(--blue);}
+.keep{font-family:var(--form); font-size:10px; color:var(--ok); border:1px solid currentColor; border-radius:2px; padding:0 4px; line-height:14px; font-weight:400;}
+</style>
+</head>
+<body>
+
+<div class="top">
+  <div class="top-in">
+    <div class="top-row">
+      <span class="brand">案件情報</span>
+      <span class="who" id="who">店名未入力</span>
+      <span class="score" id="score">★ 0/7</span>
+    </div>
+    <nav class="nav" aria-label="セクション">
+      <a href="#s1">案件情報</a><a href="#s2">日程・連絡先</a><a href="#s3">前確</a><a href="#s4">詰め</a><a href="#s5">メモ</a><a href="#s6">前確者</a><a href="#sout">出力</a>
+    </nav>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <div class="lede">
+    <h1>案件情報 入力シート</h1>
+    <p>タップと短い入力だけで、いつもの<b>＜案件情報＞フォーマットそのまま</b>のテキストができる。下のボタンでコピーして貼るだけ。</p>
+    <p>空欄の項目は、フォーマットの形を崩さず空のまま出る。<span class="keep">残る</span> の付いた欄は「次の案件」を押しても消えへん。</p>
+  </div>
+
+  <section class="sec" id="s1">
+    <div class="sec-h"><span class="num">1</span><h2>案件情報</h2></div>
+    <div class="sec-b">
+      <div class="f"><div class="lab"><label for="a_ten">店名</label> <span class="req">必須</span></div><input type="text" id="a_ten" placeholder="例）炭火焼鳥 とり源"></div>
+      <div class="f">
+        <div class="lab"><label for="a_gyo">業種</label></div>
+        <input type="text" id="a_gyo" list="gyolist" placeholder="例）居酒屋">
+        <datalist id="gyolist">
+          <option value="居酒屋"><option value="焼肉"><option value="焼鳥"><option value="ラーメン"><option value="カフェ"><option value="バー"><option value="レストラン"><option value="美容室"><option value="ネイルサロン"><option value="エステ"><option value="整骨院"><option value="整体"><option value="歯科"><option value="クリニック"><option value="ジム"><option value="小売"><option value="不動産">
+        </datalist>
+      </div>
+      <div class="f"><div class="lab"><label for="a_jus">住所</label> <span class="req">必須</span></div><input type="text" id="a_jus" placeholder="例）大阪府大阪市中央区心斎橋筋1-2-3"></div>
+      <div class="f">
+        <div class="lab">LINE公式アカ有無</div>
+        <div class="chips">
+          <label class="chip"><input type="radio" name="line1" id="a_line_y" value="有り"><span>有り</span></label>
+          <label class="chip"><input type="radio" name="line1" id="a_line_n" value="無し"><span>無し</span></label>
+        </div>
+      </div>
+      <div class="row">
+        <div class="f"><div class="lab"><label for="a_ap">AP(苗字カタカナ)</label> <span class="keep">残る</span></div><input type="text" id="a_ap" class="kana" placeholder="タケウチ"></div>
+        <div class="f"><div class="lab"><label for="a_own">オーナー名（カナ）</label> <span class="req">必須</span></div><input type="text" id="a_own" class="kana" placeholder="ヤマダ タロウ"></div>
+      </div>
+      <div class="hint">ひらがなで打っても、欄から出た時に<b>カタカナへ自動で直る</b>。</div>
+      <div class="f"><div class="lab"><label for="a_sei">性格と特徴</label></div><textarea id="a_sei" placeholder="例）50代男性。せっかちで結論から聞きたいタイプ。関西弁。"></textarea></div>
+      <div class="row">
+        <div class="f"><div class="lab"><label for="a_inst">インスタアカウント</label></div><input type="text" id="a_inst" placeholder="@torigen_shinsaibashi" autocapitalize="off" autocorrect="off"></div>
+        <div class="f"><div class="lab"><label for="a_mise">店舗数</label></div><div class="unit"><input type="number" id="a_mise" inputmode="numeric" placeholder="1"><span>店舗</span></div></div>
+      </div>
+      <div class="f"><div class="lab"><label for="a_hp">会社HP</label></div><input type="url" id="a_hp" placeholder="https://" autocapitalize="off" autocorrect="off"></div>
+    </div>
+  </section>
+
+  <section class="sec" id="s2">
+    <div class="sec-h"><span class="num">2</span><h2>日程・連絡先</h2></div>
+    <div class="sec-b">
+      <div class="f"><div class="lab"><label for="d_toss">トス日</label></div><input type="date" id="d_toss"></div>
+      <div class="f"><div class="lab"><label for="d_mae">前確日</label></div><div class="dt"><input type="date" id="d_mae"><input type="time" id="d_mae_t" step="600" aria-label="前確の時間"></div></div>
+      <div class="f"><div class="lab"><label for="d_sho">商談日</label> <span class="req">必須</span></div><div class="dt"><input type="date" id="d_sho"><input type="time" id="d_sho_t" step="600" aria-label="商談の時間"></div></div>
+      <div class="hint">日付は「<b>9月27日(土) 14:00</b>」の形で出る。時間は空でもええ。</div>
+      <div class="row">
+        <div class="f"><div class="lab"><label for="d_tel">電話番号</label></div><input type="tel" id="d_tel" inputmode="tel" placeholder="06-1234-5678"></div>
+        <div class="f"><div class="lab"><label for="d_kei">携帯電話番号</label></div><input type="tel" id="d_kei" inputmode="tel" placeholder="090-1234-5678"></div>
+      </div>
+      <div class="hint">電話番号はどちらか片方あれば必須はOK。</div>
+    </div>
+  </section>
+
+  <section class="sec" id="s3">
+    <div class="sec-h"><span class="num">3</span><h2>前確の内容</h2><span class="tag">〇△✕＋ひとこと</span></div>
+    <div class="sec-b">
+      <div class="pair">
+        <div class="kk" data-mk="m_dai"><span class="kl">代表アポ</span>
+          <div class="chips">
+            <label class="chip sm"><input type="radio" name="m_dai" value="〇"><span>〇</span></label>
+            <label class="chip sm"><input type="radio" name="m_dai" value="△"><span>△</span></label>
+            <label class="chip sm"><input type="radio" name="m_dai" value="✕"><span>✕</span></label>
+          </div>
+          <input type="text" id="m_dai_t" placeholder="補足（任意）">
+        </div>
+        <div class="kk" data-mk="m_jik"><span class="kl">時間認識</span>
+          <div class="chips">
+            <label class="chip sm"><input type="radio" name="m_jik" value="〇"><span>〇</span></label>
+            <label class="chip sm"><input type="radio" name="m_jik" value="△"><span>△</span></label>
+            <label class="chip sm"><input type="radio" name="m_jik" value="✕"><span>✕</span></label>
+          </div>
+          <input type="text" id="m_jik_t" placeholder="例）30分">
+        </div>
+        <div class="kk" data-mk="m_ryo"><span class="kl">料金認識</span>
+          <div class="chips">
+            <label class="chip sm"><input type="radio" name="m_ryo" value="〇"><span>〇</span></label>
+            <label class="chip sm"><input type="radio" name="m_ryo" value="△"><span>△</span></label>
+            <label class="chip sm"><input type="radio" name="m_ryo" value="✕"><span>✕</span></label>
+          </div>
+          <input type="text" id="m_ryo_t" placeholder="例）無料と認識">
+        </div>
+        <div class="kk" data-mk="m_onl"><span class="kl">オンライン認識</span>
+          <div class="chips">
+            <label class="chip sm"><input type="radio" name="m_onl" value="〇"><span>〇</span></label>
+            <label class="chip sm"><input type="radio" name="m_onl" value="△"><span>△</span></label>
+            <label class="chip sm"><input type="radio" name="m_onl" value="✕"><span>✕</span></label>
+          </div>
+          <input type="text" id="m_onl_t" placeholder="例）Zoom可">
+        </div>
+      </div>
+      <div class="f">
+        <div class="lab">現在もしくは過去にSNSのサービスを利用したことはあるか</div>
+        <div class="chips">
+          <label class="chip"><input type="radio" name="sns" value="現在利用中"><span>現在利用中</span></label>
+          <label class="chip"><input type="radio" name="sns" value="過去に利用"><span>過去に利用</span></label>
+          <label class="chip"><input type="radio" name="sns" value="なし"><span>なし</span></label>
+        </div>
+        <input type="text" id="m_sns_t" placeholder="補足（例：〇〇社に月3万、1年で解約）">
+      </div>
+    </div>
+  </section>
+
+  <section class="sec" id="s4">
+    <div class="sec-h"><span class="num">4</span><h2>詰め内容</h2></div>
+    <div class="sec-b">
+      <div class="f">
+        <div class="lab">LINE公式アカウント</div>
+        <div class="chips">
+          <label class="chip"><input type="radio" name="line2" id="t_line_y" value="有り"><span>有り</span></label>
+          <label class="chip"><input type="radio" name="line2" id="t_line_n" value="無し"><span>無し</span></label>
+        </div>
+        <div class="hint">未選択なら、上の「LINE公式アカ有無」と同じ内容で出る。</div>
+      </div>
+      <div class="f">
+        <div class="lab">インスタとLINE有料でサービス導入してるか</div>
+        <div class="chips">
+          <label class="chip"><input type="radio" name="yuryo" value="導入してる"><span>導入してる</span></label>
+          <label class="chip"><input type="radio" name="yuryo" value="導入してない"><span>導入してない</span></label>
+        </div>
+        <input type="text" id="t_yuryo_t" placeholder="補足（どこの・いくら など）">
+      </div>
+      <div class="row">
+        <div class="f"><div class="lab"><label for="t_kya">月間来客数</label></div><div class="unit"><input type="number" id="t_kya" inputmode="numeric" placeholder="600"><span>人</span></div></div>
+        <div class="f"><div class="lab"><label for="t_tan">客単価</label></div><div class="unit"><input type="number" id="t_tan" inputmode="numeric" placeholder="3500"><span>円</span></div></div>
+      </div>
+      <div class="f">
+        <div class="lab">興味あるポイント</div>
+        <div class="chips" id="kyomi">
+          <label class="chip"><input type="checkbox" value="新規集客"><span>新規集客</span></label>
+          <label class="chip"><input type="checkbox" value="リピート"><span>リピート</span></label>
+          <label class="chip"><input type="checkbox" value="予約増"><span>予約増</span></label>
+          <label class="chip"><input type="checkbox" value="採用"><span>採用</span></label>
+          <label class="chip"><input type="checkbox" value="認知度"><span>認知度</span></label>
+          <label class="chip"><input type="checkbox" value="運用の手間削減"><span>手間削減</span></label>
+          <label class="chip"><input type="checkbox" value="無料なこと"><span>無料</span></label>
+        </div>
+        <input type="text" id="t_kyo_t" placeholder="補足（例：平日の夜を埋めたい）">
+      </div>
+    </div>
+  </section>
+
+  <section class="sec" id="s5">
+    <div class="sec-h"><span class="num">5</span><h2>内容メモ・質問</h2></div>
+    <div class="sec-b">
+      <div class="f"><div class="lab"><label for="n_memo">内容メモ</label></div><textarea id="n_memo" rows="4" placeholder="例）娘さんがインスタ担当。最近フォロワーが伸びず悩み中。"></textarea></div>
+      <div class="f"><div class="lab"><label for="n_q">オーナーからの質問</label></div><textarea id="n_q" rows="3" placeholder="例）本当に無料？途中でお金かからへん？"></textarea></div>
+    </div>
+  </section>
+
+  <section class="sec" id="s6">
+    <div class="sec-h"><span class="num">6</span><h2>前確者</h2></div>
+    <div class="sec-b">
+      <div class="f"><div class="lab"><label for="p_tan">前確担当者</label> <span class="req">必須</span> <span class="keep">残る</span></div><input type="text" id="p_tan" placeholder="自分の名前"></div>
+      <div class="f">
+        <div class="lab">事前連絡</div>
+        <div class="chips">
+          <label class="chip"><input type="radio" name="jizen" value="済"><span>済</span></label>
+          <label class="chip"><input type="radio" name="jizen" value="未"><span>未</span></label>
+          <label class="chip"><input type="radio" name="jizen" value="不要"><span>不要</span></label>
+        </div>
+        <input type="text" id="p_jizen_t" placeholder="補足（例：前日夕方に電話OK）">
+      </div>
+      <div class="f">
+        <div class="lab">URL送付先</div>
+        <div class="chips">
+          <label class="chip"><input type="radio" name="urlsaki" value="LINE"><span>LINE</span></label>
+          <label class="chip"><input type="radio" name="urlsaki" value="SMS"><span>SMS</span></label>
+          <label class="chip"><input type="radio" name="urlsaki" value="メール"><span>メール</span></label>
+        </div>
+        <input type="text" id="p_url_t" placeholder="宛先（例：090-xxxx / xxx@gmail.com）" autocapitalize="off" autocorrect="off">
+      </div>
+    </div>
+  </section>
+
+  <section class="sec" id="sout">
+    <div class="sec-h"><span class="num">→</span><h2>貼りつけ用テキスト</h2><span class="tag">下のボタンでコピー</span></div>
+    <div class="sec-b">
+      <pre class="outbox" id="outbox" aria-live="polite"></pre>
+      <div class="miss" id="miss"></div>
+    </div>
+  </section>
+
+  <div class="foot">
+    <p>入力はこの端末のブラウザに自動保存される。閉じても残るけど、端末をまたいでは引き継がれへん。</p>
+    <p>コピーして送ったら「次の案件」でまっさらに戻す。AP・前確担当者だけは残る。</p>
+    <p>圏外でも開ける。ホーム画面に追加しとくと一発で立ち上がる。</p>
+  </div>
+
+</div>
+
+<div class="bottom">
+  <div class="inner">
+    <button class="btn main" id="copy" type="button">テキストをコピー</button>
+    <button class="btn" id="reset" type="button">次の案件</button>
+  </div>
+</div>
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+(function(){
+  "use strict";
+  var KEY = "anken-info-v1";
+  var KEEP = ["a_ap", "p_tan"];
+  var $  = function(s,r){ return (r||document).querySelector(s); };
+  var $$ = function(s,r){ return Array.prototype.slice.call((r||document).querySelectorAll(s)); };
+  var WD = ["日","月","火","水","木","金","土"];
+
+  function val(id){ var el = $("#" + id); return el && el.value ? String(el.value).trim() : ""; }
+  function radio(name){ var c = $('input[name="' + name + '"]:checked'); return c ? c.value : ""; }
+  function join(a, b){ return a && b ? a + "（" + b + "）" : (a || b); }
+  function kata(s){ return s.replace(/[ぁ-ゖ]/g, function(c){ return String.fromCharCode(c.charCodeAt(0) + 0x60); }); }
+
+  function md(v, withWd){
+    if(!v) return "";
+    var p = v.split("-"); if(p.length !== 3) return v;
+    var d = new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]));
+    return Number(p[1]) + "月" + Number(p[2]) + "日" + (withWd ? "(" + WD[d.getDay()] + ")" : "");
+  }
+  function dt(dId, tId){
+    var s = md(val(dId), true), t = val(tId);
+    return s && t ? s + " " + t : (s || t);
+  }
+
+  function build(){
+    var line1 = radio("line1");
+    var line2 = radio("line2") || line1;
+    var kyomi = $$("#kyomi input:checked").map(function(c){ return c.value; }).join("、");
+    var mise  = val("a_mise");
+    var kya = val("t_kya"), tan = val("t_tan");
+
+    var L = [
+      "＜案件情報＞",
+      "店名：" + val("a_ten"),
+      "業種:" + val("a_gyo"),
+      "住所：" + val("a_jus"),
+      "LINE公式アカ有無：" + line1,
+      "AP(苗字カタカナ)：" + kata(val("a_ap")),
+      "オーナー名（カナ）：" + kata(val("a_own")),
+      "性格と特徴：" + val("a_sei"),
+      "トス日：" + (md(val("d_toss"), false) || "月 日"),
+      "・前確日：" + dt("d_mae", "d_mae_t"),
+      "商談日：" + dt("d_sho", "d_sho_t"),
+      "電話番号：" + val("d_tel"),
+      "携帯電話番号：" + val("d_kei"),
+      "会社HP：" + val("a_hp"),
+      "インスタアカウント:" + val("a_inst"),
+      "店舗数：" + (mise ? mise + "店舗" : ""),
+      "",
+      "＜前確の内容＞",
+      "・代表アポ　：" + join(radio("m_dai"), val("m_dai_t")),
+      "・時間認識　：" + join(radio("m_jik"), val("m_jik_t")),
+      "・料金認識　：" + join(radio("m_ryo"), val("m_ryo_t")),
+      "・オンライン認識：" + join(radio("m_onl"), val("m_onl_t")),
+      "",
+      "現在もしくは過去にSNSのサービスを利用したことはあるか：" + join(radio("sns"), val("m_sns_t")),
+      "",
+      "■詰め内容",
+      "・LINE公式アカウント：" + (line2 || "有りor無し"),
+      "",
+      "・インスタとLINE有料でサービス導入してるか" + ((radio("yuryo") || val("t_yuryo_t")) ? "：" + join(radio("yuryo"), val("t_yuryo_t")) : ""),
+      "",
+      "・月間来客数：" + (kya ? kya + "人" : ""),
+      "",
+      "・客単価：" + (tan ? tan + "円" : ""),
+      "",
+      "・興味あるポイント：" + join(kyomi, val("t_kyo_t")),
+      "",
+      "",
+      "＜内容メモ＞",
+      val("n_memo"),
+      "",
+      "〇オーナーからの質問",
+      val("n_q"),
+      "",
+      "",
+      "＜前確者＞",
+      "前確担当者：" + val("p_tan"),
+      "事前連絡：" + join(radio("jizen"), val("p_jizen_t")),
+      "URL送付先：" + join(radio("urlsaki"), val("p_url_t"))
+    ];
+    return L.join("\n");
+  }
+
+  var REQ = [
+    { name:"店名",       ok:function(){ return !!val("a_ten"); } },
+    { name:"住所",       ok:function(){ return !!val("a_jus"); } },
+    { name:"オーナー名", ok:function(){ return !!val("a_own"); } },
+    { name:"電話番号",   ok:function(){ return !!(val("d_tel") || val("d_kei")); } },
+    { name:"商談日",     ok:function(){ return !!val("d_sho"); } },
+    { name:"前確4項目",  ok:function(){ return ["m_dai","m_jik","m_ryo","m_onl"].every(function(n){ return !!radio(n); }); } },
+    { name:"前確担当者", ok:function(){ return !!val("p_tan"); } }
+  ];
+
+  function render(){
+    $("#outbox").textContent = build();
+    var miss = REQ.filter(function(r){ return !r.ok(); }).map(function(r){ return r.name; });
+    var done = REQ.length - miss.length;
+    var sc = $("#score");
+    sc.textContent = "★ " + done + "/" + REQ.length;
+    sc.classList.toggle("full", !miss.length);
+    var m = $("#miss");
+    m.textContent = miss.length ? "まだ埋まってない必須：" + miss.join(" / ") : "必須そろってる。コピーして送ってOK。";
+    m.classList.toggle("ok", !miss.length);
+    $("#who").textContent = val("a_ten") || "店名未入力";
+  }
+
+  /* 保存: id付きはid、ラジオ/チェックは name+value / 親#id+value をキーにする */
+  function keyOf(el){
+    if(el.type === "radio") return "r:" + el.name + ":" + el.value;
+    if(el.type === "checkbox") return "c:" + (el.id || (el.closest("[id]").id + ":" + el.value));
+    return el.id;
+  }
+  function fields(){ return $$("input,textarea,select").filter(function(el){ return !!keyOf(el); }); }
+
+  function save(){
+    try{
+      var d = {};
+      fields().forEach(function(el){
+        d[keyOf(el)] = (el.type === "checkbox" || el.type === "radio") ? el.checked : el.value;
+      });
+      localStorage.setItem(KEY, JSON.stringify(d));
+    }catch(e){}
+  }
+  function load(){
+    try{
+      var raw = localStorage.getItem(KEY);
+      if(!raw) return;
+      var d = JSON.parse(raw);
+      fields().forEach(function(el){
+        var k = keyOf(el);
+        if(!(k in d)) return;
+        if(el.type === "checkbox" || el.type === "radio") el.checked = !!d[k];
+        else el.value = d[k];
+      });
+    }catch(e){}
+  }
+
+  var timer;
+  function onChange(){ render(); clearTimeout(timer); timer = setTimeout(save, 250); }
+  document.addEventListener("input", onChange);
+  document.addEventListener("change", onChange);
+
+  /* カナ欄は欄を出たらカタカナに */
+  $$(".kana").forEach(function(el){
+    el.addEventListener("blur", function(){ var k = kata(el.value); if(k !== el.value){ el.value = k; onChange(); } });
+  });
+
+  /* ラジオはもう一度タップで解除できるようにする（押し間違い対策） */
+  $$('input[type=radio]').forEach(function(r){
+    r.addEventListener("click", function(){
+      if(r.dataset.was === "1"){ r.checked = false; r.dataset.was = ""; onChange(); }
+      else { $$('input[name="' + r.name + '"]').forEach(function(o){ o.dataset.was = ""; }); r.dataset.was = "1"; }
+    });
+  });
+  function syncWas(){ $$('input[type=radio]').forEach(function(r){ r.dataset.was = r.checked ? "1" : ""; }); }
+
+  function toast(msg){
+    var el = $("#toast");
+    el.textContent = msg;
+    el.classList.add("on");
+    setTimeout(function(){ el.classList.remove("on"); }, 1800);
+  }
+  function legacyCopy(s){
+    var ok = false;
+    try{
+      var ta = document.createElement("textarea");
+      ta.value = s; ta.setAttribute("readonly", "");
+      ta.style.position = "fixed"; ta.style.top = "-1000px";
+      document.body.appendChild(ta);
+      ta.select(); ta.setSelectionRange(0, s.length);
+      ok = document.execCommand("copy");
+      document.body.removeChild(ta);
+    }catch(e){}
+    toast(ok ? "コピーした" : "下の枠を長押しして選択してコピーして");
+  }
+
+  $("#copy").addEventListener("click", function(){
+    var txt = build();
+    try{
+      if(navigator.clipboard && navigator.clipboard.writeText){
+        navigator.clipboard.writeText(txt).then(function(){ toast("コピーした"); }, function(){ legacyCopy(txt); });
+        return;
+      }
+    }catch(e){}
+    legacyCopy(txt);
+  });
+
+  $("#reset").addEventListener("click", function(){
+    if(!window.confirm("この案件の入力を全部消して、次の案件を始める？\n（AP・前確担当者は残る）")) return;
+    var kept = {};
+    KEEP.forEach(function(id){ kept[id] = $("#" + id).value; });
+    fields().forEach(function(el){
+      if(el.type === "checkbox" || el.type === "radio") el.checked = false;
+      else el.value = "";
+    });
+    KEEP.forEach(function(id){ $("#" + id).value = kept[id]; });
+    try{ localStorage.removeItem(KEY); }catch(e){}
+    setDefaults(); syncWas(); save(); render();
+    window.scrollTo({ top: 0, behavior: "smooth" });
+    toast("まっさらにした");
+  });
+
+  function setDefaults(){
+    var d = new Date();
+    var p = function(n){ return (n < 10 ? "0" : "") + n; };
+    if(!val("d_toss")) $("#d_toss").value = d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate());
+  }
+
+  load();
+  setDefaults();
+  syncWas();
+  render();
+
+  if("serviceWorker" in navigator){
+    window.addEventListener("load", function(){
+      navigator.serviceWorker.register("./sw.js", { scope: "./" }).catch(function(){});
+    });
+  }
+})();
+</script>
+</body>
+</html>
