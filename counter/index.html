@@ -152,8 +152,53 @@ h2{font-size:13px; letter-spacing:.06em; color:var(--ink2); margin:22px 2px 6px;
   padding:8px 16px; border-radius:999px; font-size:13.5px; font-weight:700;
   box-shadow:0 4px 16px rgba(0,0,0,.25); max-width:calc(100% - 32px);
   opacity:0; pointer-events:none; transition:opacity .2s;
+  z-index:60;
 }
 .toast.on{opacity:1;}
+
+/* 項目の編集 */
+.acts .gear{flex:0 0 auto; padding-inline:14px;}
+.sheet{
+  position:fixed; inset:0; z-index:50; background:var(--paper); overflow-y:auto;
+  -webkit-overflow-scrolling:touch;
+}
+.sheet-in{max-width:680px; margin:0 auto; padding:calc(env(safe-area-inset-top,0px) + 12px) 16px calc(env(safe-area-inset-bottom,0px) + 90px);}
+.sheet h3{margin:0 0 4px; font-size:18px;}
+.sheet .hint{font-size:12.5px; color:var(--ink2); margin:0 0 12px;}
+.items{display:flex; flex-direction:column; gap:8px;}
+.item{background:var(--card); border:1px solid var(--rule); border-radius:10px; padding:8px;}
+.item-row{display:flex; align-items:center; gap:6px;}
+.swatch{
+  width:40px; height:40px; flex:0 0 auto; border-radius:8px; border:1px solid rgba(0,0,0,.12);
+  font-weight:700; font-size:13px;
+}
+.item input{
+  flex:1; min-width:0; height:40px; border:1px solid var(--rule); border-radius:8px;
+  background:var(--card2); color:var(--ink); font:inherit; font-size:16px; padding:0 10px;
+}
+.item input.bad{border-color:var(--red); background:var(--red-soft);}
+.ib{
+  width:36px; height:40px; flex:0 0 auto; border:1px solid var(--rule); border-radius:8px;
+  background:var(--card2); font-size:14px;
+}
+.ib:disabled{opacity:.3; cursor:default;}
+.ib.rm{color:var(--red); font-weight:700;}
+.pal{display:flex; flex-wrap:wrap; gap:6px; margin-top:8px;}
+.pal button{width:34px; height:34px; border-radius:7px; border:1px solid rgba(0,0,0,.12); font-size:12px; font-weight:700;}
+.pal button.on{outline:3px solid var(--blue); outline-offset:1px;}
+.add{
+  margin-top:10px; width:100%; min-height:46px; border:1.5px dashed var(--rule); border-radius:10px;
+  background:transparent; color:var(--blue); font-weight:700; font-size:15px;
+}
+.reset{margin-top:18px; border:0; background:transparent; color:var(--ink2); text-decoration:underline; font-size:13px; padding:4px 0;}
+.sheet-bar{
+  position:fixed; left:0; right:0; bottom:0; z-index:51; background:var(--paper); border-top:1px solid var(--rule);
+  padding:10px 16px calc(env(safe-area-inset-bottom,0px) + 10px);
+}
+.sheet-bar .in{max-width:680px; margin:0 auto; display:flex; gap:8px;}
+.sheet-bar button{flex:1; min-height:46px; border-radius:8px; border:1px solid var(--rule); background:var(--card); font-weight:700; font-size:15px;}
+.sheet-bar .primary{background:var(--blue); color:var(--on-blue); border-color:var(--blue);}
+body.lock{overflow:hidden;}
 </style>
 </head>
 <body>
@@ -181,6 +226,7 @@ h2{font-size:13px; letter-spacing:.06em; color:var(--ink2); margin:22px 2px 6px;
   <div class="acts">
     <button id="undo">↶ ひとつ戻す</button>
     <button class="primary" id="copy">集計をコピー</button>
+    <button class="gear" id="openEdit" aria-label="項目を編集">⚙ 項目</button>
   </div>
   <p class="note" id="note">押し間違えたら「ひとつ戻す」か、下の記録の × で消せます。</p>
 
@@ -191,12 +237,29 @@ h2{font-size:13px; letter-spacing:.06em; color:var(--ink2); margin:22px 2px 6px;
   <table class="hist" id="hist"></table>
 
 </div>
+<div class="sheet" id="sheet" hidden>
+  <div class="sheet-in">
+    <h3>項目を編集</h3>
+    <p class="hint">左の色を押すと色が選べます。↑↓で並べ替え、✕で削除。<br>
+      名前を変えると、今までの記録も新しい名前になります。削除しても今までの記録と架電数は残ります。</p>
+    <div class="items" id="items"></div>
+    <button class="add" id="addItem">＋ 項目を追加</button>
+    <button class="reset" id="resetItems">最初の項目に戻す</button>
+  </div>
+</div>
+<div class="sheet-bar" id="sheetBar" hidden>
+  <div class="in">
+    <button id="cancelEdit">やめる</button>
+    <button class="primary" id="saveEdit">保存</button>
+  </div>
+</div>
 <div class="toast" id="toast"></div>
 
 <script>
-/* リストの「結果」プルダウンと同じ並び（ガチャ切り・忙しいはカウンターだけの追加）。色はシートの色分けに合わせる
-   （シートに色が無い項目は近い色を当てている） */
-const RESULTS = [
+/* 最初の項目。リストの「結果」プルダウンと同じ並び（ガチャ切り・忙しいはカウンターだけの追加）。
+   色はシートの色分けに合わせる（シートに色が無い項目は近い色を当てている）。
+   画面の「項目を編集」で変えたものは ITEMS_KEY に保存され、そちらが優先 */
+const DEFAULTS = [
   {k:"留守",           bg:"#E8EAED", fg:"#3C4043"},
   {k:"再架電",         bg:"#BFE1F6", fg:"#0A53A8"},
   {k:"オーナー不在",   bg:"#C6DBE1", fg:"#215A6C"},
@@ -211,9 +274,18 @@ const RESULTS = [
   {k:"忙しい",         bg:"#E1D5C9", fg:"#5B4636"},
   {k:"NG",             bg:"#473822", fg:"#FFFFFF"}
 ];
-const COLOR = Object.fromEntries(RESULTS.map(r => [r.k, r]));
+/* 設定画面で選べる色（背景, 文字） */
+const PALETTE = [
+  ["#E8EAED","#3C4043"], ["#D5D8DC","#3C4043"], ["#5F6368","#FFFFFF"],
+  ["#BFE1F6","#0A53A8"], ["#C6DBE1","#215A6C"], ["#D4EDBC","#11734B"],
+  ["#FFE5A0","#473822"], ["#FFC8AA","#753800"], ["#FFCFC9","#B10202"],
+  ["#E6CFF2","#5A3286"], ["#E1D5C9","#5B4636"], ["#B10202","#FFFFFF"],
+  ["#0A53A8","#FFFFFF"], ["#11734B","#FFFFFF"], ["#473822","#FFFFFF"]
+];
 const KEY = "kekka-counter-v1";
+const ITEMS_KEY = "kekka-counter-items-v1";
 const WD = ["日","月","火","水","木","金","土"];
+const GRAY = {bg:"#E8EAED", fg:"#3C4043"};
 
 /* ---- 保存 ---- */
 let log = [];   // [{t: ミリ秒, r: "留守"}]
@@ -221,6 +293,17 @@ try { log = JSON.parse(localStorage.getItem(KEY) || "[]"); } catch (_) { log = [
 if (!Array.isArray(log)) log = [];
 function save() {
   try { localStorage.setItem(KEY, JSON.stringify(log)); }
+  catch (_) { toast("保存できませんでした"); }
+}
+
+let RESULTS = DEFAULTS.map(r => ({...r}));
+try {
+  const s = JSON.parse(localStorage.getItem(ITEMS_KEY) || "null");
+  if (Array.isArray(s) && s.length && s.every(r => r && typeof r.k === "string" && r.k)) RESULTS = s;
+} catch (_) {}
+let COLOR = {};
+function saveItems() {
+  try { localStorage.setItem(ITEMS_KEY, JSON.stringify(RESULTS)); }
   catch (_) { toast("保存できませんでした"); }
 }
 
@@ -239,24 +322,32 @@ let view = todayKey();
 let showAll = false;
 
 function entriesOf(k) { return log.filter(e => dayKey(new Date(e.t)) === k); }
+/* 今の項目に無い名前（消した項目の過去の記録）も数えて、後ろに付ける */
 function countOf(list) {
   const c = Object.fromEntries(RESULTS.map(r => [r.k, 0]));
-  list.forEach(e => { if (e.r in c) c[e.r]++; });
+  list.forEach(e => { c[e.r] = (c[e.r] || 0) + 1; });
   return c;
 }
+const get = (c, k) => c[k] || 0;
+const mikomiOf = c => Object.keys(c).filter(k => k.startsWith("見込み")).reduce((a, k) => a + c[k], 0);
 
 /* ---- ボタンを作る ---- */
 const grid = document.getElementById("grid");
-RESULTS.forEach((r, i) => {
-  const b = document.createElement("button");
-  b.className = "rb" + (i === RESULTS.length - 1 && RESULTS.length % 2 ? " wide" : "");
-  b.style.background = r.bg; b.style.color = r.fg;
-  b.dataset.k = r.k;
-  b.innerHTML = '<span></span><span class="n">0</span>';
-  b.firstChild.textContent = r.k;
-  b.addEventListener("click", () => add(r.k, b));
-  grid.appendChild(b);
-});
+function buildGrid() {
+  COLOR = Object.fromEntries(RESULTS.map(r => [r.k, r]));
+  grid.innerHTML = "";
+  RESULTS.forEach((r, i) => {
+    const b = document.createElement("button");
+    b.className = "rb" + (i === RESULTS.length - 1 && RESULTS.length % 2 ? " wide" : "");
+    b.style.background = r.bg; b.style.color = r.fg;
+    b.dataset.k = r.k;
+    b.innerHTML = '<span></span><span class="n">0</span>';
+    b.firstChild.textContent = r.k;
+    b.addEventListener("click", () => add(r.k, b));
+    grid.appendChild(b);
+  });
+}
+buildGrid();
 
 function add(k, btn) {
   if (view !== todayKey()) return;
@@ -280,7 +371,7 @@ document.getElementById("copy").addEventListener("click", async () => {
   const c = countOf(entriesOf(view));
   const total = Object.values(c).reduce((a, b) => a + b, 0);
   const lines = [label(view) + " 架電 " + total + "件"];
-  RESULTS.forEach(r => { if (c[r.k]) lines.push(r.k + " " + c[r.k]); });
+  Object.keys(c).forEach(k => { if (c[k]) lines.push(k + " " + c[k]); });
   const text = lines.join("\n");
   try { await navigator.clipboard.writeText(text); toast("コピーしました"); }
   catch (_) {
@@ -316,7 +407,7 @@ function render() {
   document.getElementById("next").disabled = isToday;
 
   document.getElementById("total").textContent = total;
-  const apo = c["アポ"], mikomi = c["見込みA"] + c["見込みB"] + c["見込みC"];
+  const apo = get(c, "アポ"), mikomi = mikomiOf(c);
   document.getElementById("side").innerHTML =
     "アポ <b>" + apo + "</b>　見込み <b>" + mikomi + "</b><br>" +
     "アポ率 <b>" + (total ? (apo / total * 100).toFixed(1) : "0.0") + "%</b>";
@@ -344,7 +435,7 @@ function render() {
       const tm = document.createElement("span"); tm.className = "tm";
       tm.textContent = pad(d.getHours()) + ":" + pad(d.getMinutes());
       const chip = document.createElement("span"); chip.className = "chip";
-      const col = COLOR[e.r] || {bg:"#E8EAED", fg:"#3C4043"};
+      const col = COLOR[e.r] || GRAY;
       chip.style.background = col.bg; chip.style.color = col.fg; chip.textContent = e.r;
       const del = document.createElement("button"); del.className = "del"; del.textContent = "×";
       del.setAttribute("aria-label", "この記録を消す");
@@ -374,12 +465,114 @@ function render() {
     const cc = countOf(days[k]);
     const tr = document.createElement("tr");
     tr.className = "go" + (k === view ? " cur" : "");
-    [label(k), days[k].length, cc["アポ"], cc["見込みA"] + cc["見込みB"] + cc["見込みC"], cc["オーナー断り"] + cc["NG"]]
+    [label(k), days[k].length, get(cc, "アポ"), mikomiOf(cc), get(cc, "オーナー断り") + get(cc, "NG")]
       .forEach(v => { const td = document.createElement("td"); td.textContent = v; tr.appendChild(td); });
     tr.onclick = () => { view = k; showAll = false; render(); window.scrollTo({top:0, behavior:"smooth"}); };
     tb.appendChild(tr);
   });
 }
+
+/* ---- 項目の編集 ---- */
+let draft = [];   // [{k, bg, fg, orig, open}]  orig = 編集前の名前（新規は null）
+const sheet = document.getElementById("sheet"), sheetBar = document.getElementById("sheetBar");
+
+function openEdit() {
+  draft = RESULTS.map(r => ({k: r.k, bg: r.bg, fg: r.fg, orig: r.k, open: false}));
+  drawItems();
+  sheet.hidden = sheetBar.hidden = false; sheet.scrollTop = 0;
+  document.body.classList.add("lock");
+}
+function closeEdit() {
+  sheet.hidden = sheetBar.hidden = true;
+  document.body.classList.remove("lock");
+}
+
+function drawItems() {
+  const box = document.getElementById("items");
+  box.innerHTML = "";
+  draft.forEach((it, i) => {
+    const wrap = document.createElement("div"); wrap.className = "item";
+    const row = document.createElement("div"); row.className = "item-row";
+
+    const sw = document.createElement("button"); sw.className = "swatch";
+    sw.style.background = it.bg; sw.style.color = it.fg; sw.textContent = "色";
+    sw.setAttribute("aria-label", "色を選ぶ");
+    sw.onclick = () => { draft.forEach((d, j) => d.open = j === i ? !d.open : false); drawItems(); };
+
+    const inp = document.createElement("input");
+    inp.value = it.k; inp.placeholder = "項目の名前"; inp.maxLength = 20;
+    inp.oninput = () => { it.k = inp.value; inp.classList.remove("bad"); };
+
+    const up = document.createElement("button"); up.className = "ib"; up.textContent = "↑";
+    up.setAttribute("aria-label", "上へ"); up.disabled = i === 0;
+    up.onclick = () => { [draft[i - 1], draft[i]] = [draft[i], draft[i - 1]]; drawItems(); };
+    const dn = document.createElement("button"); dn.className = "ib"; dn.textContent = "↓";
+    dn.setAttribute("aria-label", "下へ"); dn.disabled = i === draft.length - 1;
+    dn.onclick = () => { [draft[i + 1], draft[i]] = [draft[i], draft[i + 1]]; drawItems(); };
+    const rm = document.createElement("button"); rm.className = "ib rm"; rm.textContent = "✕";
+    rm.setAttribute("aria-label", "削除");
+    rm.onclick = () => {
+      if (it.k.trim() && !confirm("「" + it.k.trim() + "」を削除しますか？")) return;
+      draft.splice(i, 1); drawItems();
+    };
+    row.append(sw, inp, up, dn, rm);
+    wrap.appendChild(row);
+
+    if (it.open) {
+      const pal = document.createElement("div"); pal.className = "pal";
+      PALETTE.forEach(([bg, fg]) => {
+        const p = document.createElement("button");
+        p.style.background = bg; p.style.color = fg; p.textContent = "あ";
+        if (bg === it.bg) p.className = "on";
+        p.onclick = () => { it.bg = bg; it.fg = fg; it.open = false; drawItems(); };
+        pal.appendChild(p);
+      });
+      wrap.appendChild(pal);
+    }
+    box.appendChild(wrap);
+  });
+}
+
+document.getElementById("openEdit").addEventListener("click", openEdit);
+document.getElementById("cancelEdit").addEventListener("click", closeEdit);
+document.getElementById("addItem").addEventListener("click", () => {
+  draft.forEach(d => d.open = false);
+  const [bg, fg] = PALETTE[draft.length % PALETTE.length];
+  draft.push({k: "", bg, fg, orig: null, open: false});
+  drawItems();
+  const inputs = document.querySelectorAll("#items input");
+  inputs[inputs.length - 1].focus();
+});
+document.getElementById("resetItems").addEventListener("click", () => {
+  if (!confirm("最初の項目に戻しますか？（今までの記録は消えません）")) return;
+  draft = DEFAULTS.map(r => ({k: r.k, bg: r.bg, fg: r.fg, orig: null, open: false}));
+  drawItems();
+});
+document.getElementById("saveEdit").addEventListener("click", () => {
+  draft.forEach(d => d.k = d.k.trim());
+  const named = draft.filter(d => d.k);   // 名前が空のものは捨てる
+  const inputs = document.querySelectorAll("#items input");
+  const seen = {}; let dup = null;
+  draft.forEach((d, i) => {
+    if (!d.k) return;
+    if (seen[d.k]) { dup = d.k; inputs[i].classList.add("bad"); }
+    seen[d.k] = true;
+  });
+  if (dup) { toast("「" + dup + "」が2つあります"); return; }
+  if (!named.length) { toast("項目が1つもありません"); return; }
+
+  /* 名前を変えた項目は、今までの記録も新しい名前に付け替える */
+  const ren = {};
+  named.forEach(d => { if (d.orig && d.orig !== d.k) ren[d.orig] = d.k; });
+  if (Object.keys(ren).length) {
+    log.forEach(e => { if (e.r in ren) e.r = ren[e.r]; });
+    save();
+  }
+  RESULTS = named.map(d => ({k: d.k, bg: d.bg, fg: d.fg}));
+  saveItems();
+  buildGrid(); render(); closeEdit();
+  toast("保存しました");
+});
 
 let tt;
 function toast(msg) {
