@@ -194,7 +194,7 @@ h2{font-size:13px; letter-spacing:.06em; color:var(--ink2); margin:22px 2px 6px;
 <div class="toast" id="toast"></div>
 
 <script>
-/* リストの「結果」プルダウンと同じ並び。色はシートの色分けに合わせる
+/* リストの「結果」プルダウンと同じ並び（ガチャ切り・忙しいはカウンターだけの追加）。色はシートの色分けに合わせる
    （シートに色が無い項目は近い色を当てている） */
 const RESULTS = [
   {k:"留守",           bg:"#E8EAED", fg:"#3C4043"},
@@ -207,6 +207,8 @@ const RESULTS = [
   {k:"見込みB",        bg:"#FFC8AA", fg:"#753800"},
   {k:"見込みC",        bg:"#D4EDBC", fg:"#11734B"},
   {k:"受けブロ",       bg:"#E6CFF2", fg:"#5A3286"},
+  {k:"ガチャ切り",     bg:"#5F6368", fg:"#FFFFFF"},
+  {k:"忙しい",         bg:"#E1D5C9", fg:"#5B4636"},
   {k:"NG",             bg:"#473822", fg:"#FFFFFF"}
 ];
 const COLOR = Object.fromEntries(RESULTS.map(r => [r.k, r]));

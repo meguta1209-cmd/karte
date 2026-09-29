@@ -8,7 +8,7 @@
    - キャッシュ削除は "counter-" で始まるものだけ。caches.keys() は
      オリジン全体を返すので、無条件に消すと訪販カルテのキャッシュまで消える。
 */
-const CACHE = "counter-v1";
+const CACHE = "counter-v2";
 const ASSETS = [
   "./",
   "./index.html",
