@@ -111,6 +111,19 @@ button{font:inherit; color:inherit; cursor:pointer;}
 @keyframes pop{0%{filter:brightness(1.25);} 100%{filter:none;}}
 .rb:disabled{opacity:.55; cursor:default; transform:none;}
 .rb.wide{grid-column:1 / -1;}
+/* キーボードで押すときの目印（マウスのある機械だけ表示） */
+.rb .key{display:none;}
+@media (hover:hover) and (pointer:fine){
+  .rb{padding-left:34px;}
+  .rb .key{
+    display:block; position:absolute; left:8px; top:50%; transform:translateY(-50%);
+    width:20px; height:20px; line-height:18px; text-align:center; border-radius:4px;
+    font-family:var(--mono); font-size:11.5px; font-weight:700;
+    border:1px solid currentColor; opacity:.55;
+  }
+  .keyhelp{display:block !important;}
+}
+.keyhelp{display:none; font-size:12px; color:var(--ink2); margin:4px 2px 0;}
 
 /* 操作 */
 .acts{margin-top:10px; display:flex; gap:8px;}
@@ -229,6 +242,7 @@ body.lock{overflow:hidden;}
     <button class="gear" id="openEdit" aria-label="項目を編集">⚙ 項目</button>
   </div>
   <p class="note" id="note">押し間違えたら「ひとつ戻す」か、下の記録の × で消せます。</p>
+  <p class="keyhelp">キーボード：ボタン左の数字・英字キーで +1 ／ Backspace か Ctrl+Z でひとつ戻す</p>
 
   <h2>押した記録</h2>
   <div class="log" id="log"></div>
@@ -332,6 +346,7 @@ const get = (c, k) => c[k] || 0;
 const mikomiOf = c => Object.keys(c).filter(k => k.startsWith("見込み")).reduce((a, k) => a + c[k], 0);
 
 /* ---- ボタンを作る ---- */
+const KEYS = "1234567890qwertyuiopasdfghjkl";   // 並び順にこのキーを割り当てる
 const grid = document.getElementById("grid");
 function buildGrid() {
   COLOR = Object.fromEntries(RESULTS.map(r => [r.k, r]));
@@ -343,6 +358,10 @@ function buildGrid() {
     b.dataset.k = r.k;
     b.innerHTML = '<span></span><span class="n">0</span>';
     b.firstChild.textContent = r.k;
+    if (KEYS[i]) {
+      const kk = document.createElement("span"); kk.className = "key";
+      kk.textContent = KEYS[i].toUpperCase(); b.prepend(kk);
+    }
     b.addEventListener("click", () => add(r.k, b));
     grid.appendChild(b);
   });
@@ -380,6 +399,22 @@ document.getElementById("copy").addEventListener("click", async () => {
     try { document.execCommand("copy"); toast("コピーしました"); } catch (_) { toast("コピーできませんでした"); }
     ta.remove();
   }
+});
+
+/* キーボード：割り当てキーで +1、Backspace / Ctrl+Z でひとつ戻す
+   （編集画面を開いている時と、文字入力中は反応しない） */
+document.addEventListener("keydown", e => {
+  if (!sheet.hidden || e.isComposing || e.altKey || e.metaKey) return;
+  if (e.target.closest && e.target.closest("input, textarea")) return;
+  if ((e.ctrlKey && e.key.toLowerCase() === "z") || (!e.ctrlKey && e.key === "Backspace")) {
+    e.preventDefault(); document.getElementById("undo").click(); return;
+  }
+  if (e.ctrlKey || e.repeat) return;
+  const i = KEYS.indexOf(e.key.toLowerCase());
+  if (i < 0 || !RESULTS[i]) return;
+  e.preventDefault();
+  const b = grid.children[i];
+  if (!b.disabled) add(RESULTS[i].k, b);
 });
 
 document.getElementById("prev").addEventListener("click", () => { view = shiftKey(view, -1); showAll = false; render(); });
