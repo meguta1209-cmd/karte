@@ -1,0 +1,405 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>結果カウンター</title>
+<meta name="description" content="テレアポの結果をタップで数えて、日別に集計するカウンター">
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#E9EEF4" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0C141E" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="結果カウンター">
+<meta name="format-detection" content="telephone=no">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="apple-touch-icon" href="./icons/icon-180.png">
+<link rel="icon" href="./icons/icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=BIZ+UDPGothic:wght@400;700&family=Roboto+Mono:wght@500;700&display=swap">
+<style>
+/* ============================================================
+   結果カウンター（テレアポの結果をタップで数える）
+   結果の項目はリストの「結果」プルダウンと同じ11個・同じ並び
+   ボタンの色もシートの色分けに合わせてある
+   データはこの端末の中だけ（localStorage）。シートとは連動しない
+   ============================================================ */
+:root{
+  color-scheme:light dark;
+  --paper:#E9EEF4; --card:#FBFCFE; --card2:#F2F6FA;
+  --ink:#14304E; --ink2:#4B667F; --ink3:#8299AF;
+  --rule:#C6D5E3;
+  --blue:#1E4E86; --blue-soft:#DBE7F5;
+  --red:#B8392C; --red-soft:#F8E4E1;
+  --on-blue:#FFFFFF;
+  --shadow:0 1px 0 rgba(20,48,78,.06), 0 2px 10px rgba(20,48,78,.05);
+  --form:"BIZ UDPGothic","Hiragino Kaku Gothic ProN","Yu Gothic",sans-serif;
+  --mono:"Roboto Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --paper:#0C141E; --card:#151F2B; --card2:#1B2734;
+    --ink:#DDE7F1; --ink2:#9AAEC3; --ink3:#697F96;
+    --rule:#25344A;
+    --blue:#79ADE8; --blue-soft:#1A2C43;
+    --red:#E5796B; --red-soft:#37211E;
+    --on-blue:#0C141E;
+    --shadow:0 1px 0 rgba(0,0,0,.3), 0 2px 10px rgba(0,0,0,.25);
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#0C141E; --card:#151F2B; --card2:#1B2734;
+  --ink:#DDE7F1; --ink2:#9AAEC3; --ink3:#697F96;
+  --rule:#25344A;
+  --blue:#79ADE8; --blue-soft:#1A2C43;
+  --red:#E5796B; --red-soft:#37211E;
+  --on-blue:#0C141E;
+  --shadow:0 1px 0 rgba(0,0,0,.3), 0 2px 10px rgba(0,0,0,.25);
+}
+html,body{margin:0; padding:0;}
+[hidden]{display:none !important;}
+*{box-sizing:border-box;}
+body{
+  background:var(--paper); color:var(--ink);
+  font-family:var(--form); font-size:15px; line-height:1.6;
+  -webkit-text-size-adjust:100%;
+  -webkit-tap-highlight-color:transparent;
+}
+button{font:inherit; color:inherit; cursor:pointer;}
+.wrap{max-width:680px; margin:0 auto; padding:calc(env(safe-area-inset-top,0px) + 10px) 16px 60px;}
+
+/* 日付の切り替え */
+.day{display:flex; align-items:center; gap:8px;}
+.day .arrow{
+  width:40px; height:40px; flex:0 0 auto; border-radius:8px;
+  border:1px solid var(--rule); background:var(--card); font-size:16px;
+}
+.day .arrow:disabled{opacity:.35; cursor:default;}
+.day .date{flex:1; text-align:center; font-weight:700; font-size:17px;}
+.day .date small{display:block; font-weight:400; font-size:11.5px; color:var(--ink2); line-height:1.3;}
+.today-btn{
+  border:1px solid var(--blue); background:transparent; color:var(--blue);
+  border-radius:999px; font-size:12px; padding:2px 10px; margin-top:2px;
+}
+
+/* 合計 */
+.total{
+  margin-top:10px; background:var(--card); border:1px solid var(--rule); border-radius:10px;
+  box-shadow:var(--shadow); padding:10px 14px;
+  display:flex; align-items:center; gap:14px;
+}
+.total .big{font-family:var(--mono); font-weight:700; font-size:40px; line-height:1; color:var(--blue);}
+.total .lbl{font-size:12px; color:var(--ink2);}
+.total .side{margin-left:auto; text-align:right; font-size:12.5px; color:var(--ink2); line-height:1.5;}
+.total .side b{font-family:var(--mono); color:var(--ink); font-size:14px;}
+
+/* 結果ボタン */
+.grid{margin-top:12px; display:grid; grid-template-columns:1fr 1fr; gap:8px;}
+.rb{
+  position:relative; min-height:62px; border-radius:10px; border:1px solid rgba(0,0,0,.08);
+  display:flex; align-items:center; justify-content:space-between; gap:6px;
+  padding:8px 12px; text-align:left; font-weight:700; font-size:16px;
+  box-shadow:0 1px 0 rgba(0,0,0,.08);
+  transition:transform .06s;
+  touch-action:manipulation; user-select:none; -webkit-user-select:none;
+}
+.rb:active{transform:scale(.97);}
+.rb .n{font-family:var(--mono); font-size:24px; font-weight:700; min-width:1.5em; text-align:right;}
+.rb.pop{animation:pop .35s ease-out;}
+@keyframes pop{0%{filter:brightness(1.25);} 100%{filter:none;}}
+.rb:disabled{opacity:.55; cursor:default; transform:none;}
+.rb.wide{grid-column:1 / -1;}
+
+/* 操作 */
+.acts{margin-top:10px; display:flex; gap:8px;}
+.acts button{
+  flex:1; min-height:44px; border-radius:8px; border:1px solid var(--rule);
+  background:var(--card); font-size:14px; font-weight:700;
+}
+.acts .primary{background:var(--blue); color:var(--on-blue); border-color:var(--blue);}
+.acts button:disabled{opacity:.4; cursor:default;}
+.note{font-size:12px; color:var(--ink2); margin:6px 2px 0;}
+
+/* 見出し */
+h2{font-size:13px; letter-spacing:.06em; color:var(--ink2); margin:22px 2px 6px; font-weight:700;}
+
+/* 押した記録 */
+.log{background:var(--card); border:1px solid var(--rule); border-radius:10px; overflow:hidden;}
+.log .row{display:flex; align-items:center; gap:10px; padding:6px 6px 6px 12px; border-top:1px solid var(--rule);}
+.log .row:first-child{border-top:0;}
+.log .tm{font-family:var(--mono); font-size:13px; color:var(--ink2); width:3.2em;}
+.log .chip{font-size:12.5px; font-weight:700; padding:1px 8px; border-radius:4px;}
+.log .del{margin-left:auto; border:0; background:transparent; color:var(--ink3); width:36px; height:32px; font-size:16px;}
+.log .empty{padding:14px; color:var(--ink3); font-size:13px; text-align:center;}
+.more{display:block; width:100%; border:0; border-top:1px solid var(--rule); background:var(--card2); padding:8px; font-size:13px; color:var(--blue);}
+
+/* 日別一覧 */
+.hist{width:100%; border-collapse:collapse; background:var(--card); border:1px solid var(--rule); border-radius:10px; overflow:hidden; font-size:13.5px;}
+.hist th,.hist td{padding:7px 10px; border-top:1px solid var(--rule); text-align:right;}
+.hist th{font-size:11.5px; color:var(--ink2); font-weight:700; background:var(--card2); border-top:0;}
+.hist th:first-child,.hist td:first-child{text-align:left;}
+.hist td{font-family:var(--mono);}
+.hist td:first-child{font-family:var(--form);}
+.hist tr.go{cursor:pointer;}
+.hist tr.cur td{background:var(--blue-soft);}
+
+/* トースト */
+.toast{
+  position:fixed; left:50%; bottom:calc(env(safe-area-inset-bottom,0px) + 18px);
+  transform:translateX(-50%); background:var(--ink); color:var(--paper);
+  padding:8px 16px; border-radius:999px; font-size:13.5px; font-weight:700;
+  box-shadow:0 4px 16px rgba(0,0,0,.25); max-width:calc(100% - 32px);
+  opacity:0; pointer-events:none; transition:opacity .2s;
+}
+.toast.on{opacity:1;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="day">
+    <button class="arrow" id="prev" aria-label="前の日">◀</button>
+    <div class="date">
+      <span id="dateLbl"></span>
+      <small id="dateSub"></small>
+    </div>
+    <button class="arrow" id="next" aria-label="次の日">▶</button>
+  </div>
+
+  <div class="total">
+    <div>
+      <div class="lbl">架電数</div>
+      <div class="big" id="total">0</div>
+    </div>
+    <div class="side" id="side"></div>
+  </div>
+
+  <div class="grid" id="grid"></div>
+
+  <div class="acts">
+    <button id="undo">↶ ひとつ戻す</button>
+    <button class="primary" id="copy">集計をコピー</button>
+  </div>
+  <p class="note" id="note">押し間違えたら「ひとつ戻す」か、下の記録の × で消せます。</p>
+
+  <h2>押した記録</h2>
+  <div class="log" id="log"></div>
+
+  <h2>日別の集計</h2>
+  <table class="hist" id="hist"></table>
+
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+/* リストの「結果」プルダウンと同じ並び。色はシートの色分けに合わせる
+   （シートに色が無い項目は近い色を当てている） */
+const RESULTS = [
+  {k:"留守",           bg:"#E8EAED", fg:"#3C4043"},
+  {k:"再架電",         bg:"#BFE1F6", fg:"#0A53A8"},
+  {k:"オーナー不在",   bg:"#C6DBE1", fg:"#215A6C"},
+  {k:"オーナー断り",   bg:"#B10202", fg:"#FFFFFF"},
+  {k:"使われていない", bg:"#D5D8DC", fg:"#3C4043"},
+  {k:"アポ",           bg:"#FFE5A0", fg:"#473822"},
+  {k:"見込みA",        bg:"#FFCFC9", fg:"#B10202"},
+  {k:"見込みB",        bg:"#FFC8AA", fg:"#753800"},
+  {k:"見込みC",        bg:"#D4EDBC", fg:"#11734B"},
+  {k:"受けブロ",       bg:"#E6CFF2", fg:"#5A3286"},
+  {k:"NG",             bg:"#473822", fg:"#FFFFFF"}
+];
+const COLOR = Object.fromEntries(RESULTS.map(r => [r.k, r]));
+const KEY = "kekka-counter-v1";
+const WD = ["日","月","火","水","木","金","土"];
+
+/* ---- 保存 ---- */
+let log = [];   // [{t: ミリ秒, r: "留守"}]
+try { log = JSON.parse(localStorage.getItem(KEY) || "[]"); } catch (_) { log = []; }
+if (!Array.isArray(log)) log = [];
+function save() {
+  try { localStorage.setItem(KEY, JSON.stringify(log)); }
+  catch (_) { toast("保存できませんでした"); }
+}
+
+/* ---- 日付 ---- */
+const pad = n => String(n).padStart(2, "0");
+const dayKey = d => d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
+const todayKey = () => dayKey(new Date());
+function fromKey(k) { const [y, m, d] = k.split("-").map(Number); return new Date(y, m - 1, d); }
+function shiftKey(k, n) { const d = fromKey(k); d.setDate(d.getDate() + n); return dayKey(d); }
+function label(k, withYear) {
+  const d = fromKey(k);
+  return (withYear ? d.getFullYear() + "/" : "") + (d.getMonth() + 1) + "/" + d.getDate() + "(" + WD[d.getDay()] + ")";
+}
+
+let view = todayKey();
+let showAll = false;
+
+function entriesOf(k) { return log.filter(e => dayKey(new Date(e.t)) === k); }
+function countOf(list) {
+  const c = Object.fromEntries(RESULTS.map(r => [r.k, 0]));
+  list.forEach(e => { if (e.r in c) c[e.r]++; });
+  return c;
+}
+
+/* ---- ボタンを作る ---- */
+const grid = document.getElementById("grid");
+RESULTS.forEach((r, i) => {
+  const b = document.createElement("button");
+  b.className = "rb" + (i === RESULTS.length - 1 && RESULTS.length % 2 ? " wide" : "");
+  b.style.background = r.bg; b.style.color = r.fg;
+  b.dataset.k = r.k;
+  b.innerHTML = '<span></span><span class="n">0</span>';
+  b.firstChild.textContent = r.k;
+  b.addEventListener("click", () => add(r.k, b));
+  grid.appendChild(b);
+});
+
+function add(k, btn) {
+  if (view !== todayKey()) return;
+  log.push({t: Date.now(), r: k});
+  save();
+  if (navigator.vibrate) navigator.vibrate(15);
+  btn.classList.remove("pop"); void btn.offsetWidth; btn.classList.add("pop");
+  render();
+}
+
+document.getElementById("undo").addEventListener("click", () => {
+  const list = entriesOf(view);
+  if (!list.length) return;
+  const last = list[list.length - 1];
+  log.splice(log.indexOf(last), 1);
+  save(); render();
+  toast("「" + last.r + "」を1件戻しました");
+});
+
+document.getElementById("copy").addEventListener("click", async () => {
+  const c = countOf(entriesOf(view));
+  const total = Object.values(c).reduce((a, b) => a + b, 0);
+  const lines = [label(view) + " 架電 " + total + "件"];
+  RESULTS.forEach(r => { if (c[r.k]) lines.push(r.k + " " + c[r.k]); });
+  const text = lines.join("\n");
+  try { await navigator.clipboard.writeText(text); toast("コピーしました"); }
+  catch (_) {
+    const ta = document.createElement("textarea"); ta.value = text;
+    document.body.appendChild(ta); ta.select();
+    try { document.execCommand("copy"); toast("コピーしました"); } catch (_) { toast("コピーできませんでした"); }
+    ta.remove();
+  }
+});
+
+document.getElementById("prev").addEventListener("click", () => { view = shiftKey(view, -1); showAll = false; render(); });
+document.getElementById("next").addEventListener("click", () => { view = shiftKey(view, 1); showAll = false; render(); });
+
+/* ---- 描画 ---- */
+function render() {
+  const today = todayKey();
+  if (view > today) view = today;
+  const isToday = view === today;
+  const list = entriesOf(view);
+  const c = countOf(list);
+  const total = list.length;
+
+  document.getElementById("dateLbl").textContent = label(view, fromKey(view).getFullYear() !== new Date().getFullYear());
+  const sub = document.getElementById("dateSub");
+  if (isToday) { sub.textContent = "今日"; }
+  else {
+    sub.innerHTML = "";
+    const b = document.createElement("button");
+    b.className = "today-btn"; b.textContent = "今日に戻る";
+    b.onclick = () => { view = today; showAll = false; render(); };
+    sub.appendChild(b);
+  }
+  document.getElementById("next").disabled = isToday;
+
+  document.getElementById("total").textContent = total;
+  const apo = c["アポ"], mikomi = c["見込みA"] + c["見込みB"] + c["見込みC"];
+  document.getElementById("side").innerHTML =
+    "アポ <b>" + apo + "</b>　見込み <b>" + mikomi + "</b><br>" +
+    "アポ率 <b>" + (total ? (apo / total * 100).toFixed(1) : "0.0") + "%</b>";
+
+  grid.querySelectorAll(".rb").forEach(b => {
+    b.querySelector(".n").textContent = c[b.dataset.k];
+    b.disabled = !isToday;
+  });
+  document.getElementById("undo").disabled = !list.length;
+  document.getElementById("note").textContent = isToday
+    ? "押し間違えたら「ひとつ戻す」か、下の記録の × で消せます。"
+    : "過去の日は見るだけです（× で消すのはできます）。数えるのは今日だけ。";
+
+  /* 押した記録（新しい順） */
+  const box = document.getElementById("log");
+  box.innerHTML = "";
+  if (!list.length) {
+    box.innerHTML = '<div class="empty">まだありません</div>';
+  } else {
+    const rev = list.slice().reverse();
+    const shown = showAll ? rev : rev.slice(0, 15);
+    shown.forEach(e => {
+      const d = new Date(e.t);
+      const row = document.createElement("div"); row.className = "row";
+      const tm = document.createElement("span"); tm.className = "tm";
+      tm.textContent = pad(d.getHours()) + ":" + pad(d.getMinutes());
+      const chip = document.createElement("span"); chip.className = "chip";
+      const col = COLOR[e.r] || {bg:"#E8EAED", fg:"#3C4043"};
+      chip.style.background = col.bg; chip.style.color = col.fg; chip.textContent = e.r;
+      const del = document.createElement("button"); del.className = "del"; del.textContent = "×";
+      del.setAttribute("aria-label", "この記録を消す");
+      del.onclick = () => {
+        if (!confirm(tm.textContent + " の「" + e.r + "」を消しますか？")) return;
+        const i = log.indexOf(e); if (i >= 0) log.splice(i, 1);
+        save(); render();
+      };
+      row.append(tm, chip, del); box.appendChild(row);
+    });
+    if (rev.length > 15) {
+      const m = document.createElement("button"); m.className = "more";
+      m.textContent = showAll ? "たたむ" : "残り " + (rev.length - 15) + " 件を見る";
+      m.onclick = () => { showAll = !showAll; render(); };
+      box.appendChild(m);
+    }
+  }
+
+  /* 日別の集計（新しい日から） */
+  const days = {};
+  log.forEach(e => { const k = dayKey(new Date(e.t)); (days[k] = days[k] || []).push(e); });
+  if (!days[today]) days[today] = [];
+  const keys = Object.keys(days).sort().reverse();
+  const tb = document.getElementById("hist");
+  tb.innerHTML = "<tr><th>日付</th><th>架電</th><th>アポ</th><th>見込み</th><th>断り/NG</th></tr>";
+  keys.forEach(k => {
+    const cc = countOf(days[k]);
+    const tr = document.createElement("tr");
+    tr.className = "go" + (k === view ? " cur" : "");
+    [label(k), days[k].length, cc["アポ"], cc["見込みA"] + cc["見込みB"] + cc["見込みC"], cc["オーナー断り"] + cc["NG"]]
+      .forEach(v => { const td = document.createElement("td"); td.textContent = v; tr.appendChild(td); });
+    tr.onclick = () => { view = k; showAll = false; render(); window.scrollTo({top:0, behavior:"smooth"}); };
+    tb.appendChild(tr);
+  });
+}
+
+let tt;
+function toast(msg) {
+  const el = document.getElementById("toast");
+  el.textContent = msg; el.classList.add("on");
+  clearTimeout(tt); tt = setTimeout(() => el.classList.remove("on"), 1800);
+}
+
+/* 日付が変わったまま開きっぱなしでも、戻ってきたら今日に合わせる */
+let lastToday = todayKey();
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState !== "visible") return;
+  const t = todayKey();
+  if (t !== lastToday) { if (view === lastToday) view = t; lastToday = t; }
+  render();
+});
+
+render();
+
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("./sw.js").catch(() => {});
+}
+</script>
+</body>
+</html>
