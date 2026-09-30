@@ -1,0 +1,990 @@
+/* ============================================================
+   結果カウンター チーム版
+   ・Googleでログイン → 名前を登録 → 管理者が承認 → 使える
+   ・データは Firestore（kekka-counter-2026）
+       members/{uid}   名簿（name, email, closer, status: pending/active/removed, role）
+       records/{id}    1架電＝1件（uid, r, t, day, hour, memo, undated, pending, done, slotId）
+       slots/{日_時刻_クローザー}  アポの枠。1枠1件なので二重予約できない
+       stats/{日}      日ごとの集計 c.{uid}.{結果} / h.{uid}.{時}（KPIとチーム数はここだけ読む）
+       config/items    結果の項目（管理者が編集）
+   ・カレンダーとアポはリアルタイム、チームの架電数は30秒ごとに読む（無料枠に収めるため）
+   ============================================================ */
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import {
+  initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
+  doc, collection, query, where, documentId, onSnapshot, getDoc, getDocs, setDoc, updateDoc, deleteDoc,
+  writeBatch, runTransaction, increment, Timestamp, serverTimestamp
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { firebaseConfig } from "./firebase-config.js";
+
+const ADMIN_EMAIL = "meguta1209@gmail.com";
+const fb = initializeApp(firebaseConfig);
+const auth = getAuth(fb);
+const db = initializeFirestore(fb, { localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }) });
+
+/* ---------- 項目（シートの結果欄と同じ12個・同じ色）。config/items があればそちらが優先 ---------- */
+const DEFAULT_ITEMS = [
+  {k:"留守",         bg:"#E8EAED", fg:"#3C4043"},
+  {k:"受けブロ",     bg:"#E6CFF2", fg:"#5A3286"},
+  {k:"オーナー断り", bg:"#B10202", fg:"#FFFFFF"},
+  {k:"接客中",       bg:"#BDE7E0", fg:"#0B5B4F"},
+  {k:"ガチャ切り",   bg:"#5F6368", fg:"#FFFFFF"},
+  {k:"使われてない", bg:"#D5D8DC", fg:"#80868B", strike:true},
+  {k:"オーナー不在", bg:"#C6DBE1", fg:"#215A6C"},
+  {k:"繋がらない",   bg:"#E1D5C9", fg:"#5B4636"},
+  {k:"アポ",         bg:"#FFD54F", fg:"#473822"},
+  {k:"本社管理",     bg:"#0A53A8", fg:"#FFFFFF"},
+  {k:"NG",           bg:"#473822", fg:"#FFFFFF"},
+  {k:"再架電",       bg:"#BFE1F6", fg:"#0A53A8"}
+];
+const PALETTE = [
+  ["#E8EAED","#3C4043"], ["#D5D8DC","#3C4043"], ["#5F6368","#FFFFFF"],
+  ["#BFE1F6","#0A53A8"], ["#C6DBE1","#215A6C"], ["#BDE7E0","#0B5B4F"], ["#D4EDBC","#11734B"],
+  ["#FFD54F","#473822"], ["#FFC8AA","#753800"], ["#FFCFC9","#B10202"],
+  ["#E6CFF2","#5A3286"], ["#E1D5C9","#5B4636"], ["#B10202","#FFFFFF"],
+  ["#0A53A8","#FFFFFF"], ["#11734B","#FFFFFF"], ["#473822","#FFFFFF"]
+];
+const PEOPLE_COLORS = ["#1E4E86","#11734B","#8A4B08","#6B3FA0","#A33A5B","#0B6E7A","#5B6B1A","#9C3D10","#3D4F8F","#7A2E6E"];
+const CLOSER_COLORS = ["#2F6DB5","#1F7A55","#B0572A","#7B4DB8","#B83B6B","#0E7F8C"];
+const KEYS = "1234567890qwertyuiop";
+const SLOT_H0 = 10, SLOT_H1 = 19;          // アポ枠 10:00〜19:00・30分ごと・日曜休み
+
+/* ---------- 小道具 ---------- */
+const $ = id => document.getElementById(id);
+const pad = n => String(n).padStart(2, "0");
+const WD = ["日","月","火","水","木","金","土"];
+const dk = d => d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
+const md = d => (d.getMonth() + 1) + "/" + d.getDate() + "(" + WD[d.getDay()] + ")";
+const hm = d => pad(d.getHours()) + ":" + pad(d.getMinutes());
+const dayStart = d => { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; };
+const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
+const today = () => dayStart(new Date());
+const esc = s => String(s == null ? "" : s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const toLocal = d => d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()) + "T" + pad(d.getHours()) + ":" + pad(d.getMinutes());
+const tsd = v => v && typeof v.toDate === "function" ? v.toDate() : (v instanceof Date ? v : null);
+const lsGet = (k, d) => { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (_) { return d; } };
+const lsSet = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (_) {} };
+let tt;
+function toast(msg, actLabel, act) {
+  const el = $("toast"); el.textContent = msg;
+  if (actLabel) { const b = document.createElement("button"); b.textContent = actLabel; b.onclick = () => { el.classList.remove("on"); act(); }; el.appendChild(b); }
+  el.classList.add("on"); clearTimeout(tt); tt = setTimeout(() => el.classList.remove("on"), actLabel ? 3500 : 2200);
+}
+const errMsg = e => (e && e.code === "permission-denied") ? "権限がありません" : (e && e.message === "FULL") ? "その時間は埋まっています" : (e && e.code === "unavailable") ? "オフラインのため保存できません" : "保存できませんでした";
+
+/* ---------- 状態 ---------- */
+let U = null;            // ログイン中の uid
+let me = null;           // 自分の members の中身
+let members = {};        // uid → 名簿
+let ITEMS = DEFAULT_ITEMS;
+let COL = {};
+let myToday = [];        // 自分の今日の記録
+let pendMine = [], pendTeam = [], undated = [], slots = [];
+let unsubs = [];
+let started = false;
+
+const nameOf = uid => (members[uid] && members[uid].name) || "（退出した人）";
+function colorOf(uid) {
+  const ids = Object.keys(members).sort();
+  const i = ids.indexOf(uid);
+  return PEOPLE_COLORS[(i < 0 ? 0 : i) % PEOPLE_COLORS.length];
+}
+function closerList() {
+  const list = Object.entries(members).filter(([, m]) => m.status === "active" && m.closer)
+    .sort((a, b) => (a[1].name || "").localeCompare(b[1].name || "", "ja"))
+    .map(([id, m], i) => ({id, name: m.name, color: CLOSER_COLORS[i % CLOSER_COLORS.length]}));
+  return list.length ? list : [{id: "none", name: "担当未定", color: "#5F6368"}];
+}
+const CNAME = id => (closerList().find(c => c.id === id) || {name: id === "none" ? "担当未定" : nameOf(id)}).name;
+const CCOL = id => (closerList().find(c => c.id === id) || {color: "#5F6368"}).color;
+const resChip = k => { const c = COL[k] || {bg:"#E8EAED", fg:"#3C4043"}; return `<span class="res${c.strike ? " strike" : ""}" style="background:${c.bg};color:${c.fg}">${esc(k)}</span>`; };
+
+/* Firestore の記録 → 画面で使う形 */
+function recOf(snap) {
+  const d = snap.data();
+  const m = d.memo ? {...d.memo, when: tsd(d.memo.when)} : null;
+  return {...d, id: snap.id, t: tsd(d.t) || new Date(), memo: m};
+}
+
+/* ============================================================
+   入口：ログイン → 名簿を見て振り分け
+   ============================================================ */
+const GATES = ["gLoading", "gLogin", "gRegister", "gPending", "gRemoved"];
+function gate(id) { GATES.forEach(g => $(g).hidden = g !== id); $("app").hidden = true; }
+
+$("btnLogin").onclick = async () => {
+  $("loginErr").hidden = true;
+  try { await signInWithPopup(auth, new GoogleAuthProvider()); }
+  catch (e) {
+    $("loginErr").hidden = false;
+    $("loginErr").textContent = e.code === "auth/popup-blocked" ? "ポップアップが止められました。ブラウザの設定で許可してください" :
+      e.code === "auth/popup-closed-by-user" ? "ログインの画面が閉じられました。もう一度押してください" : "ログインできませんでした（" + e.code + "）";
+  }
+};
+["regLogout", "pendLogout", "remLogout", "logout"].forEach(id => $(id).onclick = () => { stopAll(); signOut(auth); });
+
+let meUnsub = null;
+onAuthStateChanged(auth, u => {
+  if (meUnsub) { meUnsub(); meUnsub = null; }
+  if (!u) { stopAll(); U = null; gate("gLogin"); return; }
+  U = u.uid;
+  gate("gLoading");
+  meUnsub = onSnapshot(doc(db, "members", u.uid), async snap => {
+    if (!snap.exists()) {
+      if ((u.email || "").toLowerCase() === ADMIN_EMAIL) {     // 管理者は最初から有効
+        await setDoc(doc(db, "members", u.uid), {name: "竹内", email: u.email, closer: false, status: "active", role: "admin", createdAt: serverTimestamp()});
+        return;
+      }
+      $("regMail").textContent = u.email + " でログイン中";
+      if (!$("regName").value) $("regName").value = (u.displayName || "").split(/\s/)[0].slice(0, 12);
+      gate("gRegister"); return;
+    }
+    me = snap.data();
+    if (me.status === "pending") { $("pendName").textContent = me.name; stopAll(); gate("gPending"); return; }
+    if (me.status !== "active") { stopAll(); gate("gRemoved"); return; }
+    GATES.forEach(g => $(g).hidden = true); $("app").hidden = false;
+    renderMe();
+    if (!started) startApp();
+  }, e => { $("loginErr").hidden = false; $("loginErr").textContent = "読み込めませんでした（" + e.code + "）"; gate("gLogin"); });
+});
+
+$("btnRegister").onclick = async () => {
+  const name = $("regName").value.trim();
+  if (!name) { $("regErr").hidden = false; $("regErr").textContent = "名前を入れてください"; return; }
+  $("btnRegister").disabled = true;
+  try {
+    await setDoc(doc(db, "members", U), {name, email: auth.currentUser.email, closer: $("regCloser").checked, status: "pending", role: "member", createdAt: serverTimestamp()});
+  } catch (e) { $("regErr").hidden = false; $("regErr").textContent = "登録できませんでした（" + (e.code || e.message) + "）"; }
+  $("btnRegister").disabled = false;
+};
+
+function stopAll() { unsubs.forEach(f => { try { f(); } catch (_) {} }); unsubs = []; started = false; clearInterval(teamTimer); clearInterval(notifTimer); }
+
+/* ============================================================
+   本体の開始：リアルタイムの購読を張る
+   ============================================================ */
+let listenDay = null;
+function startApp() {
+  started = true;
+  const recs = collection(db, "records");
+  unsubs.push(onSnapshot(collection(db, "members"), s => {
+    members = {}; s.forEach(d => members[d.id] = d.data());
+    renderMe(); renderAdmin(); renderCount(); if (curTab === "cal") renderCal(); renderUndated();
+  }));
+  unsubs.push(onSnapshot(doc(db, "config", "items"), s => {
+    const list = s.exists() && Array.isArray(s.data().list) && s.data().list.length ? s.data().list : DEFAULT_ITEMS;
+    ITEMS = list; COL = Object.fromEntries(ITEMS.map(i => [i.k, i]));
+    buildGrid(); renderCount();
+  }));
+  subscribeToday();
+  unsubs.push(onSnapshot(query(recs, where("uid", "==", U), where("pending", "==", true)), s => {
+    pendMine = s.docs.map(recOf); renderAfterPending();
+    maybeDaySum(); cleanupOldApos();
+  }));
+  unsubs.push(onSnapshot(query(recs, where("pending", "==", true)), s => { pendTeam = s.docs.map(recOf); if (curTab === "remind") renderRemind(); }));
+  unsubs.push(onSnapshot(query(recs, where("undated", "==", true)), s => { undated = s.docs.map(recOf).sort((a, b) => a.t - b.t); renderUndated(); }));
+  unsubs.push(onSnapshot(query(collection(db, "slots"), where("day", ">=", dk(addDays(today(), -7)))), s => {
+    slots = s.docs.map(d => ({id: d.id, ...d.data(), when: tsd(d.data().when)}));
+    if (curTab === "cal") renderCal(); if (!$("msheet").hidden) checkClash();
+  }));
+  pollTeam(); teamTimer = setInterval(() => { if (document.visibilityState === "visible") pollTeam(); }, 30000);
+  notifTimer = setInterval(checkNotifs, 15000);
+  showTab(curTab);
+}
+function subscribeToday() {
+  listenDay = dk(today());
+  const f = onSnapshot(query(collection(db, "records"), where("uid", "==", U), where("day", "==", listenDay)), s => {
+    myToday = s.docs.map(recOf).sort((a, b) => a.t - b.t);
+    renderCount(); if (curTab === "log") renderLog();
+  });
+  unsubs.push(f); todayUnsub = f;
+}
+let todayUnsub = null, teamTimer = null, notifTimer = null;
+
+/* 日付が変わったら今日の購読を張り直す */
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState !== "visible" || !started) return;
+  if (listenDay !== dk(today())) { if (todayUnsub) todayUnsub(); unsubs = unsubs.filter(f => f !== todayUnsub); subscribeToday(); }
+  pollTeam(); maybeDaySum(); checkNotifs(true);
+});
+window.addEventListener("online", () => $("offline").hidden = true);
+window.addEventListener("offline", () => $("offline").hidden = false);
+$("offline").hidden = navigator.onLine;
+
+/* ============================================================
+   カウント
+   ============================================================ */
+function renderMe() {
+  if (!me) return;
+  $("meAv").textContent = (me.name || "?")[0]; $("meAv").style.background = colorOf(U);
+  $("meName").textContent = me.name + (me.role === "admin" ? "（管理者）" : "");
+  const act = Object.values(members).filter(m => m.status === "active").length;
+  $("teamName").textContent = "チーム " + (act || 1) + "人";
+  $("todayLbl").textContent = md(today());
+  $("myMail").textContent = auth.currentUser ? auth.currentUser.email : "";
+  if (document.activeElement !== $("myName")) $("myName").value = me.name || "";
+  $("myCloser").checked = !!me.closer;
+  $("adminBox").hidden = me.role !== "admin";
+}
+const grid = $("grid");
+function buildGrid() {
+  grid.innerHTML = "";
+  ITEMS.forEach((it, i) => {
+    const b = document.createElement("button");
+    b.className = "rb" + (i === ITEMS.length - 1 && ITEMS.length % 2 ? " wide" : "");
+    b.style.background = it.bg; b.style.color = it.fg; b.dataset.k = it.k;
+    b.innerHTML = (KEYS[i] ? `<span class="key">${KEYS[i].toUpperCase()}</span>` : "") +
+      `<span style="${it.strike ? "text-decoration:line-through" : ""}">${esc(it.k)}</span><span class="n">0</span>` +
+      (it.k === "アポ" || it.k === "再架電" ? `<span class="memo-mark">＋詳細</span>` : "");
+    b.onclick = () => addResult(it.k, b);
+    grid.appendChild(b);
+  });
+}
+function statInc(uid, k, hour, n) { return {c: {[uid]: {[k]: increment(n)}}, h: {[uid]: {[String(hour)]: increment(n)}}}; }
+
+function addResult(k, btn) {
+  const t = new Date(), day = dk(t), hour = t.getHours();
+  const ref = doc(collection(db, "records"));
+  const data = {uid: U, r: k, t: Timestamp.fromDate(t), day, hour, memo: null, undated: k === "アポ", pending: false, done: false, slotId: null};
+  const b = writeBatch(db);
+  b.set(ref, data);
+  b.set(doc(db, "stats", day), statInc(U, k, hour, 1), {merge: true});
+  b.commit().catch(e => toast(errMsg(e)));
+  if (btn) { btn.classList.remove("pop"); void btn.offsetWidth; btn.classList.add("pop"); }
+  if (navigator.vibrate) navigator.vibrate(15);
+  const rec = {...data, id: ref.id, t};
+  if (k === "アポ" || k === "再架電") openMemo(rec);
+  else toast(k + " +1", "メモを付ける", () => openMemo(myToday.find(r => r.id === rec.id) || rec));
+}
+function deleteRec(rec) {
+  const b = writeBatch(db);
+  b.delete(doc(db, "records", rec.id));
+  b.set(doc(db, "stats", rec.day), statInc(rec.uid, rec.r, rec.hour, -1), {merge: true});
+  if (rec.slotId) b.delete(doc(db, "slots", rec.slotId));
+  return b.commit();
+}
+$("undo").onclick = () => {
+  const last = myToday[myToday.length - 1]; if (!last) return;
+  deleteRec(last).catch(e => toast(errMsg(e)));
+  toast("「" + last.r + "」を1件戻しました");
+};
+$("memoLast").onclick = () => { const last = myToday[myToday.length - 1]; if (last) openMemo(last); };
+
+function count(list) { const c = Object.fromEntries(ITEMS.map(i => [i.k, 0])); list.forEach(r => c[r.r] = (c[r.r] || 0) + 1); return c; }
+function renderCount() {
+  if (!started) return;
+  const c = count(myToday), n = myToday.length, apo = c["アポ"] || 0;
+  $("cTotal").textContent = n;
+  $("cSide").innerHTML = `アポ <b>${apo}</b>　再架電 <b>${c["再架電"] || 0}</b><br>アポ率 <b>${n ? (apo / n * 100).toFixed(1) : "0.0"}%</b>`;
+  grid.querySelectorAll(".rb").forEach(b => b.querySelector(".n").textContent = c[b.dataset.k] || 0);
+  fillRecs($("recent"), myToday.slice(-15).reverse());
+  renderNext(); renderUndated();
+}
+async function pollTeam() {
+  try {
+    const s = await getDoc(doc(db, "stats", dk(today())));
+    let n = 0, apo = 0;
+    if (s.exists()) Object.values(s.data().c || {}).forEach(m => Object.entries(m).forEach(([k, v]) => { n += v; if (k === "アポ") apo += v; }));
+    $("tTotal").textContent = n; $("tApo").textContent = apo;
+  } catch (_) {}
+}
+
+/* キーボード：1〜0・Q…で +1、Backspace / Ctrl+Z でひとつ戻す */
+document.addEventListener("keydown", e => {
+  if (!started || curTab !== "count" || !$("msheet").hidden || !$("itemSheet").hidden || e.isComposing || e.altKey || e.metaKey) return;
+  if (e.target.closest && e.target.closest("input, textarea, select")) return;
+  if ((e.ctrlKey && e.key.toLowerCase() === "z") || (!e.ctrlKey && e.key === "Backspace")) { e.preventDefault(); $("undo").click(); return; }
+  if (e.ctrlKey || e.repeat) return;
+  const i = KEYS.indexOf(e.key.toLowerCase());
+  if (i < 0 || !ITEMS[i]) return;
+  e.preventDefault(); addResult(ITEMS[i].k, grid.children[i]);
+});
+
+/* ============================================================
+   記録の一覧（カウント画面の直近15件・記録タブ）
+   ============================================================ */
+let logF = "all";
+$("logFilter").onclick = e => { const b = e.target.closest("button"); if (!b) return; logF = b.dataset.f; $("logFilter").querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", x === b)); renderLog(); };
+function renderLog() {
+  let list = myToday.slice().reverse();
+  if (logF === "memo") list = list.filter(r => r.memo);
+  if (logF === "apo") list = list.filter(r => r.r === "アポ" || r.r === "再架電");
+  fillRecs($("logList"), list, true);
+}
+function memoLine(m) {
+  if (!m) return "";
+  return [m.shop ? `<b>${esc(m.shop)}</b>` : "", m.text ? esc(m.text) : ""].filter(Boolean).join("　");
+}
+function fillRecs(box, list, withDelete) {
+  if (!list.length) { box.innerHTML = `<div class="empty">まだ記録はありません</div>`; return; }
+  box.innerHTML = "";
+  list.forEach(r => {
+    const row = document.createElement("div"); row.className = "rec"; row.setAttribute("role", "button"); row.tabIndex = 0;
+    const w = r.memo && r.memo.when;
+    const when = w ? `<span class="when">${r.r === "アポ" ? "面談" : "再架電"} ${md(w)} ${hm(w)}</span>` : (r.r === "アポ" ? `<span class="badge late">日時未定</span>` : "");
+    row.innerHTML = `<span class="tm">${hm(r.t)}</span><span class="body">${resChip(r.r)}${when}` +
+      (r.memo && (r.memo.shop || r.memo.text) ? `<div class="memo">${memoLine(r.memo)}</div>` : `<div class="add">＋ メモを付ける</div>`) + `</span>`;
+    row.onclick = () => openMemo(r);
+    row.onkeydown = e => { if (e.key === "Enter") openMemo(r); };
+    if (withDelete) {
+      const del = document.createElement("button"); del.className = "ib rm"; del.textContent = "×"; del.setAttribute("aria-label", "この記録を消す");
+      del.style.marginLeft = "auto"; del.style.height = "32px";
+      del.onclick = e => { e.stopPropagation(); confirmDelete(r, del); };
+      row.appendChild(del);
+    }
+    box.appendChild(row);
+  });
+}
+/* confirm() を使わず、2回押しで消す */
+function confirmDelete(r, btn) {
+  if (btn.dataset.arm) { deleteRec(r).then(() => toast("消しました")).catch(e => toast(errMsg(e))); return; }
+  btn.dataset.arm = "1"; btn.textContent = "消す"; btn.style.width = "auto"; btn.style.padding = "0 8px";
+  setTimeout(() => { if (btn.isConnected) { delete btn.dataset.arm; btn.textContent = "×"; btn.style.width = ""; btn.style.padding = ""; } }, 2500);
+}
+
+/* ============================================================
+   メモのシート（アポの日時・クローザー・再架電の日時）
+   ============================================================ */
+let editing = null, selCloser = "auto", tick = 0;
+function dayWord(d) { const diff = Math.round((dayStart(d) - today()) / 864e5); return diff === 0 ? "今日" : diff === 1 ? "明日" : diff === 2 ? "明後日" : md(d); }
+function setQuick(kind) {
+  const q = $("mQuick"); q.innerHTML = "";
+  let opts;
+  if (kind === "再架電") {
+    $("mQuickLbl").textContent = "";
+    const at = (off, h) => { const d = addDays(today(), off); d.setHours(h, 0, 0, 0); return d; };
+    opts = [["1時間後", new Date(Date.now() + 36e5)], ["今日17時", at(0, 17)], ["明日10時", at(1, 10)], ["明日15時", at(1, 15)]];
+  } else {
+    $("mQuickLbl").textContent = "空いている枠（近い順）";
+    opts = freeSlots(new Date(Date.now() + 36e5), 6).map(d => [dayWord(d) + " " + hm(d), d]);
+  }
+  opts.forEach(([l, d]) => { const b = document.createElement("button"); b.type = "button"; b.textContent = l; b.onclick = () => { $("mWhen").value = toLocal(d); checkClash(); }; q.appendChild(b); });
+}
+function openMemo(rec) {
+  editing = rec; const m = rec.memo || {};
+  const kind = rec.r, timed = kind === "アポ" || kind === "再架電", mine = rec.uid === U;
+  $("mTitle").innerHTML = resChip(kind) + (kind === "アポ" ? " アポの詳細" : kind === "再架電" ? " 再架電の予定" : " メモ");
+  $("mHint").textContent = !mine ? nameOf(rec.uid) + "さんの記録です（見るだけ）" :
+    rec.draft ? "カレンダーから登録します。保存するとアポが1件増えます" : hm(rec.t) + " の記録" + (timed ? "。日時を入れるとリマインドに出ます" : "");
+  $("mShop").value = m.shop || ""; $("mTel").value = m.tel || ""; $("mText").value = m.text || "";
+  $("mWhenBox").hidden = !timed; $("mRemindBox").hidden = !timed;
+  $("mPick").hidden = kind !== "アポ" || !mine;
+  $("mCloserBox").hidden = kind !== "アポ";
+  if (timed) {
+    selCloser = m.closer || "auto";
+    $("mWhenLbl").textContent = kind === "アポ" ? "面談日時（Zoom）" : "かけ直す日時";
+    $("mWhen").value = m.when ? toLocal(m.when) : ""; $("mRemind").checked = m.remind !== false; setQuick(kind);
+  }
+  ["mShop", "mTel", "mText", "mWhen"].forEach(id => $(id).readOnly = !mine);
+  $("mSave").hidden = !mine; $("mSkip").textContent = mine ? "あとで" : "閉じる";
+  checkClash();
+  $("scrim").hidden = $("msheet").hidden = false;
+  if (mine) setTimeout(() => $(timed ? "mShop" : "mText").focus(), 50);
+}
+function closeMemo() { $("scrim").hidden = $("msheet").hidden = true; editing = null; }
+$("mSkip").onclick = () => {
+  const r = editing; closeMemo();
+  if (r && r.uid === U && !r.draft && r.r === "アポ" && !(r.memo && r.memo.when)) toast("日時未定のアポとして残しました");
+};
+$("scrim").onclick = closeMemo;
+document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("msheet").hidden) closeMemo(); });
+$("mWhen").addEventListener("input", checkClash);
+
+/* クローザーの選択（"auto"＝空いている人におまかせ） */
+function renderClosers() {
+  const box = $("mClosers"); box.innerHTML = "";
+  const d = $("mWhen").value ? new Date($("mWhen").value) : null;
+  const list = closerList();
+  [{id: "auto", name: "おまかせ"}, ...list].forEach(c => {
+    const b = document.createElement("button"); b.type = "button"; b.className = "cl-chip";
+    b.setAttribute("aria-pressed", selCloser === c.id);
+    let state = "";
+    if (d && isSlotTime(d)) state = c.id === "auto" ? (freeClosers(d, editing).length ? "" : "×") : (closerBusy(d, c.id, editing) ? "×" : "空き");
+    if (c.id !== "auto") b.innerHTML = `<i style="background:${c.color}"></i>`;
+    b.insertAdjacentHTML("beforeend", esc(c.name) + (state ? `<small class="${state === "×" ? "ng" : "okk"}">${state}</small>` : ""));
+    b.disabled = editing && editing.uid !== U;
+    b.onclick = () => { selCloser = c.id; renderClosers(); setQuick("アポ"); checkClash(); };
+    box.appendChild(b);
+  });
+}
+function checkClash() {
+  const box = $("mClash");
+  if (editing && editing.r === "アポ") renderClosers();
+  if (!editing || editing.r !== "アポ" || !$("mWhen").value) { box.hidden = true; return; }
+  const d = new Date($("mWhen").value);
+  box.hidden = false;
+  if (!isSlotTime(d)) { box.className = "clash"; box.textContent = "アポの枠の外です（10:00〜19:00・30分ごと・日曜休み）"; return; }
+  const free = freeClosers(d, editing);
+  if (selCloser === "auto") {
+    if (!free.length) { box.className = "clash"; box.textContent = "この時間はクローザー全員が埋まっています"; return; }
+    box.className = "clash ok"; box.textContent = md(d) + " " + hm(d) + " 空いているクローザー：" + free.map(c => c.name).join("・"); return;
+  }
+  const hit = slotsAt(d, editing).find(s => s.closer === selCloser);
+  if (hit) { box.className = "clash"; box.textContent = CNAME(selCloser) + "さんはこの時間埋まっています（" + nameOf(hit.uid) + "さんのアポ：" + (hit.shop || "店名なし") + "）" + (free.length ? "。空いているのは " + free.map(c => c.name).join("・") : ""); return; }
+  box.className = "clash ok"; box.textContent = md(d) + " " + hm(d) + " " + CNAME(selCloser) + "さん 空いています";
+}
+
+$("mSave").onclick = async () => {
+  const rec = editing; if (!rec || rec.uid !== U) return;
+  const w = $("mWhen").value ? new Date($("mWhen").value) : null;
+  const m = {shop: $("mShop").value.trim(), tel: $("mTel").value.trim(), text: $("mText").value.trim()};
+  const remind = $("mRemind").checked;
+  $("mSave").disabled = true;
+  try {
+    if (rec.r === "アポ" && w) {
+      if (!isSlotTime(w)) { toast("アポの枠の外です（10:00〜19:00・30分ごと・日曜休み）"); return; }
+      const cl = await bookSlot(rec, m, w, remind);
+      closeMemo();
+      toast((rec.draft ? "アポを登録しました（アポ+1）" : "保存しました。" + md(w) + " " + hm(w)) + "（クローザー " + CNAME(cl) + "）");
+    } else if (rec.r === "アポ") {
+      const b = writeBatch(db);
+      b.update(doc(db, "records", rec.id), {memo: m, undated: true, pending: false, slotId: null});
+      if (rec.slotId) b.delete(doc(db, "slots", rec.slotId));
+      b.commit().catch(e => toast(errMsg(e)));
+      closeMemo(); toast("日時未定のアポとして保存しました");
+    } else if (rec.r === "再架電") {
+      updateDoc(doc(db, "records", rec.id), {memo: {...m, when: w ? Timestamp.fromDate(w) : null, remind}, pending: !!w && !rec.done}).catch(e => toast(errMsg(e)));
+      closeMemo(); toast(w ? "保存しました。" + md(w) + " " + hm(w) + " にリマインドします" : "メモを保存しました");
+    } else {
+      updateDoc(doc(db, "records", rec.id), {memo: (m.shop || m.tel || m.text) ? m : null}).catch(e => toast(errMsg(e)));
+      closeMemo(); toast("メモを保存しました");
+    }
+  } catch (e) { toast(errMsg(e)); }
+  finally { $("mSave").disabled = false; }
+};
+
+/* アポの枠を取る。枠の文書は「日_時刻_クローザー」で1つだけなので、同時に保存しても片方しか入らない */
+async function bookSlot(rec, m, when, remind) {
+  const cands = selCloser === "auto" ? freeClosers(when, rec).map(c => c.id).concat(closerList().map(c => c.id)) : [selCloser];
+  const recRef = doc(db, "records", rec.id);
+  let chosenId = null;
+  await runTransaction(db, async tx => {
+    let chosen = null;
+    for (const c of [...new Set(cands)]) {
+      const sref = doc(db, "slots", slotIdOf(when, c));
+      const s = await tx.get(sref);
+      if (!s.exists() || s.data().recId === rec.id) { chosen = {c, sref}; break; }
+    }
+    if (!chosen) throw new Error("FULL");
+    const memo = {...m, when: Timestamp.fromDate(when), remind, closer: chosen.c};
+    const sdata = {day: dk(when), time: hm(when), when: Timestamp.fromDate(when), closer: chosen.c, uid: U, recId: rec.id, shop: m.shop, tel: m.tel, text: m.text};
+    if (rec.slotId && rec.slotId !== chosen.sref.id) tx.delete(doc(db, "slots", rec.slotId));
+    tx.set(chosen.sref, sdata);
+    if (rec.draft) {
+      const t = new Date();
+      tx.set(recRef, {uid: U, r: "アポ", t: Timestamp.fromDate(t), day: dk(t), hour: t.getHours(), memo, undated: false, pending: true, done: false, slotId: chosen.sref.id});
+      tx.set(doc(db, "stats", dk(t)), statInc(U, "アポ", t.getHours(), 1), {merge: true});
+    } else {
+      tx.update(recRef, {memo, undated: false, pending: true, slotId: chosen.sref.id});
+    }
+    chosenId = chosen.c;
+  });
+  return chosenId;
+}
+
+/* ============================================================
+   アポカレンダー
+   ============================================================ */
+const isSlotTime = d => d.getDay() !== 0 && d.getMinutes() % 30 === 0 && d.getHours() >= SLOT_H0 && d.getHours() < SLOT_H1;
+const slotIdOf = (d, c) => dk(d) + "_" + pad(d.getHours()) + pad(d.getMinutes()) + "_" + c;
+let extraSlots = [];      // 過去の週を見るときに一度だけ読んだ分
+const allSlots = () => slots.concat(extraSlots.filter(x => !slots.some(s => s.id === x.id)));
+function slotsAt(d, except) { const k = dk(d) + " " + hm(d); return allSlots().filter(s => s.day + " " + s.time === k && !(except && s.recId === except.id)); }
+const closerBusy = (d, cid, except) => slotsAt(d, except).some(s => s.closer === cid);
+const freeClosers = (d, except) => closerList().filter(c => !closerBusy(d, c.id, except));
+const slotOpen = (d, except, cid) => (!cid || cid === "auto" || cid === "all") ? freeClosers(d, except).length > 0 : !closerBusy(d, cid, except);
+function freeSlots(from, n) {
+  const out = []; let d = new Date(from); d.setSeconds(0, 0);
+  d.setMinutes(d.getMinutes() === 0 ? 0 : d.getMinutes() <= 30 ? 30 : 60, 0, 0);
+  for (let g = 0; out.length < n && g < 2000; g++, d = new Date(d.getTime() + 18e5)) if (isSlotTime(d) && slotOpen(d, editing, selCloser)) out.push(new Date(d));
+  return out;
+}
+const monday = d => addDays(dayStart(d), -((d.getDay() + 6) % 7));
+let wkStart = monday(new Date()), pickMode = false, pickReturn = "count", calCloser = "all";
+$("wkPrev").onclick = () => { wkStart = addDays(wkStart, -7); loadPastWeek(); renderCal(); };
+$("wkNext").onclick = () => { wkStart = addDays(wkStart, 7); renderCal(); };
+$("calFilter").onclick = e => { const b = e.target.closest("button"); if (!b) return; calCloser = b.dataset.c; renderCal(); };
+async function loadPastWeek() {
+  if (wkStart >= addDays(today(), -7)) return;
+  try {
+    const s = await getDocs(query(collection(db, "slots"), where("day", ">=", dk(wkStart)), where("day", "<=", dk(addDays(wkStart, 6)))));
+    extraSlots = s.docs.map(d => ({id: d.id, ...d.data(), when: tsd(d.data().when)}));
+    renderCal();
+  } catch (_) {}
+}
+function renderCal() {
+  const days = [0, 1, 2, 3, 4, 5].map(i => addDays(wkStart, i)), now = new Date(), T = today();
+  const cls = closerList();
+  if (calCloser !== "all" && !cls.some(c => c.id === calCloser)) calCloser = "all";
+  $("wkLbl").textContent = md(days[0]) + " 〜 " + md(days[5]);
+  const wOff = Math.round((wkStart - monday(now)) / (7 * 864e5));
+  const byC = s => calCloser === "all" || s.closer === calCloser;
+  const inWeek = allSlots().filter(s => s.day >= dk(days[0]) && s.day <= dk(days[5]) && byC(s));
+  let free = 0;
+  $("calFilter").innerHTML = [{id: "all", name: "クローザー全員"}, ...cls].map(c =>
+    `<button class="chip-btn" data-c="${c.id}" aria-pressed="${calCloser === c.id}">${c.id !== "all" ? `<i class="dot-c" style="background:${c.color}"></i>` : ""}${esc(c.name)}</button>`).join("");
+  $("legend").innerHTML = `<span>色＝クローザー</span>` + cls.map(c => `<span><i style="background:${c.color}"></i>${esc(c.name)}</span>`).join("") +
+    `<span><i style="background:transparent;outline:2px solid #FFD54F;outline-offset:-2px"></i>自分が取ったアポ</span>`;
+  const cal = $("cal"); cal.innerHTML = "";
+  cal.insertAdjacentHTML("beforeend", `<div class="hd"></div>` + days.map(d => `<div class="hd${+d === +T ? " today" : ""}">${WD[d.getDay()]}<small>${d.getMonth() + 1}/${d.getDate()}</small></div>`).join(""));
+  for (let h = SLOT_H0; h < SLOT_H1; h++) for (const mi of [0, 30]) {
+    cal.insertAdjacentHTML("beforeend", `<div class="tm${mi ? " half" : ""}">${h}:${pad(mi)}</div>`);
+    days.forEach(day => {
+      const d = new Date(day); d.setHours(h, mi, 0, 0);
+      const list = slotsAt(d, null).filter(byC).sort((a, b) => a.closer < b.closer ? -1 : 1);
+      const past = d < now, full = !slotOpen(d, null, calCloser);
+      if (!past && !full) free++;
+      const b = document.createElement("button");
+      b.className = "sl" + (mi ? " half" : "") + (past ? " past" : full ? " full" : " free") + (+day === +T ? " today" : "");
+      b.setAttribute("aria-label", md(d) + " " + hm(d) + (list.length ? " アポ" + list.length + "件" : past ? " 過ぎた枠" : " 空き"));
+      b.innerHTML = list.map(s => `<span class="ap${s.uid === U ? " mine" : ""}" style="background:${CCOL(s.closer)}"><b>${esc(CNAME(s.closer)[0])}</b><span>${esc(s.shop || "")}</span></span>`).join("");
+      b.onclick = () => slotTap(d, list, past, full);
+      cal.appendChild(b);
+    });
+  }
+  $("wkSub").textContent = (wOff === 0 ? "今週" : wOff === 1 ? "来週" : wOff === -1 ? "先週" : "") + "　アポ " + inWeek.length + "件 ・ 空き " + free + "枠";
+  $("calDefs").textContent = "枠を押すと、アポの詳細を見るか、空いていればその枠でアポを登録できます。1枠30分。クローザー1人につき同じ時間は1件まで" +
+    (calCloser === "all" ? "で、全員埋まった時間だけ「埋まり」になります。" : "。今は" + CNAME(calCloser) + "さんの予定だけ表示しています。");
+  document.body.classList.toggle("picking", pickMode);
+  $("pickBar").hidden = !pickMode;
+  renderUndated();
+  if (pickMode) $("undatedTeam").hidden = true;
+}
+function slotTap(d, list, past, full) {
+  if (pickMode) {
+    if (past) { toast("過ぎた時間は選べません"); return; }
+    if (full) { toast("この枠は埋まっています"); return; }
+    if (calCloser !== "all") selCloser = calCloser;
+    $("mWhen").value = toLocal(d); finishPick(); setQuick("アポ"); checkClash(); return;
+  }
+  if (list.length) { showApoDetail(d, list, past); return; }
+  if (past) return;
+  newApoAt(d);
+}
+function newApoAt(d) {
+  const ref = doc(collection(db, "records"));
+  openMemo({id: ref.id, uid: U, t: new Date(), r: "アポ", memo: {when: new Date(d), remind: true, closer: calCloser === "all" ? undefined : calCloser}, draft: true});
+}
+let adSlot = null;
+function showApoDetail(d, list, past) {
+  adSlot = d;
+  $("adTitle").textContent = md(d) + " " + hm(d) + " のアポ";
+  const free = freeClosers(d, null);
+  $("adBody").innerHTML = list.map(s => `<div class="ad-row"><b>${esc(s.shop || "（店名なし）")}</b>
+    <small><i class="dot-c" style="background:${CCOL(s.closer)}"></i>クローザー ${esc(CNAME(s.closer))} ・ 獲得 ${esc(nameOf(s.uid))}${s.tel ? " ・ " + esc(s.tel) : ""}</small>
+    ${s.text ? `<div>${esc(s.text)}</div>` : ""}</div>`).join("") +
+    (!past ? `<div class="ad-row"><small>この時間に空いているクローザー：${free.length ? free.map(c => esc(c.name)).join("・") : "なし"}</small></div>` : "");
+  $("adNew").hidden = past || !slotOpen(d, null, calCloser);
+  $("adScrim").hidden = $("apoDetail").hidden = false;
+}
+$("adNew").onclick = () => { $("adScrim").hidden = $("apoDetail").hidden = true; if (adSlot) newApoAt(adSlot); };
+$("adClose").onclick = $("adScrim").onclick = () => { $("adScrim").hidden = $("apoDetail").hidden = true; };
+
+/* 日切り：メモの画面 → カレンダーで空きを選ぶ → メモの画面に戻る */
+$("mPick").onclick = () => {
+  pickMode = true; pickReturn = curTab;
+  $("scrim").hidden = $("msheet").hidden = true;
+  const w = $("mWhen").value ? new Date($("mWhen").value) : new Date();
+  wkStart = monday(w);
+  calCloser = selCloser === "auto" ? "all" : selCloser;
+  showTab("cal");
+};
+function finishPick() { pickMode = false; document.body.classList.remove("picking"); $("pickBar").hidden = true; showTab(pickReturn); $("scrim").hidden = $("msheet").hidden = false; }
+function cancelPick() { pickMode = false; document.body.classList.remove("picking"); $("pickBar").hidden = true; $("scrim").hidden = $("msheet").hidden = false; }
+$("pickCancel").onclick = () => { cancelPick(); showTab(pickReturn); };
+
+/* 日時未定のアポ */
+function renderUndated() {
+  if (!started) return;
+  const mine = undated.filter(r => r.uid === U), b = $("undatedMine");
+  b.hidden = !mine.length;
+  if (mine.length) { b.innerHTML = `<span>日時未定のアポ ${mine.length}件</span><span class="go2">日時を入れる →</span>`; b.onclick = () => openMemo(mine[0]); }
+  const box = $("undatedTeam");
+  box.hidden = !undated.length;
+  if (undated.length) {
+    box.innerHTML = `<div class="ttl">日時未定のアポ ${undated.length}件（カレンダーに入っていません）</div>` +
+      undated.map((r, i) => `<button data-i="${i}"><b>${esc((r.memo && r.memo.shop) || "（店名なし）")}</b><small>獲得 ${esc(nameOf(r.uid))} ・ ${md(r.t)} ${hm(r.t)}</small><span class="fix">${r.uid === U ? "日時を入れる" : "見る"}</span></button>`).join("");
+    box.querySelectorAll("button").forEach(x => x.onclick = () => openMemo(undated[+x.dataset.i]));
+  }
+}
+
+/* ============================================================
+   リマインド・通知
+   ============================================================ */
+function visiblePending(list) {
+  const from = addDays(today(), -3);
+  return list.filter(r => r.memo && r.memo.when && !r.done && (r.r === "再架電" ? r.memo.when >= from : r.memo.when >= today()));
+}
+function todayMine() { const T = today(), E = addDays(T, 1); return visiblePending(pendMine).filter(r => r.memo.when >= T && r.memo.when < E).sort((a, b) => a.memo.when - b.memo.when); }
+function renderAfterPending() { renderNext(); if (curTab === "remind") renderRemind(); updateRmDot(); }
+function updateRmDot() {
+  const n = visiblePending(pendMine).filter(r => r.memo.when < addDays(today(), 1)).length;
+  $("rmDot").hidden = !n; $("rmDot").textContent = n;
+}
+function renderNext() {
+  if (!started) return;
+  const now = new Date(), list = todayMine(), r = list.find(x => x.memo.when >= now), late = list.filter(x => x.memo.when < now && x.r === "再架電").length;
+  const box = $("nextUp");
+  if (!list.length) { box.hidden = true; return; }
+  box.hidden = false;
+  if (r) {
+    const mins = Math.round((r.memo.when - now) / 6e4);
+    const left = mins >= 60 ? Math.floor(mins / 60) + "時間" + (mins % 60 ? mins % 60 + "分" : "") : mins + "分";
+    box.innerHTML = `<span class="nu-lbl">次の予定</span><span class="num nu-t">${hm(r.memo.when)}</span><span class="nu-b">${resChip(r.r)} ${esc(r.memo.shop || "")}</span><span class="nu-left">あと${left}</span>`;
+  } else box.innerHTML = `<span class="nu-lbl">次の予定</span><span class="nu-b">今日のこのあとの予定はありません</span>`;
+  if (late) box.innerHTML += `<span class="badge late">過ぎた再架電 ${late}件</span>`;
+}
+setInterval(() => { if (started) renderNext(); }, 60000);
+
+let rmF = "me";
+$("rmFilter").onclick = e => { const b = e.target.closest("button"); if (!b) return; rmF = b.dataset.f; $("rmFilter").querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", x === b)); renderRemind(); };
+function renderRemind() {
+  const now = new Date(), tmr = addDays(today(), 1);
+  const list = visiblePending(rmF === "me" ? pendMine : pendTeam).sort((a, b) => a.memo.when - b.memo.when);
+  const groups = [["過ぎている再架電", list.filter(r => r.memo.when < now)], ["今日", list.filter(r => r.memo.when >= now && r.memo.when < tmr)], ["明日以降", list.filter(r => r.memo.when >= tmr)]];
+  const body = $("rmBody"); body.innerHTML = "";
+  groups.forEach(([title, g]) => {
+    const h = document.createElement("h2"); h.innerHTML = `${title} <span class="aside">${g.length}件</span>`; body.appendChild(h);
+    const c = document.createElement("div"); c.className = "card";
+    if (!g.length) c.innerHTML = `<div class="empty">ありません</div>`;
+    g.slice(0, 30).forEach(r => {
+      const late = r.memo.when < now, mine = r.uid === U;
+      const row = document.createElement("div"); row.className = "rm" + (late ? " late" : "");
+      row.innerHTML = `<div class="time">${hm(r.memo.when)}<small>${md(r.memo.when)}</small></div>
+        <div class="info"><div class="shop">${esc(r.memo.shop || "（店名なし）")}${r.r === "アポ" ? `<span class="badge apo">アポ・Zoom</span>` : ""}${late ? `<span class="badge late">期限切れ</span>` : ""}</div>
+        <div class="meta">担当 ${esc(nameOf(r.uid))}${r.r === "アポ" && r.memo.closer ? " ・ クローザー " + esc(CNAME(r.memo.closer)) : ""} ・ ${md(r.t)} に${r.r === "アポ" ? "獲得" : "架電"}</div>
+        ${r.memo.text ? `<div class="memo">${esc(r.memo.text)}</div>` : ""}</div>
+        <div class="btns">${r.r === "再架電" && mine ? `<button class="done">かけた</button><button class="later">明日へ</button>` : `<button class="edit">詳細</button>`}</div>`;
+      const d = row.querySelector(".done"), l = row.querySelector(".later"), ed = row.querySelector(".edit");
+      if (d) d.onclick = () => markDone(r);
+      if (l) l.onclick = () => {
+        const w = addDays(dayStart(r.memo.when < now ? now : r.memo.when), 1); w.setHours(r.memo.when.getHours(), r.memo.when.getMinutes());
+        updateDoc(doc(db, "records", r.id), {"memo.when": Timestamp.fromDate(w)}).catch(e => toast(errMsg(e)));
+        toast(md(w) + " " + hm(w) + " に延期しました");
+      };
+      if (ed) ed.onclick = () => openMemo(r);
+      c.appendChild(row);
+    });
+    body.appendChild(c);
+  });
+}
+function markDone(r) {
+  updateDoc(doc(db, "records", r.id), {done: true, pending: false}).catch(e => toast(errMsg(e)));
+  showTab("count"); toast("今回の結果のボタンを押してください");
+}
+/* 3日以上前に終わった自分のアポは、リマインドの対象から外しておく */
+function cleanupOldApos() {
+  const limit = addDays(today(), -3);
+  pendMine.filter(r => r.r === "アポ" && r.memo && r.memo.when && r.memo.when < limit).forEach(r => updateDoc(doc(db, "records", r.id), {pending: false}).catch(() => {}));
+}
+
+/* 通知の設定（機械ごと） */
+const SW = ["swMorning", "swBefore", "swOnTime", "swSound", "swVib"];
+const swSaved = lsGet("team-notif", {});
+SW.forEach(id => { if (id in swSaved) $(id).checked = swSaved[id]; $(id).onchange = () => { swSaved[id] = $(id).checked; lsSet("team-notif", swSaved); }; });
+
+function beep(times) {
+  if (!$("swSound").checked) return;
+  try {
+    const ac = new (window.AudioContext || window.webkitAudioContext)();
+    [0, 0.35, 0.7].slice(0, times || 2).forEach(d => {
+      const o = ac.createOscillator(), g = ac.createGain();
+      o.type = "sine"; o.frequency.value = 880; o.connect(g); g.connect(ac.destination);
+      g.gain.setValueAtTime(0.0001, ac.currentTime + d);
+      g.gain.exponentialRampToValueAtTime(0.25, ac.currentTime + d + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, ac.currentTime + d + 0.3);
+      o.start(ac.currentTime + d); o.stop(ac.currentTime + d + 0.32);
+    });
+  } catch (_) {}
+}
+let alertRec = null;
+function showAlert(rec, mode, force) {
+  const now = mode === "now";
+  if (!force && !$(now ? "swOnTime" : "swBefore").checked) return;
+  alertRec = rec;
+  const kind = rec.r === "アポ" ? "アポ（Zoom）" : "再架電";
+  $("alertBar").classList.toggle("now", now);
+  $("alTag").textContent = now ? kind + "の時間です" : kind + "まで あと15分";
+  $("alTime").textContent = hm(rec.memo.when);
+  $("alShop").textContent = rec.memo.shop || "（店名なし）";
+  $("alMemo").textContent = rec.memo.text || ""; $("alMemo").hidden = !rec.memo.text;
+  $("alDone").hidden = !now || rec.r !== "再架電"; $("alSnooze").hidden = !now;
+  $("alOpen").classList.toggle("primary", !now || rec.r !== "再架電");
+  $("alertBar").hidden = false;
+  beep(now ? 3 : 2);
+  if ($("swVib").checked && navigator.vibrate) navigator.vibrate(now ? [300, 100, 300, 100, 300] : [200, 100, 200]);
+}
+function hideAlert() { $("alertBar").hidden = true; alertRec = null; }
+$("alOpen").onclick = () => { const r = alertRec; hideAlert(); if (r) openMemo(r); };
+$("alDone").onclick = () => { const r = alertRec; hideAlert(); if (r) markDone(r); };
+$("alSnooze").onclick = () => { const r = alertRec; hideAlert(); if (r) { snoozed[r.id] = Date.now() + 5 * 6e4; } toast("5分後にもう一度出します"); };
+$("alClose").onclick = hideAlert;
+
+/* 15秒ごとに、自分の今日の予定を見て「15分前」「ちょうど」を1回ずつ出す */
+const snoozed = {};
+function checkNotifs() {
+  if (!started) return;
+  const now = Date.now(), key = "team-fired-" + dk(today());
+  const fired = lsGet(key, {});
+  for (const r of todayMine()) {
+    if (r.memo.remind === false) continue;
+    const w = r.memo.when.getTime();
+    if (snoozed[r.id] && now >= snoozed[r.id]) { delete snoozed[r.id]; showAlert(r, "now"); return; }
+    if (!fired[r.id + ":now"] && now >= w && now < w + 30 * 6e4) { fired[r.id + ":now"] = 1; fired[r.id + ":pre"] = 1; lsSet(key, fired); showAlert(r, "now"); return; }
+    if (!fired[r.id + ":pre"] && now >= w - 15 * 6e4 && now < w) { fired[r.id + ":pre"] = 1; lsSet(key, fired); showAlert(r, "pre"); return; }
+  }
+}
+
+/* その日はじめて開いたときの「今日の予定」（機械ごとに1日1回） */
+let pendLoaded = false;
+function maybeDaySum() {
+  if (!pendLoaded) { pendLoaded = true; }
+  if (!$("swMorning").checked) return;
+  const k = "team-daysum";
+  if (lsGet(k, "") === dk(today())) return;
+  lsSet(k, dk(today()));
+  showDaySum();
+}
+function showDaySum() {
+  const list = todayMine(), now = new Date();
+  $("dsDate").textContent = md(today());
+  $("dsCount").textContent = list.length + "件";
+  $("dsList").innerHTML = list.length ? list.map(r => {
+    const past = r.memo.when < now;
+    return `<div class="ds-row${past ? " past" : ""}"><span class="num ds-t">${hm(r.memo.when)}</span><span class="ds-b">${resChip(r.r)} <b>${esc(r.memo.shop || "（店名なし）")}</b>${past ? `<span class="badge late">過ぎています</span>` : ""}${r.memo.text ? `<small>${esc(r.memo.text)}</small>` : ""}</span></div>`;
+  }).join("") : `<div class="empty">今日の再架電・アポはありません</div>`;
+  $("dsScrim").hidden = $("daySum").hidden = false;
+  if (list.length) beep(1);
+}
+function closeDaySum() { $("dsScrim").hidden = $("daySum").hidden = true; }
+$("dsOk").onclick = closeDaySum; $("dsScrim").onclick = closeDaySum;
+$("dsGo").onclick = () => { closeDaySum(); showTab("remind"); };
+$("trySum").onclick = showDaySum;
+const nextMine = () => todayMine().find(r => r.memo.when >= new Date()) || visiblePending(pendMine).sort((a, b) => a.memo.when - b.memo.when)[0];
+$("tryPre").onclick = () => { const r = nextMine(); if (r) showAlert(r, "pre", true); else toast("自分の予定がありません"); };
+$("tryNow").onclick = () => { const r = nextMine(); if (r) showAlert(r, "now", true); else toast("自分の予定がありません"); };
+
+/* ============================================================
+   KPI（stats/{日} だけを読む）
+   ============================================================ */
+let period = "today", member = "all";
+$("period").onclick = e => {
+  const b = e.target.closest("button"); if (!b) return;
+  period = b.dataset.p; $("period").querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", x === b));
+  $("customRange").hidden = period !== "custom"; renderKpi();
+};
+$("from").value = dk(addDays(today(), -13)); $("to").value = dk(today());
+$("from").onchange = $("to").onchange = renderKpi;
+$("member").onchange = () => { member = $("member").value; renderKpi(); };
+function range() {
+  const T = today(), tmr = addDays(T, 1);
+  if (period === "today") return [T, tmr];
+  if (period === "yday") return [addDays(T, -1), T];
+  if (period === "week") return [monday(T), tmr];
+  if (period === "month") return [new Date(T.getFullYear(), T.getMonth(), 1), tmr];
+  if (period === "d30") return [addDays(T, -29), tmr];
+  const f = $("from").value ? new Date($("from").value + "T00:00") : addDays(T, -13);
+  const t = $("to").value ? addDays(new Date($("to").value + "T00:00"), 1) : tmr;
+  return f < t ? [f, t] : [addDays(t, -1), addDays(f, 1)];
+}
+const statCache = {};
+async function loadStats(a, b) {
+  const key = dk(a) + "~" + dk(b);
+  if (statCache[key] && Date.now() - statCache[key].at < 30000) return statCache[key].data;
+  const s = await getDocs(query(collection(db, "stats"), where(documentId(), ">=", dk(a)), where(documentId(), "<=", dk(addDays(b, -1)))));
+  const data = {}; s.forEach(d => data[d.id] = d.data());
+  statCache[key] = {at: Date.now(), data};
+  return data;
+}
+function sumStats(data, who) {
+  const c = {}; let n = 0;
+  Object.values(data).forEach(day => Object.entries(day.c || {}).forEach(([uid, m]) => {
+    if (who !== "all" && uid !== who) return;
+    Object.entries(m).forEach(([k, v]) => { c[k] = (c[k] || 0) + v; n += v; });
+  }));
+  const apo = c["アポ"] || 0, conn = apo + (c["オーナー断り"] || 0) + (c["NG"] || 0);
+  return {n, apo, c, apoRate: n ? apo / n * 100 : 0, connRate: n ? conn / n * 100 : 0};
+}
+const workDays = (a, b) => { let n = 0; for (let d = new Date(a); d < b; d = addDays(d, 1)) if (d.getDay() !== 0) n++; return Math.max(n, 1); };
+function delta(cur, prev, unit) {
+  const d = cur - prev;
+  if (Math.abs(d) < (unit === "%" ? 0.05 : 0.5)) return `<span class="d flat">前期比 ±0</span>`;
+  const s = (d > 0 ? "▲" : "▼") + (unit === "%" ? Math.abs(d).toFixed(1) + "pt" : Math.round(Math.abs(d)));
+  return `<span class="d ${d > 0 ? "up" : "down"}">前期比 ${s}</span>`;
+}
+let kpiSeq = 0;
+async function renderKpi() {
+  const seq = ++kpiSeq;
+  const [a, b] = range(), days = Math.round((b - a) / 864e5), pa = addDays(a, -days);
+  const ids = Object.keys(members).filter(id => members[id].status === "active" || members[id].status === "removed");
+  const sel = $("member"), cur = sel.value || member;
+  sel.innerHTML = `<option value="all">メンバー：全員</option>` + ids.filter(id => members[id].status === "active").map(id => `<option value="${id}">メンバー：${esc(members[id].name)}${id === U ? "（自分）" : ""}</option>`).join("");
+  sel.value = [...sel.options].some(o => o.value === cur) ? cur : "all"; member = sel.value;
+  let data, pdata;
+  try { [data, pdata] = await Promise.all([loadStats(a, b), loadStats(pa, a)]); }
+  catch (e) { $("tiles").innerHTML = `<div class="empty">読み込めませんでした</div>`; return; }
+  if (seq !== kpiSeq) return;
+  const s = sumStats(data, member), p = sumStats(pdata, member);
+  $("tiles").innerHTML = [
+    ["架電", s.n, "", delta(s.n, p.n)], ["アポ", s.apo, "", delta(s.apo, p.apo)],
+    ["アポ率", s.apoRate.toFixed(1), "%", delta(s.apoRate, p.apoRate, "%")], ["接続率", s.connRate.toFixed(1), "%", delta(s.connRate, p.connRate, "%")]
+  ].map(([k, v, u, d]) => `<div class="card tile"><div class="k">${k}</div><div class="v">${v}<small>${u}</small></div>${d}</div>`).join("");
+
+  const wd = workDays(a, b);
+  const uids = new Set(ids); Object.values(data).forEach(d => Object.keys(d.c || {}).forEach(u => uids.add(u)));
+  const rows = [...uids].map(u => ({u, s: sumStats(data, u)})).filter(r => r.s.n || (members[r.u] && members[r.u].status === "active"))
+    .sort((x, y) => y.s.apo - x.s.apo || y.s.n - x.s.n);
+  const maxN = Math.max(1, ...rows.map(r => r.s.n)), tot = sumStats(data, "all");
+  $("mtable").innerHTML = `<tr><th>メンバー</th><th>架電</th><th>アポ</th><th>アポ率</th><th>接続率</th><th>1日平均</th></tr>` +
+    rows.map(({u, s}) => `<tr class="pick${u === U ? " me" : ""}" data-u="${u}" style="${member !== "all" && member !== u ? "opacity:.45" : ""}">
+      <td class="name">${esc(nameOf(u))}</td><td><span class="meter">${s.n}<i style="width:${Math.round(s.n / maxN * 56)}px"></i></span></td>
+      <td>${s.apo}</td><td>${s.apoRate.toFixed(1)}%</td><td>${s.connRate.toFixed(1)}%</td><td>${(s.n / wd).toFixed(0)}</td></tr>`).join("") +
+    `<tr><td class="name">チーム合計</td><td>${tot.n}</td><td>${tot.apo}</td><td>${tot.apoRate.toFixed(1)}%</td><td>${tot.connRate.toFixed(1)}%</td><td>${(tot.n / wd).toFixed(0)}</td></tr>`;
+  $("mtable").querySelectorAll("tr.pick").forEach(tr => tr.onclick = () => { member = member === tr.dataset.u ? "all" : tr.dataset.u; $("member").value = member; renderKpi(); });
+
+  const who = u => member === "all" || u === member;
+  let buckets = [];
+  if (days <= 1) {
+    $("chartTitle").textContent = "時間帯別の架電数";
+    const day = data[dk(a)] || {};
+    for (let h = 9; h < 21; h++) {
+      let n = 0; Object.entries(day.h || {}).forEach(([u, m]) => { if (who(u)) n += m[String(h)] || 0; });
+      buckets.push({lbl: h + "時", tip: h + ":00〜", n, apo: null});
+    }
+  } else {
+    $("chartTitle").textContent = "日別の架電数";
+    for (let d = new Date(a); d < b; d = addDays(d, 1)) {
+      const st = sumStats(data[dk(d)] ? {x: data[dk(d)]} : {}, member);
+      buckets.push({lbl: (d.getMonth() + 1) + "/" + d.getDate(), tip: md(d), n: st.n, apo: st.apo});
+    }
+  }
+  drawChart(buckets);
+  const total = Math.max(1, s.n), keys = [...new Set([...ITEMS.map(i => i.k), ...Object.keys(s.c)])];
+  const maxC = Math.max(1, ...keys.map(k => s.c[k] || 0));
+  $("brk").innerHTML = keys.map(k => ({k, v: s.c[k] || 0})).sort((x, y) => y.v - x.v).map(({k, v}) =>
+    `<div class="row">${resChip(k)}<div class="track"><i style="width:${v / maxC * 100}%"></i></div><span class="c">${v}</span><span class="p">${(v / total * 100).toFixed(1)}%</span></div>`).join("");
+}
+function niceMax(v) { if (v <= 5) return 5; const p = Math.pow(10, Math.floor(Math.log10(v))); for (const m of [1, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10]) if (m * p >= v) return m * p; return 10 * p; }
+function drawChart(bk) {
+  const W = 520, H = 190, L = 30, R = 6, T = 10, B = 22;
+  const vals = bk.map(x => x.n), top = niceMax(Math.max(1, ...vals));
+  const n = bk.length, slot = (W - L - R) / n, bw = Math.max(2, Math.min(28, slot - 2));
+  const y = v => T + (H - T - B) * (1 - v / top);
+  let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc($("chartTitle").textContent)}">`;
+  for (let i = 0; i <= 4; i++) { const v = top * i / 4, yy = y(v); s += `<line class="grid-l" x1="${L}" x2="${W - R}" y1="${yy}" y2="${yy}"/><text class="axis" x="${L - 6}" y="${yy + 3}" text-anchor="end">${Math.round(v)}</text>`; }
+  const every = Math.ceil(n / 10), mx = Math.max(...vals), maxI = mx > 0 ? vals.indexOf(mx) : -1;
+  bk.forEach((x, i) => {
+    const cx = L + slot * i + slot / 2, v = vals[i], yy = y(v), h = Math.max(0, y(0) - yy), r = Math.min(4, bw / 2, h);
+    if (v > 0) s += `<path class="bar${i === maxI ? " hot" : ""}" d="M${cx - bw / 2},${y(0)} V${yy + r} Q${cx - bw / 2},${yy} ${cx - bw / 2 + r},${yy} H${cx + bw / 2 - r} Q${cx + bw / 2},${yy} ${cx + bw / 2},${yy + r} V${y(0)} Z"/>`;
+    if (i % every === 0) s += `<text class="axis" x="${cx}" y="${H - 6}" text-anchor="middle">${x.lbl}</text>`;
+    s += `<rect class="hit" data-i="${i}" x="${L + slot * i}" y="${T}" width="${slot}" height="${H - T - B}"/>`;
+  });
+  s += `</svg><div class="tip" id="tip" hidden></div>`;
+  const box = $("chart"); box.innerHTML = s;
+  const tip = $("tip"), svg = box.querySelector("svg");
+  const show = e => {
+    const r = e.target.closest(".hit"); if (!r) { tip.hidden = true; return; }
+    const i = +r.dataset.i, x = bk[i], bb = svg.getBoundingClientRect(), sc = bb.width / W;
+    tip.innerHTML = `${x.tip}　架電 <b>${x.n}</b>` + (x.apo != null ? `　アポ <b>${x.apo}</b>` : "");
+    tip.style.left = Math.min(Math.max((L + slot * i + slot / 2) * sc + 12, 90), bb.width - 60) + "px"; tip.style.top = (y(vals[i]) * sc + 4) + "px"; tip.hidden = false;
+  };
+  svg.addEventListener("pointermove", show); svg.addEventListener("pointerdown", show); svg.addEventListener("pointerleave", () => tip.hidden = true);
+}
+
+/* ============================================================
+   設定（自分・管理者）
+   ============================================================ */
+$("saveName").onclick = () => {
+  const n = $("myName").value.trim(); if (!n) { toast("名前を入れてください"); return; }
+  updateDoc(doc(db, "members", U), {name: n}).then(() => toast("名前を保存しました")).catch(e => toast(errMsg(e)));
+};
+$("myCloser").onchange = () => updateDoc(doc(db, "members", U), {closer: $("myCloser").checked}).then(() => toast($("myCloser").checked ? "クローザーに入りました" : "クローザーから外れました")).catch(e => toast(errMsg(e)));
+$("appUrl").textContent = location.origin + location.pathname;
+$("copyUrl").onclick = async () => {
+  try { await navigator.clipboard.writeText(location.origin + location.pathname); toast("リンクをコピーしました"); }
+  catch (_) { const r = document.createRange(); r.selectNodeContents($("appUrl")); const s = getSelection(); s.removeAllRanges(); s.addRange(r); toast("選択しました。コピーしてください"); }
+};
+function renderAdmin() {
+  const admin = me && me.role === "admin";
+  const pend = Object.entries(members).filter(([, m]) => m.status === "pending");
+  $("setDot").hidden = !(admin && pend.length); $("setDot").textContent = pend.length;
+  if (!admin) return;
+  $("pendCount").textContent = pend.length + "人";
+  $("pendList").innerHTML = pend.length ? pend.map(([id, m]) => `<div class="row mrow"><div class="t">${esc(m.name)}<small>${esc(m.email)}${m.closer ? " ・ クローザー希望" : ""}</small></div>
+    <div class="acts2"><button class="ok" data-a="ok" data-id="${id}">承認</button><button class="ng" data-a="rej" data-id="${id}">却下</button></div></div>`).join("")
+    : `<div class="row"><div class="t"><small>承認待ちの人はいません</small></div></div>`;
+  const act = Object.entries(members).filter(([, m]) => m.status !== "pending").sort((a, b) => (a[1].status === "removed") - (b[1].status === "removed"));
+  $("memCount").textContent = act.filter(([, m]) => m.status === "active").length + "人";
+  $("memList").innerHTML = act.map(([id, m]) => `<div class="row mrow"><div class="avatar" style="background:${colorOf(id)};width:28px;height:28px;font-size:12px">${esc((m.name || "?")[0])}</div>
+    <div class="t">${esc(m.name)}${m.role === "admin" ? "（管理者）" : ""}${m.status === "removed" ? ` <span class="badge pend">外した人</span>` : ""}<small>${esc(m.email)}</small></div>
+    <div class="acts2">${m.status === "active" ? `<button data-a="closer" data-id="${id}" aria-pressed="${!!m.closer}" class="${m.closer ? "ok" : ""}">${m.closer ? "クローザー" : "クローザーにする"}</button>` : ""}
+    ${m.role !== "admin" ? (m.status === "active" ? `<button class="ng" data-a="rm" data-id="${id}">外す</button>` : `<button data-a="back" data-id="${id}">戻す</button>`) : ""}</div></div>`).join("");
+}
+document.addEventListener("click", e => {
+  const b = e.target.closest("#pendList button, #memList button"); if (!b) return;
+  const id = b.dataset.id, a = b.dataset.a, ref = doc(db, "members", id), m = members[id] || {};
+  const arm = label => { if (b.dataset.arm) return true; b.dataset.arm = "1"; const o = b.textContent; b.textContent = label; setTimeout(() => { if (b.isConnected) { delete b.dataset.arm; b.textContent = o; } }, 2500); return false; };
+  if (a === "ok") updateDoc(ref, {status: "active"}).then(() => toast(m.name + "さんを承認しました")).catch(er => toast(errMsg(er)));
+  if (a === "rej" && arm("本当に却下")) deleteDoc(ref).then(() => toast("却下しました")).catch(er => toast(errMsg(er)));
+  if (a === "rm" && arm("本当に外す")) updateDoc(ref, {status: "removed"}).then(() => toast(m.name + "さんを外しました")).catch(er => toast(errMsg(er)));
+  if (a === "back") updateDoc(ref, {status: "active"}).then(() => toast(m.name + "さんを戻しました")).catch(er => toast(errMsg(er)));
+  if (a === "closer") updateDoc(ref, {closer: !m.closer}).catch(er => toast(errMsg(er)));
+});
+
+/* 結果の項目の編集（管理者） */
+let draftItems = [];
+$("editItems").onclick = () => { draftItems = ITEMS.map(i => ({...i, open: false})); drawItems(); $("itemSheet").hidden = false; };
+$("itemCancel").onclick = () => $("itemSheet").hidden = true;
+$("addItem").onclick = () => { const [bg, fg] = PALETTE[draftItems.length % PALETTE.length]; draftItems.push({k: "", bg, fg, open: false}); drawItems(); const ins = document.querySelectorAll("#itemList input"); ins[ins.length - 1].focus(); };
+function drawItems() {
+  const box = $("itemList"); box.innerHTML = "";
+  draftItems.forEach((it, i) => {
+    const wrap = document.createElement("div"); wrap.className = "item";
+    const row = document.createElement("div"); row.className = "item-row";
+    const sw = document.createElement("button"); sw.className = "swatch"; sw.style.background = it.bg; sw.style.color = it.fg; sw.textContent = "色";
+    sw.onclick = () => { draftItems.forEach((d, j) => d.open = j === i ? !d.open : false); drawItems(); };
+    const inp = document.createElement("input"); inp.value = it.k; inp.maxLength = 20; inp.placeholder = "項目の名前"; inp.oninput = () => { it.k = inp.value; inp.classList.remove("bad"); };
+    const mk = (t, dis, f, cls) => { const b = document.createElement("button"); b.className = "ib" + (cls ? " " + cls : ""); b.textContent = t; b.disabled = dis; b.onclick = f; return b; };
+    row.append(sw, inp,
+      mk("↑", i === 0, () => { [draftItems[i - 1], draftItems[i]] = [draftItems[i], draftItems[i - 1]]; drawItems(); }),
+      mk("↓", i === draftItems.length - 1, () => { [draftItems[i + 1], draftItems[i]] = [draftItems[i], draftItems[i + 1]]; drawItems(); }),
+      mk("✕", false, () => { draftItems.splice(i, 1); drawItems(); }, "rm"));
+    wrap.appendChild(row);
+    if (it.open) {
+      const pal = document.createElement("div"); pal.className = "pal";
+      PALETTE.forEach(([bg, fg]) => { const p = document.createElement("button"); p.style.background = bg; p.style.color = fg; p.textContent = "あ"; if (bg === it.bg) p.className = "on"; p.onclick = () => { it.bg = bg; it.fg = fg; it.open = false; drawItems(); }; pal.appendChild(p); });
+      wrap.appendChild(pal);
+    }
+    box.appendChild(wrap);
+  });
+}
+$("itemSave").onclick = () => {
+  draftItems.forEach(d => d.k = d.k.trim());
+  const list = draftItems.filter(d => d.k);
+  const seen = {}; let dup = null; list.forEach(d => { if (seen[d.k]) dup = d.k; seen[d.k] = 1; });
+  if (dup) { toast("「" + dup + "」が2つあります"); return; }
+  if (!list.length) { toast("項目が1つもありません"); return; }
+  setDoc(doc(db, "config", "items"), {list: list.map(({k, bg, fg, strike}) => strike ? {k, bg, fg, strike: true} : {k, bg, fg})})
+    .then(() => { $("itemSheet").hidden = true; toast("保存しました。全員の画面に反映されます"); }).catch(e => toast(errMsg(e)));
+};
+$("itemsNote").textContent = "全員のボタンが変わります";
+
+/* ============================================================
+   タブ
+   ============================================================ */
+const VIEWS = ["count", "log", "cal", "kpi", "remind", "set"];
+let curTab = "count";
+function showTab(v) {
+  if (pickMode && v !== "cal") cancelPick();
+  curTab = v;
+  VIEWS.forEach(x => $("v-" + x).hidden = x !== v);
+  document.querySelectorAll(".tabs button").forEach(b => { if (b.dataset.go === v) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current"); });
+  window.scrollTo(0, 0);
+  if (v === "cal") renderCal(); if (v === "kpi") renderKpi(); if (v === "remind") renderRemind(); if (v === "log") renderLog(); if (v === "set") renderAdmin();
+}
+document.addEventListener("click", e => { const b = e.target.closest("[data-go]"); if (b) showTab(b.dataset.go); });
+COL = Object.fromEntries(ITEMS.map(i => [i.k, i]));
+buildGrid();
+
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js").catch(() => {});

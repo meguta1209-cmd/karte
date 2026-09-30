@@ -1,0 +1,318 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>結果カウンター チーム版</title>
+<meta name="description" content="テレアポの結果をチームで数えて、アポのカレンダーを共有するアプリ">
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#E9EEF4" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0C141E" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="結果カウンター">
+<meta name="format-detection" content="telephone=no">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="apple-touch-icon" href="./icons/icon-180.png">
+<link rel="icon" href="./icons/icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=BIZ+UDPGothic:wght@400;700&family=Roboto+Mono:wght@500;700&display=swap">
+<link rel="stylesheet" href="./style.css">
+</head>
+<body>
+
+<!-- ===== 入口（読み込み中／ログイン／名前登録／承認待ち／利用停止） ===== -->
+<div class="gate" id="gLoading"><div class="box"><div class="spin"></div><p>読み込み中…</p></div></div>
+
+<div class="gate" id="gLogin" hidden>
+  <div class="box">
+    <div class="logo">正</div>
+    <h2>結果カウンター</h2>
+    <p>チームで数えて、アポのカレンダーを共有</p>
+    <button class="g" id="btnLogin"><span class="gg">G</span>Googleアカウントでログイン</button>
+    <p class="err" id="loginErr" hidden></p>
+    <p style="font-size:12px;color:var(--ink3)">初めての人は、ログインのあとに名前を登録して、管理者の承認を待ちます。</p>
+  </div>
+</div>
+
+<div class="gate" id="gRegister" hidden>
+  <div class="box">
+    <div class="logo">正</div>
+    <h2>はじめまして</h2>
+    <p id="regMail"></p>
+    <div class="fld"><label for="regName">名前（チームで表示されます）</label><input id="regName" maxlength="12" placeholder="例）竹内" autocomplete="name"></div>
+    <label class="check"><input type="checkbox" id="regCloser"><span>クローザーもやる<small>Zoom面談の担当としてカレンダーに出ます</small></span></label>
+    <button class="primary" id="btnRegister">登録して承認を待つ</button>
+    <p class="err" id="regErr" hidden></p>
+    <button class="link" id="regLogout">別のアカウントでログインする</button>
+  </div>
+</div>
+
+<div class="gate" id="gPending" hidden>
+  <div class="box">
+    <div class="logo">正</div>
+    <h2>承認待ちです</h2>
+    <p><b id="pendName"></b> さんの登録を受け付けました。<br>管理者が承認すると、この画面が自動で切り替わります。</p>
+    <button class="link" id="pendLogout">ログアウト</button>
+  </div>
+</div>
+
+<div class="gate" id="gRemoved" hidden>
+  <div class="box">
+    <div class="logo">正</div>
+    <h2>利用が止められています</h2>
+    <p>このアカウントは、今はチームのメンバーになっていません。管理者に確認してください。</p>
+    <button class="link" id="remLogout">ログアウト</button>
+  </div>
+</div>
+
+<!-- ===== 本体 ===== -->
+<div id="app" hidden>
+<main class="wrap">
+  <!-- カウント -->
+  <section id="v-count">
+    <div class="head">
+      <div class="avatar" id="meAv"></div>
+      <div class="who"><b id="meName"></b><small id="teamName"></small></div>
+      <div class="date"><span id="todayLbl"></span><small>今日</small></div>
+    </div>
+    <div class="card total">
+      <div><div class="lbl">自分の架電数</div><div class="big" id="cTotal">0</div></div>
+      <div class="side" id="cSide"></div>
+    </div>
+    <div class="team-strip">
+      <span>チーム今日<small class="upd">30秒ごと更新</small></span>
+      <span>架電 <b id="tTotal">–</b></span>
+      <span>アポ <b id="tApo">–</b></span>
+      <button class="go" data-go="kpi">KPIを見る →</button>
+    </div>
+    <button class="nextup" id="nextUp" data-go="remind" hidden></button>
+    <button class="undated" id="undatedMine" hidden></button>
+    <div class="grid" id="grid"></div>
+    <div class="acts">
+      <button id="undo">↶ ひとつ戻す</button>
+      <button id="memoLast">✎ 直前の記録にメモ</button>
+    </div>
+    <p class="note">「アポ」「再架電」を押すと、詳細と日時を書く画面が開きます。ほかの結果も、下の記録を押せばメモを付けられます。</p>
+    <h2>直近の記録 <span class="aside">新しい順に15件</span></h2>
+    <div class="card" id="recent"></div>
+    <button class="btn-plain" data-go="log">今日の記録をすべて見る</button>
+  </section>
+
+  <!-- 記録 -->
+  <section id="v-log" hidden>
+    <h1 class="screen">今日の記録</h1>
+    <div class="chips" id="logFilter">
+      <button class="chip-btn" data-f="all" aria-pressed="true">全部</button>
+      <button class="chip-btn" data-f="memo" aria-pressed="false">メモあり</button>
+      <button class="chip-btn" data-f="apo" aria-pressed="false">アポ・再架電</button>
+    </div>
+    <div class="card" id="logList"></div>
+    <p class="defs">記録を押すとメモを直せます。右の × は、その記録を消します（数からも引かれます）。</p>
+  </section>
+
+  <!-- カレンダー -->
+  <section id="v-cal" hidden>
+    <h1 class="screen">アポカレンダー <small class="sub-h"><span class="live"></span>全員の画面にすぐ反映</small></h1>
+    <div class="pickbar" id="pickBar" hidden>
+      <span><b>日切り中</b>　空いている枠を押すと、その日時が入ります</span>
+      <button id="pickCancel">やめる</button>
+    </div>
+    <div class="undated-box" id="undatedTeam" hidden></div>
+    <div class="wk-nav">
+      <button id="wkPrev" aria-label="前の週">◀</button>
+      <div class="wk-lbl"><b id="wkLbl"></b><small id="wkSub"></small></div>
+      <button id="wkNext" aria-label="次の週">▶</button>
+    </div>
+    <div class="chips cal-filter" id="calFilter"></div>
+    <div class="legend" id="legend"></div>
+    <div class="card cal-wrap"><div class="cal" id="cal"></div></div>
+    <p class="defs" id="calDefs"></p>
+  </section>
+
+  <!-- KPI -->
+  <section id="v-kpi" hidden>
+    <h1 class="screen">KPI</h1>
+    <div class="filters">
+      <div class="seg" id="period">
+        <button data-p="today" aria-pressed="true">今日</button>
+        <button data-p="yday" aria-pressed="false">昨日</button>
+        <button data-p="week" aria-pressed="false">今週</button>
+        <button data-p="month" aria-pressed="false">今月</button>
+        <button data-p="d30" aria-pressed="false">過去30日</button>
+        <button data-p="custom" aria-pressed="false">期間指定</button>
+      </div>
+      <div class="range" id="customRange" hidden>
+        <input type="date" id="from" aria-label="開始日"> 〜 <input type="date" id="to" aria-label="終了日">
+      </div>
+      <select class="member" id="member" aria-label="メンバー"></select>
+    </div>
+    <div class="tiles" id="tiles"></div>
+    <h2>メンバー別 <span class="aside">行を押すとその人だけ表示</span></h2>
+    <div class="card tbl-wrap"><table class="kpi" id="mtable"></table></div>
+    <h2 id="chartTitle">日別の架電数</h2>
+    <div class="card chart" id="chart"></div>
+    <h2>結果の内訳</h2>
+    <div class="card brk" id="brk"></div>
+    <p class="defs">アポ率＝アポ÷架電。接続率（オーナーと話せた率）＝（アポ＋オーナー断り＋NG）÷架電。前期比＝同じ日数だけさかのぼった期間との差。</p>
+  </section>
+
+  <!-- リマインド -->
+  <section id="v-remind" hidden>
+    <h1 class="screen">リマインド</h1>
+    <div class="chips" id="rmFilter">
+      <button class="chip-btn" data-f="me" aria-pressed="true">自分の分</button>
+      <button class="chip-btn" data-f="all" aria-pressed="false">チーム全員</button>
+    </div>
+    <div id="rmBody"></div>
+  </section>
+
+  <!-- 設定 -->
+  <section id="v-set" hidden>
+    <h1 class="screen">設定</h1>
+
+    <div id="adminBox" hidden>
+      <h2>承認待ち <span class="aside" id="pendCount"></span></h2>
+      <div class="card set" id="pendList"></div>
+      <h2>メンバー <span class="aside" id="memCount"></span></h2>
+      <div class="card set" id="memList"></div>
+      <h2>チームに入ってもらうリンク</h2>
+      <div class="card urlbox"><code id="appUrl"></code><button id="copyUrl">コピー</button></div>
+      <p class="defs">このリンクを送って、各自Googleでログイン → 名前を登録してもらいます。承認するまでは中身は見えません。</p>
+      <h2>結果の項目</h2>
+      <div class="card set"><div class="row"><div class="t">項目を編集<small id="itemsNote"></small></div><button class="chip-btn" id="editItems">編集</button></div></div>
+    </div>
+
+    <h2>自分のアカウント</h2>
+    <div class="card set">
+      <div class="row"><div class="t">名前<small id="myMail"></small></div><input type="text" id="myName" maxlength="12" aria-label="名前"><button class="chip-btn" id="saveName">保存</button></div>
+      <div class="row"><div class="t">クローザーもやる<small>オンにするとカレンダーの担当に出ます</small></div>
+        <label class="sw"><input type="checkbox" id="myCloser" aria-label="クローザーもやる"><span></span></label></div>
+    </div>
+
+    <h2>アプリの通知（どの画面を開いていても出る）</h2>
+    <div class="card set">
+      <div class="row"><div class="t">今日の予定まとめ<small>その日はじめてアプリを開いたときに、今日の再架電・アポを一覧で出す</small></div>
+        <label class="sw"><input type="checkbox" id="swMorning" checked aria-label="今日の予定まとめ"><span></span></label></div>
+      <div class="row"><div class="t">15分前の通知<small>画面の上に黄色で出す</small></div>
+        <label class="sw"><input type="checkbox" id="swBefore" checked aria-label="15分前の通知"><span></span></label></div>
+      <div class="row"><div class="t">ちょうどの時間の通知<small>画面の上に赤で出す。「かけた」でカウント画面へ</small></div>
+        <label class="sw"><input type="checkbox" id="swOnTime" checked aria-label="ちょうどの時間の通知"><span></span></label></div>
+      <div class="row"><div class="t">音を鳴らす<small>15分前はポーン2回、ちょうどは3回</small></div>
+        <label class="sw"><input type="checkbox" id="swSound" checked aria-label="音を鳴らす"><span></span></label></div>
+      <div class="row"><div class="t">ふるわせる<small>Androidのみ（iPhoneは音だけ）</small></div>
+        <label class="sw"><input type="checkbox" id="swVib" checked aria-label="ふるわせる"><span></span></label></div>
+    </div>
+    <div class="acts">
+      <button id="trySum">今日の予定を出す</button>
+      <button id="tryPre">15分前を試す</button>
+      <button id="tryNow">ちょうどを試す</button>
+    </div>
+    <p class="defs">通知の設定はこの機械ごとに保存されます。画面を閉じていた間に過ぎた通知は、次に開いたときに出ます。</p>
+
+    <h2>LINEグループへの日報</h2>
+    <div class="card set"><div class="row"><div class="t">準備中<small>費用の相談が終わったら付けます</small></div></div></div>
+
+    <button class="btn-plain danger" id="logout">ログアウト</button>
+  </section>
+</main>
+
+<nav class="tabs" aria-label="画面の切り替え">
+  <div class="in">
+    <button data-go="count" aria-current="page"><svg viewBox="0 0 24 24"><path d="M5 4v16M9 4v16M13 4v16M17 4v16M3 15l18-6"/></svg>カウント</button>
+    <button data-go="log"><svg viewBox="0 0 24 24"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/></svg>記録</button>
+    <button data-go="cal"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4M8 14h3v3H8z"/></svg>カレンダー</button>
+    <button data-go="kpi"><svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>KPI</button>
+    <button data-go="remind"><svg viewBox="0 0 24 24"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 8 3 8H3s3-1 3-8M10 20a2 2 0 0 0 4 0"/></svg>リマインド<span class="dot num" id="rmDot" hidden></span></button>
+    <button data-go="set"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>設定<span class="dot num" id="setDot" hidden></span></button>
+  </div>
+</nav>
+</div>
+
+<!-- メモのシート -->
+<div class="scrim" id="scrim" hidden></div>
+<div class="msheet" id="msheet" role="dialog" aria-modal="true" aria-labelledby="mTitle" hidden>
+  <div class="in">
+    <h3 id="mTitle"></h3>
+    <p class="hint" id="mHint"></p>
+    <div class="two">
+      <div class="fld"><label for="mShop">店名</label><input id="mShop" placeholder="例）ほぐし処 こもれび"></div>
+      <div class="fld"><label for="mTel">電話番号</label><input id="mTel" inputmode="tel" placeholder="例）075-000-0000"></div>
+    </div>
+    <div class="fld" id="mWhenBox">
+      <label for="mWhen" id="mWhenLbl">日時</label>
+      <input type="datetime-local" id="mWhen">
+      <div class="clash" id="mClash" hidden></div>
+      <div class="quick-lbl" id="mQuickLbl"></div>
+      <div class="quick" id="mQuick"></div>
+      <button type="button" class="btn-cal" id="mPick" hidden>カレンダーで空きを見て選ぶ</button>
+      <div class="fld" id="mCloserBox" hidden>
+        <label>クローザー（Zoom面談の担当）</label>
+        <div class="quick" id="mClosers"></div>
+      </div>
+    </div>
+    <div class="fld"><label for="mText">メモ</label><textarea id="mText" placeholder="話した相手、温度感、次に言うことなど"></textarea></div>
+    <label class="inline-sw" id="mRemindBox"><span class="sw"><input type="checkbox" id="mRemind" checked><span></span></span>15分前とちょうどの時間にアプリで通知</label>
+    <div class="foot">
+      <button id="mSkip">あとで</button>
+      <button class="primary" id="mSave">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- その日はじめて開いたときの「今日の予定」 -->
+<div class="scrim" id="dsScrim" hidden></div>
+<div class="daysum" id="daySum" role="dialog" aria-modal="true" aria-labelledby="dsTitle" hidden>
+  <div class="ds-head">
+    <h3 id="dsTitle"><span id="dsDate"></span> 今日の予定</h3>
+    <span class="num ds-count" id="dsCount"></span>
+  </div>
+  <p class="ds-note">再架電とアポ（自分の分）。時間の15分前と、ちょうどの時間にも通知します。</p>
+  <div id="dsList"></div>
+  <div class="ds-foot">
+    <button id="dsGo">リマインド画面へ</button>
+    <button id="dsOk" class="primary">確認した</button>
+  </div>
+</div>
+
+<!-- カレンダーのアポの詳細 -->
+<div class="scrim" id="adScrim" hidden></div>
+<div class="daysum" id="apoDetail" role="dialog" aria-modal="true" aria-labelledby="adTitle" hidden>
+  <div class="ds-head"><h3 id="adTitle"></h3></div>
+  <div id="adBody"></div>
+  <div class="ds-foot"><button id="adNew">この時間にアポを追加</button><button id="adClose" class="primary">閉じる</button></div>
+</div>
+
+<!-- アプリ内リマインド -->
+<div class="alert" id="alertBar" role="alert" hidden>
+  <div class="in">
+    <div class="al-top"><span class="al-bell" aria-hidden="true">●</span><span id="alTag"></span><span class="al-time num" id="alTime"></span></div>
+    <div class="al-shop" id="alShop"></div>
+    <div class="al-memo" id="alMemo"></div>
+    <div class="al-btns">
+      <button id="alDone" class="primary">かけた</button>
+      <button id="alOpen" class="primary">メモを見る</button>
+      <button id="alSnooze">5分後</button>
+      <button id="alClose">閉じる</button>
+    </div>
+  </div>
+</div>
+
+<!-- 項目の編集（管理者） -->
+<div class="itemsheet" id="itemSheet" hidden>
+  <div class="in">
+    <h3>結果の項目を編集</h3>
+    <p class="defs">全員の画面に反映されます。名前を変えると、それまでの記録は古い名前のまま集計されます。</p>
+    <div class="items" id="itemList"></div>
+    <button class="add-item" id="addItem">＋ 項目を追加</button>
+  </div>
+  <div class="bar"><div class="in2"><button id="itemCancel">やめる</button><button class="primary" id="itemSave">保存</button></div></div>
+</div>
+
+<div class="offline" id="offline" hidden>オフライン中：つながったら送ります</div>
+<div class="toast" id="toast"></div>
+
+<script type="module" src="./app.js"></script>
+</body>
+</html>
