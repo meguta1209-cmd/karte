@@ -517,9 +517,27 @@ function freeSlots(from, n) {
 }
 const monday = d => addDays(dayStart(d), -((d.getDay() + 6) % 7));
 let wkStart = monday(new Date()), pickMode = false, pickReturn = "count", calCloser = "all";
-$("wkPrev").onclick = () => { wkStart = addDays(wkStart, -7); loadPastWeek(); renderCal(); };
-$("wkNext").onclick = () => { wkStart = addDays(wkStart, 7); renderCal(); };
+/* 表示：週（月〜土）か日（クローザーごとの列）。スマホは日、PCは週から始める。選んだ方を覚える */
+let calView = lsGet("team-calview", innerWidth < 640 ? "day" : "week");
+let calDay = today(); if (calDay.getDay() === 0) calDay = addDays(calDay, 1);
+const skipSun = (d, step) => { let x = addDays(d, step); if (x.getDay() === 0) x = addDays(x, step); return x; };
+$("wkPrev").onclick = () => {
+  if (calView === "day") { calDay = skipSun(calDay, -1); wkStart = monday(calDay); } else wkStart = addDays(wkStart, -7);
+  loadPastWeek(); renderCal();
+};
+$("wkNext").onclick = () => {
+  if (calView === "day") { calDay = skipSun(calDay, 1); wkStart = monday(calDay); } else wkStart = addDays(wkStart, 7);
+  renderCal();
+};
 $("calFilter").onclick = e => { const b = e.target.closest("button"); if (!b) return; calCloser = b.dataset.c; renderCal(); };
+$("calView").onclick = e => {
+  const b = e.target.closest("button"); if (!b) return;
+  calView = b.dataset.v; lsSet("team-calview", calView);
+  if (calView === "day") { calDay = wkStart <= today() && today() < addDays(wkStart, 7) ? today() : new Date(wkStart); if (calDay.getDay() === 0) calDay = addDays(calDay, 1); }
+  else wkStart = monday(calDay);
+  renderCal();
+};
+$("calToday").onclick = () => { calDay = today(); if (calDay.getDay() === 0) calDay = addDays(calDay, 1); wkStart = monday(calDay); renderCal(); };
 async function loadPastWeek() {
   if (wkStart >= addDays(today(), -7)) return;
   try {
@@ -528,58 +546,112 @@ async function loadPastWeek() {
     renderCal();
   } catch (_) {}
 }
+/* 今の時刻の赤い線（今日の、今の30分の枠にだけ入れる） */
+function nowLine(d, now) {
+  if (now < d || now >= new Date(d.getTime() + 18e5)) return "";
+  return `<i class="nowline" style="top:${((now - d) / 18e5 * 100).toFixed(1)}%"></i>`;
+}
+function timeCell(h, mi) {
+  return mi ? `<div class="tm half"><span>${h}:30</span></div>` : `<div class="tm"><span>${h}:00</span></div>`;
+}
 function renderCal() {
-  const days = [0, 1, 2, 3, 4, 5].map(i => addDays(wkStart, i)), now = new Date(), T = today();
-  const cls = closerList();
+  const now = new Date(), T = today(), cls = closerList();
   if (calCloser !== "all" && !cls.some(c => c.id === calCloser)) calCloser = "all";
-  $("wkLbl").textContent = md(days[0]) + " 〜 " + md(days[5]);
-  const wOff = Math.round((wkStart - monday(now)) / (7 * 864e5));
-  const byC = s => calCloser === "all" || s.closer === calCloser;
-  const inWeek = allSlots().filter(s => s.day >= dk(days[0]) && s.day <= dk(days[5]) && byC(s));
-  let free = 0;
-  $("calFilter").innerHTML = [{id: "all", name: "クローザー全員"}, ...cls].map(c =>
-    `<button class="chip-btn" data-c="${c.id}" aria-pressed="${calCloser === c.id}">${c.id !== "all" ? `<i class="dot-c" style="background:${c.color}"></i>` : ""}${esc(c.name)}</button>`).join("");
-  $("legend").innerHTML = `<span>色＝クローザー</span>` + cls.map(c => `<span><i style="background:${c.color}"></i>${esc(c.name)}</span>`).join("") +
-    `<span><i style="background:transparent;outline:2px solid #FFD54F;outline-offset:-2px"></i>自分が取ったアポ</span>`;
+  $("calView").querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", b.dataset.v === calView));
   const cal = $("cal"); cal.innerHTML = "";
-  cal.insertAdjacentHTML("beforeend", `<div class="hd"></div>` + days.map(d => `<div class="hd${+d === +T ? " today" : ""}">${WD[d.getDay()]}<small>${d.getMonth() + 1}/${d.getDate()}</small></div>`).join(""));
-  for (let h = SLOT_H0; h < SLOT_H1; h++) for (const mi of [0, 30]) {
-    cal.insertAdjacentHTML("beforeend", `<div class="tm${mi ? " half" : ""}">${h}:${pad(mi)}</div>`);
-    days.forEach(day => {
+  cal.className = "cal " + calView;
+  let free = 0, count = 0;
+
+  if (calView === "day") {
+    /* ---- 日表示：列＝クローザー ---- */
+    const day = calDay;
+    const off = Math.round((dayStart(day) - T) / 864e5);
+    $("wkLbl").textContent = md(day);
+    $("calFilter").hidden = true;
+    $("legend").innerHTML = `<span><i style="background:transparent;outline:2px solid #FFD54F;outline-offset:-2px"></i>自分が取ったアポ</span><span>列＝クローザー（1人1枠）</span>`;
+    cal.style.gridTemplateColumns = `50px repeat(${cls.length}, minmax(92px, 1fr))`;
+    cal.insertAdjacentHTML("beforeend", `<div class="hd corner"></div>` + cls.map(c => {
+      let f = 0;
+      for (let h = SLOT_H0; h < SLOT_H1; h++) for (const mi of [0, 30]) { const d = new Date(day); d.setHours(h, mi, 0, 0); if (d >= now && !closerBusy(d, c.id, null)) f++; }
+      return `<div class="hd cl"><span><i class="dot-c" style="background:${c.color}"></i>${esc(c.name)}</span><small>空き ${f}枠</small></div>`;
+    }).join(""));
+    for (let h = SLOT_H0; h < SLOT_H1; h++) for (const mi of [0, 30]) {
+      cal.insertAdjacentHTML("beforeend", timeCell(h, mi));
       const d = new Date(day); d.setHours(h, mi, 0, 0);
-      const list = slotsAt(d, null).filter(byC).sort((a, b) => a.closer < b.closer ? -1 : 1);
-      const past = d < now, full = !slotOpen(d, null, calCloser);
-      if (!past && !full) free++;
-      const b = document.createElement("button");
-      b.className = "sl" + (mi ? " half" : "") + (past ? " past" : full ? " full" : " free") + (+day === +T ? " today" : "");
-      b.setAttribute("aria-label", md(d) + " " + hm(d) + (list.length ? " アポ" + list.length + "件" : past ? " 過ぎた枠" : " 空き"));
-      b.innerHTML = list.map(s => `<span class="ap${s.uid === U ? " mine" : ""}" style="background:${CCOL(s.closer)}"><b>${esc(CNAME(s.closer)[0])}</b><span>${esc(s.shop || "")}</span></span>`).join("");
-      b.onclick = () => slotTap(d, list, past, full);
-      cal.appendChild(b);
-    });
+      const at = slotsAt(d, null);
+      cls.forEach(c => {
+        const list = at.filter(s => s.closer === c.id), past = d < now, full = list.length > 0;
+        if (!past && !full) free++;
+        count += list.length;
+        const b = document.createElement("button");
+        b.className = "sl" + (mi ? " half" : "") + (past ? " past" : full ? " full" : " free");
+        b.setAttribute("aria-label", c.name + " " + hm(d) + (full ? " アポあり" : past ? " 過ぎた枠" : " 空き"));
+        b.innerHTML = list.map(s => `<span class="apd${s.uid === U ? " mine" : ""}" style="--cc:${c.color}"><b>${esc(s.shop || "（店名なし）")}</b><small>獲得 ${esc(nameOf(s.uid))}</small></span>`).join("") +
+          (!past && !full ? `<span class="free-mark">${hm(d)}</span>` : "") + (+dayStart(d) === +T ? nowLine(d, now) : "");
+        b.onclick = () => slotTap(d, list, past, full, c.id);
+        cal.appendChild(b);
+      });
+    }
+    $("wkSub").textContent = (off === 0 ? "今日" : off === 1 ? "明日" : off === -1 ? "昨日" : "") + "　アポ " + count + "件 ・ 空き " + free + "枠";
+    $("calToday").hidden = off === 0;
+    $("calDefs").textContent = "空いている枠を押すと、そのクローザーでアポを登録できます。アポを押すと詳細が出ます。1枠30分。";
+  } else {
+    /* ---- 週表示：月〜土 ---- */
+    const days = [0, 1, 2, 3, 4, 5].map(i => addDays(wkStart, i));
+    $("wkLbl").textContent = md(days[0]) + " 〜 " + md(days[5]);
+    const wOff = Math.round((wkStart - monday(now)) / (7 * 864e5));
+    const byC = s => calCloser === "all" || s.closer === calCloser;
+    $("calFilter").hidden = false;
+    $("calFilter").innerHTML = [{id: "all", name: "クローザー全員"}, ...cls].map(c =>
+      `<button class="chip-btn" data-c="${c.id}" aria-pressed="${calCloser === c.id}">${c.id !== "all" ? `<i class="dot-c" style="background:${c.color}"></i>` : ""}${esc(c.name)}</button>`).join("");
+    $("legend").innerHTML = `<span>色＝クローザー</span>` + cls.map(c => `<span><i style="background:${c.color}"></i>${esc(c.name)}</span>`).join("") +
+      `<span><i style="background:transparent;outline:2px solid #FFD54F;outline-offset:-2px"></i>自分が取ったアポ</span>`;
+    cal.style.gridTemplateColumns = "";
+    cal.insertAdjacentHTML("beforeend", `<div class="hd corner"></div>` + days.map(d =>
+      `<div class="hd${+d === +T ? " today" : ""}${d.getDay() === 6 ? " sat" : ""}">${WD[d.getDay()]}<small>${d.getMonth() + 1}/${d.getDate()}</small></div>`).join(""));
+    for (let h = SLOT_H0; h < SLOT_H1; h++) for (const mi of [0, 30]) {
+      cal.insertAdjacentHTML("beforeend", timeCell(h, mi));
+      days.forEach(day => {
+        const d = new Date(day); d.setHours(h, mi, 0, 0);
+        const list = slotsAt(d, null).filter(byC).sort((a, b) => a.closer < b.closer ? -1 : 1);
+        const past = d < now, full = !slotOpen(d, null, calCloser);
+        if (!past && !full) free++;
+        count += list.length;
+        const b = document.createElement("button");
+        b.className = "sl" + (mi ? " half" : "") + (past ? " past" : full ? " full" : " free") + (+day === +T ? " today" : "");
+        b.setAttribute("aria-label", md(d) + " " + hm(d) + (list.length ? " アポ" + list.length + "件" : past ? " 過ぎた枠" : " 空き"));
+        b.innerHTML = list.map(s => `<span class="ap${s.uid === U ? " mine" : ""}" style="background:${CCOL(s.closer)}"><b>${esc(CNAME(s.closer)[0])}</b><span>${esc(s.shop || "")}</span></span>`).join("") +
+          (+day === +T ? nowLine(d, now) : "");
+        b.onclick = () => slotTap(d, list, past, full);
+        cal.appendChild(b);
+      });
+    }
+    $("wkSub").textContent = (wOff === 0 ? "今週" : wOff === 1 ? "来週" : wOff === -1 ? "先週" : "") + "　アポ " + count + "件 ・ 空き " + free + "枠";
+    $("calToday").hidden = wOff === 0;
+    $("calDefs").textContent = "枠を押すと、アポの詳細を見るか、空いていればその枠でアポを登録できます。1枠30分。クローザー1人につき同じ時間は1件まで" +
+      (calCloser === "all" ? "で、全員埋まった時間だけ「埋まり」になります。" : "。今は" + CNAME(calCloser) + "さんの予定だけ表示しています。");
   }
-  $("wkSub").textContent = (wOff === 0 ? "今週" : wOff === 1 ? "来週" : wOff === -1 ? "先週" : "") + "　アポ " + inWeek.length + "件 ・ 空き " + free + "枠";
-  $("calDefs").textContent = "枠を押すと、アポの詳細を見るか、空いていればその枠でアポを登録できます。1枠30分。クローザー1人につき同じ時間は1件まで" +
-    (calCloser === "all" ? "で、全員埋まった時間だけ「埋まり」になります。" : "。今は" + CNAME(calCloser) + "さんの予定だけ表示しています。");
   document.body.classList.toggle("picking", pickMode);
   $("pickBar").hidden = !pickMode;
   renderUndated();
   if (pickMode) $("undatedTeam").hidden = true;
 }
-function slotTap(d, list, past, full) {
+/* closerId：日表示の列から押したときだけ入る（その人で決まる） */
+function slotTap(d, list, past, full, closerId) {
   if (pickMode) {
     if (past) { toast("過ぎた時間は選べません"); return; }
     if (full) { toast("この枠は埋まっています"); return; }
-    if (calCloser !== "all") selCloser = calCloser;
+    if (closerId) selCloser = closerId; else if (calCloser !== "all") selCloser = calCloser;
     $("mWhen").value = toLocal(d); finishPick(); setQuick("アポ"); checkClash(); return;
   }
   if (list.length) { showApoDetail(d, list, past); return; }
   if (past) return;
-  newApoAt(d);
+  newApoAt(d, closerId);
 }
-function newApoAt(d) {
+function newApoAt(d, closerId) {
   const ref = doc(collection(db, "records"));
-  openMemo({id: ref.id, uid: U, t: new Date(), r: "アポ", memo: {when: new Date(d), remind: true, closer: calCloser === "all" ? undefined : calCloser}, draft: true});
+  const c = closerId || (calCloser === "all" ? undefined : calCloser);
+  openMemo({id: ref.id, uid: U, t: new Date(), r: "アポ", memo: {when: new Date(d), remind: true, closer: c}, draft: true});
 }
 let adSlot = null;
 function showApoDetail(d, list, past) {
@@ -601,7 +673,7 @@ $("mPick").onclick = () => {
   pickMode = true; pickReturn = curTab;
   $("scrim").hidden = $("msheet").hidden = true;
   const w = $("mWhen").value ? new Date($("mWhen").value) : new Date();
-  wkStart = monday(w);
+  wkStart = monday(w); calDay = dayStart(w); if (calDay.getDay() === 0) calDay = addDays(calDay, 1);
   calCloser = selCloser === "auto" ? "all" : selCloser;
   showTab("cal");
 };
