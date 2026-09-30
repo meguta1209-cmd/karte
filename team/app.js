@@ -122,8 +122,17 @@ function recOf(snap) {
 const GATES = ["gLoading", "gLogin", "gRegister", "gPending", "gRemoved"];
 function gate(id) { GATES.forEach(g => $(g).hidden = g !== id); $("app").hidden = true; }
 
+/* アプリの中のブラウザ（LINE・インスタ・Facebook など）ではログインできないので、先に案内を出す */
+const IN_APP = /\bLine\/|Instagram|FBAN|FBAV|FB_IAB|Twitter|TikTok|; wv\)/i.test(navigator.userAgent || "");
+const APP_URL = location.origin + location.pathname;
+if (IN_APP) $("inApp").hidden = false;
+$("copyLink").onclick = async () => {
+  try { await navigator.clipboard.writeText(APP_URL); toast("リンクをコピーしました。Safari／Chromeに貼り付けてください"); }
+  catch (_) { prompt("このリンクをコピーしてください", APP_URL); }
+};
 $("btnLogin").onclick = async () => {
   $("loginErr").hidden = true;
+  if (IN_APP) { toast("SafariかChromeで開いてからログインしてください"); return; }
   try { await signInWithPopup(auth, new GoogleAuthProvider()); }
   catch (e) {
     $("loginErr").hidden = false;
@@ -987,9 +996,9 @@ $("saveName").onclick = () => {
   updateDoc(doc(db, "members", U), {name: n}).then(() => toast("名前を保存しました")).catch(e => toast(errMsg(e)));
 };
 $("myCloser").onchange = () => updateDoc(doc(db, "members", U), {closer: $("myCloser").checked}).then(() => toast($("myCloser").checked ? "クローザーに入りました" : "クローザーから外れました")).catch(e => toast(errMsg(e)));
-$("appUrl").textContent = location.origin + location.pathname;
+$("appUrl").textContent = APP_URL + "?openExternalBrowser=1";
 $("copyUrl").onclick = async () => {
-  try { await navigator.clipboard.writeText(location.origin + location.pathname); toast("リンクをコピーしました"); }
+  try { await navigator.clipboard.writeText(APP_URL + "?openExternalBrowser=1"); toast("リンクをコピーしました"); }
   catch (_) { const r = document.createRange(); r.selectNodeContents($("appUrl")); const s = getSelection(); s.removeAllRanges(); s.addRange(r); toast("選択しました。コピーしてください"); }
 };
 function renderAdmin() {

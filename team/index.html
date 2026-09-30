@@ -19,6 +19,16 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=BIZ+UDPGothic:wght@400;700&family=Roboto+Mono:wght@500;700&display=swap">
 <link rel="stylesheet" href="./style.css">
+<script>
+/* LINEの中のブラウザではGoogleログインが通らない（途中の情報を覚えておけない）。
+   LINEは ?openExternalBrowser=1 を付けると Safari / Chrome で開き直してくれるので、自動で付け直す */
+(function () {
+  var ua = navigator.userAgent || "";
+  if (/\bLine\//i.test(ua) && !/[?&]openExternalBrowser=1/.test(location.search)) {
+    location.replace(location.pathname + (location.search ? location.search + "&" : "?") + "openExternalBrowser=1" + location.hash);
+  }
+})();
+</script>
 </head>
 <body>
 
@@ -30,6 +40,11 @@
     <div class="logo">正</div>
     <h2>結果カウンター</h2>
     <p>チームで数えて、アポのカレンダーを共有</p>
+    <div class="inapp" id="inApp" hidden>
+      <b>SafariかChromeで開いてください</b>
+      <p>アプリの中のブラウザ（LINE・インスタなど）では、Googleのログインができません。右上や右下の「︙」「共有」から「ブラウザで開く」を選ぶか、リンクをコピーしてSafari／Chromeに貼り付けてください。</p>
+      <button id="copyLink">リンクをコピー</button>
+    </div>
     <button class="g" id="btnLogin"><span class="gg">G</span>Googleアカウントでログイン</button>
     <p class="err" id="loginErr" hidden></p>
     <p style="font-size:12px;color:var(--ink3)">初めての人は、ログインのあとに名前を登録して、管理者の承認を待ちます。</p>

@@ -496,3 +496,8 @@ img{max-width:100%;}
 .nowline::before{content:""; position:absolute; left:-4px; top:-3px; width:8px; height:8px; border-radius:50%; background:#D93025;}
 .cal.day .nowline::before{display:none;}
 .cal.day{min-width:0;}
+/* アプリ内ブラウザの案内 */
+.inapp{background:var(--warn-soft); border:1.5px solid #E0B43A; border-radius:10px; padding:12px; text-align:left; color:var(--ink);}
+.inapp b{color:var(--warn); font-size:15px;}
+.inapp p{margin:6px 0 10px; font-size:13px; color:var(--ink);}
+.inapp button{width:100%; min-height:42px; border-radius:8px; border:0; background:var(--blue); color:var(--on-blue); font-weight:700;}
