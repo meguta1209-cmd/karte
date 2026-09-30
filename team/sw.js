@@ -8,7 +8,7 @@
    - キャッシュ削除は "team-" で始まるものだけ。caches.keys() は
      オリジン全体を返すので、無条件に消すと訪販カルテのキャッシュまで消える。
 */
-const CACHE = "team-v1";
+const CACHE = "team-v2";
 const ASSETS = [
   "./",
   "./index.html",

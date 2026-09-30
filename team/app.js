@@ -82,6 +82,15 @@ let COL = {};
 let myToday = [];        // 自分の今日の記録
 let pendMine = [], pendTeam = [], undated = [], slots = [];
 let unsubs = [];
+/* 購読が断られたら黙って止まらず、数秒おいて張り直す（名簿の確定直後などに起こりうる） */
+let retrying = false;
+const onErr = what => e => {
+  console.error(what, e);
+  if (retrying || !U) return;
+  retrying = true;
+  toast(what + "の読み込みをやり直しています…");
+  setTimeout(() => { retrying = false; if (!U || !me || me.status !== "active") return; stopAll(); startApp(); }, 3000);
+};
 let started = false;
 
 const nameOf = uid => (members[uid] && members[uid].name) || "（退出した人）";
@@ -130,7 +139,7 @@ onAuthStateChanged(auth, u => {
   if (!u) { stopAll(); U = null; gate("gLogin"); return; }
   U = u.uid;
   gate("gLoading");
-  meUnsub = onSnapshot(doc(db, "members", u.uid), async snap => {
+  meUnsub = onSnapshot(doc(db, "members", u.uid), {includeMetadataChanges: true}, async snap => {
     if (!snap.exists()) {
       if ((u.email || "").toLowerCase() === ADMIN_EMAIL) {     // 管理者は最初から有効
         await setDoc(doc(db, "members", u.uid), {name: "竹内", email: u.email, closer: false, status: "active", role: "admin", createdAt: serverTimestamp()});
@@ -140,6 +149,8 @@ onAuthStateChanged(auth, u => {
       if (!$("regName").value) $("regName").value = (u.displayName || "").split(/\s/)[0].slice(0, 12);
       gate("gRegister"); return;
     }
+    /* 自分の名簿がまだサーバーで確定していない間は始めない（確定前だと読み込みを断られる） */
+    if (snap.metadata.hasPendingWrites) return;
     me = snap.data();
     if (me.status === "pending") { $("pendName").textContent = me.name; stopAll(); gate("gPending"); return; }
     if (me.status !== "active") { stopAll(); gate("gRemoved"); return; }
@@ -171,23 +182,23 @@ function startApp() {
   unsubs.push(onSnapshot(collection(db, "members"), s => {
     members = {}; s.forEach(d => members[d.id] = d.data());
     renderMe(); renderAdmin(); renderCount(); if (curTab === "cal") renderCal(); renderUndated();
-  }));
+  }, onErr("メンバー")));
   unsubs.push(onSnapshot(doc(db, "config", "items"), s => {
     const list = s.exists() && Array.isArray(s.data().list) && s.data().list.length ? s.data().list : DEFAULT_ITEMS;
     ITEMS = list; COL = Object.fromEntries(ITEMS.map(i => [i.k, i]));
     buildGrid(); renderCount();
-  }));
+  }, onErr("項目")));
   subscribeToday();
   unsubs.push(onSnapshot(query(recs, where("uid", "==", U), where("pending", "==", true)), s => {
     pendMine = s.docs.map(recOf); renderAfterPending();
     maybeDaySum(); cleanupOldApos();
-  }));
-  unsubs.push(onSnapshot(query(recs, where("pending", "==", true)), s => { pendTeam = s.docs.map(recOf); if (curTab === "remind") renderRemind(); }));
-  unsubs.push(onSnapshot(query(recs, where("undated", "==", true)), s => { undated = s.docs.map(recOf).sort((a, b) => a.t - b.t); renderUndated(); }));
+  }, onErr("予定")));
+  unsubs.push(onSnapshot(query(recs, where("pending", "==", true)), s => { pendTeam = s.docs.map(recOf); if (curTab === "remind") renderRemind(); }, onErr("チームの予定")));
+  unsubs.push(onSnapshot(query(recs, where("undated", "==", true)), s => { undated = s.docs.map(recOf).sort((a, b) => a.t - b.t); renderUndated(); }, onErr("日時未定のアポ")));
   unsubs.push(onSnapshot(query(collection(db, "slots"), where("day", ">=", dk(addDays(today(), -7)))), s => {
     slots = s.docs.map(d => ({id: d.id, ...d.data(), when: tsd(d.data().when)}));
     if (curTab === "cal") renderCal(); if (!$("msheet").hidden) checkClash();
-  }));
+  }, onErr("カレンダー")));
   pollTeam(); teamTimer = setInterval(() => { if (document.visibilityState === "visible") pollTeam(); }, 30000);
   notifTimer = setInterval(checkNotifs, 15000);
   showTab(curTab);
@@ -197,7 +208,7 @@ function subscribeToday() {
   const f = onSnapshot(query(collection(db, "records"), where("uid", "==", U), where("day", "==", listenDay)), s => {
     myToday = s.docs.map(recOf).sort((a, b) => a.t - b.t);
     renderCount(); if (curTab === "log") renderLog();
-  });
+  }, onErr("今日の記録"));
   unsubs.push(f); todayUnsub = f;
 }
 let todayUnsub = null, teamTimer = null, notifTimer = null;
@@ -435,6 +446,10 @@ $("mSave").onclick = async () => {
     if (rec.r === "アポ" && w) {
       if (!isSlotTime(w)) { toast("アポの枠の外です（10:00〜19:00・30分ごと・日曜休み）"); return; }
       const cl = await bookSlot(rec, m, w, remind);
+      /* サーバーからの通知を待たずに、自分のカレンダーへすぐ出す */
+      const sid = slotIdOf(w, cl);
+      slots = slots.filter(s => s.recId !== rec.id && s.id !== sid).concat([{id: sid, day: dk(w), time: hm(w), when: w, closer: cl, uid: U, recId: rec.id, shop: m.shop, tel: m.tel, text: m.text}]);
+      if (curTab === "cal") renderCal();
       closeMemo();
       toast((rec.draft ? "アポを登録しました（アポ+1）" : "保存しました。" + md(w) + " " + hm(w)) + "（クローザー " + CNAME(cl) + "）");
     } else if (rec.r === "アポ") {
