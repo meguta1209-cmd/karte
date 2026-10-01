@@ -703,3 +703,11 @@ img{max-width:100%;}
   .tiles{grid-template-columns:repeat(4,1fr);}
   .chart svg{max-height:280px;}
 }
+/* ===== 2回目の見直し（2026-10-02） ===== */
+/* 小さい画面（ダイアログ）でも、下のボタン（閉じる・確認した など）は常に見える位置に */
+.daysum .ds-foot{position:sticky; bottom:-16px; z-index:2; margin:12px -16px -16px; padding:10px 16px 16px; background:var(--card); border-top:1px solid var(--rule);}
+/* トーストのボタンは区切って、別々のボタンに見えるように */
+.toast button{border:1px solid rgba(156,195,240,.55); border-radius:999px; padding:2px 10px; margin-left:8px;}
+.toast button:hover{background:rgba(156,195,240,.15);}
+/* 押し間違いの取り消し（押した直後のシートだけ） */
+.m-undo{align-self:flex-end; margin-top:-6px; border:0; background:none; color:var(--red); font-size:12.5px; font-weight:700; text-decoration:underline; padding:2px 0;}

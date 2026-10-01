@@ -349,18 +349,27 @@ function addResult(k, btn) {
   b.commit().catch(e => toast(errMsg(e)));
   if (btn) { btn.classList.remove("pop"); void btn.offsetWidth; btn.classList.add("pop"); }
   if (navigator.vibrate) navigator.vibrate(15);
-  const rec = {...data, id: ref.id, t};
+  const rec = {...data, id: ref.id, t, fresh: true};   // fresh＝押した直後に開いたシート（押し間違いを取り消せる）
   if (k === "アポ" || k === "再架電") openMemo(rec);
   else toast(k + " +1",
-    "取り消す", () => deleteRec(myToday.find(r => r.id === rec.id) || rec).then(() => toast("「" + k + "」を取り消しました")).catch(e => toast(errMsg(e))),
+    "取り消す", () => undoRec(rec, k),
     "メモを付ける", () => openMemo(myToday.find(r => r.id === rec.id) || rec));
 }
+/* 消した記録の番号を覚えておく（「ひとつ戻す」のあとにトーストの「取り消す」を押したなど、
+   同じ記録を二度消して集計だけ二重に引かないように） */
+const deletedIds = new Set();
+function undoRec(rec, k) {
+  if (deletedIds.has(rec.id)) { toast("もう取り消されています"); return; }
+  deleteRec(myToday.find(r => r.id === rec.id) || rec).then(() => toast("「" + k + "」を取り消しました")).catch(e => toast(errMsg(e)));
+}
 function deleteRec(rec) {
+  if (deletedIds.has(rec.id)) return Promise.resolve();
+  deletedIds.add(rec.id);
   const b = writeBatch(db);
   b.delete(doc(db, "records", rec.id));
   b.set(doc(db, "stats", rec.day), statInc(rec.uid, rec.r, rec.hour, -1, rec.mb), {merge: true});
   if (rec.slotId) b.delete(doc(db, "slots", rec.slotId));
-  return b.commit();
+  return b.commit().catch(e => { deletedIds.delete(rec.id); throw e; });   // 失敗したら、もう一度消せるように
 }
 $("undo").onclick = () => {
   const last = myToday[myToday.length - 1]; if (!last) return;
@@ -554,6 +563,7 @@ function openMemo(rec) {
   ["mShop", "mTel", "mText", "mWhen", "mInfo"].forEach(id => $(id).readOnly = !mine);
   $("mPaste").hidden = !mine;
   $("mSave").hidden = !mine; $("mSkip").textContent = mine ? "あとで" : "閉じる";
+  $("mUndo").hidden = !(rec.fresh && mine && !rec.draft && rec.src !== "old");
   checkClash();
   $("scrim").hidden = $("msheet").hidden = false;
   memoSnap = sheetSnap("msheet") + selCloser; delete $("msheet").dataset.armClose;
@@ -702,9 +712,28 @@ $("tDelete").onclick = () => {
 document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("taskSheet").hidden) tryCloseTask(); });
 
 function closeMemo() { refreshHistSoon(); $("scrim").hidden = $("msheet").hidden = true; editing = null; }
+/* 押し間違い：結果ボタンを押した直後に開いたシートから、その記録を取り消す */
+$("mUndo").onclick = () => { const r = editing; if (!r) return; closeMemo(); undoRec(r, r.r); };
+/* 「あとで」：日時と枠はそのままにして、入れた店名・電話・メモ（アポはカレンダーの説明も）は残す。
+   カレンダーから開いた新しいアポ（draft、まだ記録が無い）は何も作らずに閉じる */
 $("mSkip").onclick = () => {
-  const r = editing; closeMemo();
-  if (r && r.uid === U && !r.draft && r.src !== "old" && r.r === "アポ" && !(r.memo && r.memo.when)) toast("日時未定のアポとして残しました");
+  const r = editing, changed = memoChanged();
+  const shop = $("mShop").value.trim(), tel = $("mTel").value.trim(), text = $("mText").value.trim(), info = $("mInfo").value.trim();
+  closeMemo();
+  if (!r || r.uid !== U || r.draft) return;
+  const undatedApo = r.r === "アポ" && !(r.memo && r.memo.when) && r.src !== "old";
+  if (!changed) { if (undatedApo) toast("日時未定のアポとして残しました"); return; }
+  const m = {...(r.memo || {}), shop, tel, text};
+  if (r.r === "アポ") m.info = info;
+  if (m.when instanceof Date) m.when = Timestamp.fromDate(m.when);
+  Object.keys(m).forEach(k => { if (m[k] === undefined) delete m[k]; });
+  const empty = !shop && !tel && !text && !m.info && !m.when && r.r !== "アポ" && r.r !== "再架電";
+  const b = writeBatch(db);
+  b.update(doc(db, "records", r.id), {memo: empty ? null : m});
+  if (r.slotId) b.update(doc(db, "slots", r.slotId), {shop, tel, text, info});   // カレンダーの予定の中身も合わせる（日時はそのまま）
+  b.commit().catch(e => toast(errMsg(e)));
+  toast(r.r === "アポ" ? (undatedApo ? "店名などを保存しました。日時は未定のままです" : "店名などを保存しました（日時はそのまま）")
+    : r.r === "再架電" && !(r.memo && r.memo.when) ? "メモを保存しました。日時はまだ入っていません" : "メモを保存しました");
 };
 const tryCloseMemo = () => guardClose("msheet", memoChanged(), closeMemo, "mSave");
 $("scrim").onclick = tryCloseMemo;
