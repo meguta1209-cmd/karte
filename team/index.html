@@ -18,7 +18,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=BIZ+UDPGothic:wght@400;700&family=Roboto+Mono:wght@500;700&display=swap">
-<link rel="stylesheet" href="./style.css?v=20">
+<link rel="stylesheet" href="./style.css?v=21">
 <script>
 /* LINEの中のブラウザではGoogleログインが通らない（途中の情報を覚えておけない）。
    LINEは ?openExternalBrowser=1 を付けると Safari / Chrome で開き直してくれるので、自動で付け直す */
@@ -199,7 +199,7 @@
     <div class="card chart" id="chart"></div>
     <h2>結果の内訳</h2>
     <div class="card brk" id="brk"></div>
-    <p class="defs">アポ率＝アポ÷架電。接続率（オーナーと話せた率）＝（アポ＋オーナー断り＋NG）÷架電。1時間あたり＝架電÷稼働時間。稼働時間＝電話をかけた10分の枠の合計（休憩など、かけていない時間は入らない。10分の枠の情報が無い古い記録は、かけた時間帯を1時間として数える）。前期比＝同じ日数だけさかのぼった期間との差。</p>
+    <p class="defs">対応数（電話に出てもらった数）＝架電から「留守」「繋がらない」「使われてない」を引いた数。対応率＝対応数÷架電。アポ率＝アポ÷架電。接続率（オーナーと話せた率）＝（アポ＋オーナー断り＋NG）÷架電。1時間あたり＝架電÷稼働時間。稼働時間＝電話をかけた10分の枠の合計（休憩など、かけていない時間は入らない。10分の枠の情報が無い古い記録は、かけた時間帯を1時間として数える）。前期比＝同じ日数だけさかのぼった期間との差。</p>
   </section>
 
   <!-- リマインド -->
@@ -464,6 +464,6 @@
 <div class="offline" id="offline" hidden>オフライン中：つながったら送ります</div>
 <div class="toast" id="toast"></div>
 
-<script type="module" src="./app.js?v=20"></script>
+<script type="module" src="./app.js?v=21"></script>
 </body>
 </html>

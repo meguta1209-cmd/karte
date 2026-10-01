@@ -1334,6 +1334,7 @@ function activeMin(dayDoc, uid) {
   });
   return min;
 }
+const NO_ANSWER = ["留守", "繋がらない", "使われてない", "使われていない"];   // 電話に出てもらえなかった結果
 function sumStats(data, who) {
   const c = {}; let n = 0, mins = 0;
   Object.values(data).forEach(day => Object.entries(day.c || {}).forEach(([uid, m]) => {
@@ -1344,7 +1345,9 @@ function sumStats(data, who) {
   /* 接続＝アポ＋オーナー断り＋NG（項目名を「NG（業者系）」のように変えても数える） */
   const isNG = k => k === "NG" || k.startsWith("NG（") || k.startsWith("NG(");
   const apo = c["アポ"] || 0, conn = apo + (c["オーナー断り"] || 0) + Object.keys(c).filter(isNG).reduce((a, k) => a + c[k], 0);
-  return {n, apo, c, apoRate: n ? apo / n * 100 : 0, connRate: n ? conn / n * 100 : 0,
+  /* 対応数（電話に出てもらった数）＝架電から 留守・繋がらない・使われてない を引いたもの */
+  const ans = n - NO_ANSWER.reduce((a, k) => a + (c[k] || 0), 0);
+  return {n, apo, c, ans, apoRate: n ? apo / n * 100 : 0, connRate: n ? conn / n * 100 : 0, ansRate: n ? ans / n * 100 : 0,
     mins, perHour: mins ? n / (mins / 60) : 0};
 }
 /* 稼働時間の見せ方：10時間未満は「3時間20分」、それ以上は「42.5時間」 */
@@ -1376,8 +1379,9 @@ async function renderKpi() {
   if (seq !== kpiSeq) return;
   const s = sumStats(data, member), p = sumStats(pdata, member);
   $("tiles").innerHTML = [
-    ["架電", s.n, "", delta(s.n, p.n)], ["アポ", s.apo, "", delta(s.apo, p.apo)],
-    ["アポ率", s.apoRate.toFixed(1), "%", delta(s.apoRate, p.apoRate, "%")], ["接続率", s.connRate.toFixed(1), "%", delta(s.connRate, p.connRate, "%")],
+    ["架電", s.n, "", delta(s.n, p.n)], ["対応数", s.ans, "", delta(s.ans, p.ans)],
+    ["アポ", s.apo, "", delta(s.apo, p.apo)], ["アポ率", s.apoRate.toFixed(1), "%", delta(s.apoRate, p.apoRate, "%")],
+    ["対応率", s.ansRate.toFixed(1), "%", delta(s.ansRate, p.ansRate, "%")], ["接続率", s.connRate.toFixed(1), "%", delta(s.connRate, p.connRate, "%")],
     ["1時間あたり", s.mins ? s.perHour.toFixed(1) : "–", s.mins ? "件" : "", s.mins ? delta(s.perHour, p.perHour, "件/時") : `<span class="d flat">&nbsp;</span>`],
     ["稼働時間", fmtMins(s.mins), "", delta(s.mins / 60, p.mins / 60, "時間")]
   ].map(([k, v, u, d]) => `<div class="card tile"><div class="k">${k}</div><div class="v">${v}<small>${u}</small></div>${d}</div>`).join("");
@@ -1389,11 +1393,11 @@ async function renderKpi() {
     .sort((x, y) => y.s.apo - x.s.apo || y.s.n - x.s.n);
   const maxN = Math.max(1, ...rows.map(r => r.s.n)), tot = sumStats(data, "all");
   const ph = s => s.mins ? s.perHour.toFixed(1) : "–";
-  $("mtable").innerHTML = `<tr><th>メンバー</th><th>架電</th><th>1時間あたり</th><th>アポ</th><th>アポ率</th><th>接続率</th><th>稼働</th><th>1日平均</th></tr>` +
+  $("mtable").innerHTML = `<tr><th>メンバー</th><th>架電</th><th>対応</th><th>1時間あたり</th><th>アポ</th><th>アポ率</th><th>対応率</th><th>接続率</th><th>稼働</th><th>1日平均</th></tr>` +
     rows.map(({u, s}) => `<tr class="pick${u === U ? " me" : ""}" data-u="${esc(u)}" style="${member !== "all" && member !== u ? "opacity:.45" : ""}">
-      <td class="name">${esc(nameOf(u))}</td><td><span class="meter">${s.n}<i style="width:${Math.round(s.n / maxN * 56)}px"></i></span></td>
-      <td><b>${ph(s)}</b></td><td>${s.apo}</td><td>${s.apoRate.toFixed(1)}%</td><td>${s.connRate.toFixed(1)}%</td><td>${fmtMins(s.mins)}</td><td>${(s.n / wd).toFixed(0)}</td></tr>`).join("") +
-    `<tr><td class="name">チーム合計</td><td>${tot.n}</td><td><b>${ph(tot)}</b></td><td>${tot.apo}</td><td>${tot.apoRate.toFixed(1)}%</td><td>${tot.connRate.toFixed(1)}%</td><td>${fmtMins(tot.mins)}</td><td>${(tot.n / wd).toFixed(0)}</td></tr>`;
+      <td class="name">${esc(nameOf(u))}</td><td><span class="meter">${s.n}<i style="width:${Math.round(s.n / maxN * 56)}px"></i></span></td><td>${s.ans}</td>
+      <td><b>${ph(s)}</b></td><td>${s.apo}</td><td>${s.apoRate.toFixed(1)}%</td><td>${s.ansRate.toFixed(1)}%</td><td>${s.connRate.toFixed(1)}%</td><td>${fmtMins(s.mins)}</td><td>${(s.n / wd).toFixed(0)}</td></tr>`).join("") +
+    `<tr><td class="name">チーム合計</td><td>${tot.n}</td><td>${tot.ans}</td><td><b>${ph(tot)}</b></td><td>${tot.apo}</td><td>${tot.apoRate.toFixed(1)}%</td><td>${tot.ansRate.toFixed(1)}%</td><td>${tot.connRate.toFixed(1)}%</td><td>${fmtMins(tot.mins)}</td><td>${(tot.n / wd).toFixed(0)}</td></tr>`;
   $("mtable").querySelectorAll("tr.pick").forEach(tr => tr.onclick = () => { member = member === tr.dataset.u ? "all" : tr.dataset.u; $("member").value = member; renderKpi(); });
 
   const who = u => member === "all" || u === member;
