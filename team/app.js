@@ -13,7 +13,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/fireba
 import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
   initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
-  doc, collection, query, where, documentId, onSnapshot, getDoc, getDocs, setDoc, updateDoc, deleteDoc,
+  doc, collection, query, where, orderBy, documentId, onSnapshot, getDoc, getDocs, setDoc, updateDoc, deleteDoc,
   writeBatch, runTransaction, increment, Timestamp, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { firebaseConfig } from "./firebase-config.js";
@@ -337,6 +337,80 @@ function renderLog() {
   if (logF === "memo") list = list.filter(r => r.memo);
   if (logF === "apo") list = list.filter(r => r.r === "アポ" || r.r === "再架電");
   fillRecs($("logList"), list, true);
+  if (logMode === "hist") renderHist();
+}
+
+/* ---------- 再架電・アポの履歴（自分の分を、取った日ごとに） ----------
+   今日の分は「今日の記録」の購読から、昨日以前は開いたときに2週間ずつ読む（読み込み量を抑えるため） */
+let logMode = "today", histF = "all", histFrom = null, histPast = [], histLoadedAt = 0, histLoading = false;
+$("logMode").onclick = e => {
+  const b = e.target.closest("button"); if (!b) return;
+  logMode = b.dataset.m;
+  $("logMode").querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", x === b));
+  $("logToday").hidden = logMode !== "today"; $("logHist").hidden = logMode !== "hist";
+  if (logMode === "hist") loadHist(false);
+};
+$("histFilter").onclick = e => { const b = e.target.closest("button"); if (!b) return; histF = b.dataset.f; $("histFilter").querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", x === b)); renderHist(); };
+$("histMore").onclick = () => loadHist(true);
+async function loadHist(more) {
+  const T = today();
+  if (!more && histFrom && Date.now() - histLoadedAt < 5 * 6e4) { renderHist(); return; }   // 5分以内なら読み直さない
+  if (histLoading) return;
+  histLoading = true; $("histMore").disabled = true;
+  const to = more && histFrom ? histFrom : T;                    // この日より前を読む
+  const from = addDays(to, -14);
+  if (!more) histPast = [];
+  try {
+    if (!more || !histFrom) renderHist(true);
+    const s = await getDocs(query(collection(db, "records"), where("uid", "==", U), where("r", "in", ["アポ", "再架電"]),
+      where("day", ">=", dk(from)), where("day", "<", dk(to)), orderBy("day", "desc")));
+    const got = s.docs.map(recOf);
+    histPast = histPast.filter(r => !got.some(g => g.id === r.id)).concat(got);
+    histFrom = from; histLoadedAt = Date.now();
+  } catch (e) {
+    console.error(e);
+    toast(e.code === "failed-precondition" ? "履歴の準備中です。数分後にもう一度開いてください" : "履歴を読み込めませんでした");
+  }
+  histLoading = false; $("histMore").disabled = false;
+  renderHist();
+}
+function renderHist(loading) {
+  const todayList = myToday.filter(r => r.r === "アポ" || r.r === "再架電");
+  let all = todayList.concat(histPast.filter(r => !todayList.some(t => t.id === r.id)));
+  if (histF !== "all") all = all.filter(r => r.r === histF);
+  const byDay = {};
+  all.forEach(r => (byDay[r.day] = byDay[r.day] || []).push(r));
+  const days = Object.keys(byDay).sort().reverse();
+  const apoN = all.filter(r => r.r === "アポ").length, cbN = all.filter(r => r.r === "再架電").length;
+  $("histSum").innerHTML = histFrom ? `${md(histFrom)} 〜 今日　<b>アポ ${apoN}件</b>・<b>再架電 ${cbN}件</b>` : "";
+  const body = $("histBody");
+  if (loading && !all.length) { body.innerHTML = `<div class="card"><div class="empty">読み込み中…</div></div>`; return; }
+  if (!days.length) { body.innerHTML = `<div class="card"><div class="empty">この期間の${histF === "all" ? "再架電・アポ" : histF}はありません</div></div>`; return; }
+  const now = new Date();
+  body.innerHTML = "";
+  days.forEach(k => {
+    const list = byDay[k].sort((a, b) => b.t - a.t);
+    const a = list.filter(r => r.r === "アポ").length, c = list.filter(r => r.r === "再架電").length;
+    const d = new Date(k + "T00:00");
+    const h = document.createElement("h2");
+    h.innerHTML = `${md(d)}${k === dk(today()) ? "（今日）" : ""} <span class="aside">${a ? "アポ" + a : ""}${a && c ? "・" : ""}${c ? "再架電" + c : ""}</span>`;
+    body.appendChild(h);
+    const card = document.createElement("div"); card.className = "card";
+    list.forEach(r => {
+      const m = r.memo || {}, w = m.when;
+      let st = "";
+      if (r.r === "アポ") st = !w ? `<span class="badge late">日時未定</span>` : w < now ? `<span class="badge done">面談済み</span>` : "";
+      else st = r.done ? `<span class="badge done">かけた</span>` : w && w < now ? `<span class="badge late">期限切れ</span>` : !w ? `<span class="badge pend">日時なし</span>` : "";
+      const row = document.createElement("div"); row.className = "rec hrow tap"; row.tabIndex = 0;
+      row.innerHTML = `<span class="tm">${hm(r.t)}</span><span class="body">${resChip(r.r)}${w ? `<span class="when">${r.r === "アポ" ? "面談" : "再架電"} ${md(w)} ${hm(w)}</span>` : ""}${st}
+        <div class="memo"><b>${esc(m.shop || "（店名なし）")}</b>${m.tel ? `　<span class="tel-line num">☎ ${esc(m.tel)}</span>` : ""}</div>
+        ${m.text ? `<div class="memo">${esc(m.text)}</div>` : ""}</span>`;
+      row.onclick = () => openDetail(r);
+      row.onkeydown = e => { if (e.key === "Enter") openDetail(r); };
+      card.appendChild(row);
+    });
+    body.appendChild(card);
+  });
 }
 function memoLine(m) {
   if (!m) return "";
@@ -460,7 +534,8 @@ $("mPaste").onclick = async () => {
   }
 };
 
-function closeMemo() { $("scrim").hidden = $("msheet").hidden = true; editing = null; }
+function refreshHistSoon() { histLoadedAt = 0; if (curTab === "log" && logMode === "hist") setTimeout(() => loadHist(false), 800); }
+function closeMemo() { refreshHistSoon(); $("scrim").hidden = $("msheet").hidden = true; editing = null; }
 $("mSkip").onclick = () => {
   const r = editing; closeMemo();
   if (r && r.uid === U && !r.draft && r.r === "アポ" && !(r.memo && r.memo.when)) toast("日時未定のアポとして残しました");
@@ -840,10 +915,12 @@ function renderRemind() {
   });
 }
 function markDone(r) {
+  histLoadedAt = 0;
   updateDoc(doc(db, "records", r.id), {done: true, pending: false}).catch(e => toast(errMsg(e)));
   showTab("count"); toast("今回の結果のボタンを押してください");
 }
 function postpone(r) {
+  refreshHistSoon();
   const now = new Date();
   const w = addDays(dayStart(r.memo.when < now ? now : r.memo.when), 1); w.setHours(r.memo.when.getHours(), r.memo.when.getMinutes());
   updateDoc(doc(db, "records", r.id), {"memo.when": Timestamp.fromDate(w)}).catch(e => toast(errMsg(e)));
@@ -1219,7 +1296,7 @@ function showTab(v) {
   VIEWS.forEach(x => $("v-" + x).hidden = x !== v);
   document.querySelectorAll(".tabs button").forEach(b => { if (b.dataset.go === v) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current"); });
   window.scrollTo(0, 0);
-  if (v === "cal") renderCal(); if (v === "kpi") renderKpi(); if (v === "remind") renderRemind(); if (v === "log") renderLog(); if (v === "set") { renderAdmin(); renderGcal(); }
+  if (v === "cal") renderCal(); if (v === "kpi") renderKpi(); if (v === "remind") renderRemind(); if (v === "log") { renderLog(); if (logMode === "hist") loadHist(false); } if (v === "set") { renderAdmin(); renderGcal(); }
 }
 document.addEventListener("click", e => { const b = e.target.closest("[data-go]"); if (b) showTab(b.dataset.go); });
 COL = Object.fromEntries(ITEMS.map(i => [i.k, i]));

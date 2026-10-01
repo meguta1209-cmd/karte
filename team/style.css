@@ -545,3 +545,10 @@ img{max-width:100%;}
 .al-shop, .al-memo, .al-tag{cursor:pointer;}
 /* リストから貼り付け */
 .btn-paste{width:100%; min-height:42px; border-radius:8px; border:1.5px dashed var(--blue); background:var(--blue-soft); color:var(--blue); font-weight:700; font-size:13.5px;}
+/* 再架電・アポの履歴 */
+.log-mode{margin-bottom:10px;}
+.log-mode button{flex:1;}
+.hist-sum{font-size:13px; color:var(--ink2); margin:2px 2px 0;}
+.hist-sum b{color:var(--ink);}
+.badge.done{background:var(--ok-soft); color:var(--ok);}
+.hrow .memo .tel-line{display:inline; margin:0;}

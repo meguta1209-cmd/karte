@@ -117,14 +117,33 @@
 
   <!-- 記録 -->
   <section id="v-log" hidden>
-    <h1 class="screen">今日の記録</h1>
-    <div class="chips" id="logFilter">
-      <button class="chip-btn" data-f="all" aria-pressed="true">全部</button>
-      <button class="chip-btn" data-f="memo" aria-pressed="false">メモあり</button>
-      <button class="chip-btn" data-f="apo" aria-pressed="false">アポ・再架電</button>
+    <h1 class="screen">記録</h1>
+    <div class="seg log-mode" id="logMode">
+      <button data-m="today" aria-pressed="true">今日の記録</button>
+      <button data-m="hist" aria-pressed="false">再架電・アポの履歴</button>
     </div>
-    <div class="card" id="logList"></div>
-    <p class="defs">記録を押すとメモを直せます。右の × は、その記録を消します（数からも引かれます）。</p>
+
+    <div id="logToday">
+      <div class="chips" id="logFilter">
+        <button class="chip-btn" data-f="all" aria-pressed="true">全部</button>
+        <button class="chip-btn" data-f="memo" aria-pressed="false">メモあり</button>
+        <button class="chip-btn" data-f="apo" aria-pressed="false">アポ・再架電</button>
+      </div>
+      <div class="card" id="logList"></div>
+      <p class="defs">記録を押すと詳細やメモが出ます。右の × は、その記録を消します（数からも引かれます）。</p>
+    </div>
+
+    <div id="logHist" hidden>
+      <div class="chips" id="histFilter">
+        <button class="chip-btn" data-f="all" aria-pressed="true">全部</button>
+        <button class="chip-btn" data-f="アポ" aria-pressed="false">アポ</button>
+        <button class="chip-btn" data-f="再架電" aria-pressed="false">再架電</button>
+      </div>
+      <div class="hist-sum" id="histSum"></div>
+      <div id="histBody"></div>
+      <button class="btn-plain" id="histMore">もっと前を見る（2週間ずつ）</button>
+      <p class="defs">自分が取ったアポと再架電を、取った日ごとにまとめています。押すと電話番号などの詳細が出ます。</p>
+    </div>
   </section>
 
   <!-- カレンダー -->
