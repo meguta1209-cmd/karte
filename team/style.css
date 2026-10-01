@@ -358,7 +358,7 @@ table.kpi tr.me td.name::after{content:"自分"; margin-left:6px; font-size:10.5
 .cal .sl.free:hover{background:var(--blue-soft);}
 .picking .cal .sl.free{background:var(--ok-soft);}
 .picking .cal .sl.free:hover{background:var(--ok); }
-.picking .cal .sl.full{opacity:.6;}
+.picking .cal .sl.full > :not(.blk){opacity:.6;}   /* 枠そのものを半透明にすると、帯が下の枠に隠れるので中身だけ */
 .ap.mine{outline:2px solid #FFD54F; outline-offset:-2px;}
 .ap span{overflow:hidden; text-overflow:ellipsis;}
 .btn-cal{margin-top:4px; min-height:40px; border-radius:8px; border:1.5px solid var(--blue); background:var(--blue-soft); color:var(--blue); font-weight:700; font-size:14px;}
@@ -455,17 +455,17 @@ img{max-width:100%;}
 .view-seg button{min-width:52px; font-size:14px; font-weight:700;}
 .today-jump{margin-left:auto; border:1px solid var(--blue); background:transparent; color:var(--blue); border-radius:999px; padding:4px 14px; font-weight:700; font-size:13px;}
 .wk-lbl b{font-size:16px;}
-.cal{display:grid; grid-template-columns:48px repeat(6, minmax(52px,1fr)); min-width:360px;}
-.cal .hd{position:sticky; top:0; z-index:2; background:var(--card2); text-align:center; font-size:13px; font-weight:700; padding:6px 2px; border-bottom:2px solid var(--rule2); line-height:1.25;}
+.cal{display:grid; grid-template-columns:48px repeat(6, minmax(52px,1fr)); grid-template-rows:auto; grid-auto-rows:36px; min-width:360px;}   /* 行の高さは固定（商談の帯を下の枠へ伸ばすため） */
+.cal .hd{position:sticky; top:0; z-index:3; background:var(--card2); text-align:center; font-size:13px; font-weight:700; padding:6px 2px; border-bottom:2px solid var(--rule2); line-height:1.25;}
 .cal .hd small{display:block; font-weight:400; color:var(--ink2); font-size:11.5px; font-family:var(--mono);}
 .cal .hd.today{background:var(--blue); color:var(--on-blue);}
 .cal .hd.today small{color:inherit; opacity:.9;}
 .cal .hd.sat{color:#2F6DB5;}
-.cal .hd.corner{left:0; z-index:3;}
+.cal .hd.corner{left:0; z-index:4;}
 .cal .hd.cl span{display:inline-flex; align-items:center; gap:2px;}
 .cal .hd.cl small{font-family:var(--form);}
 /* 時刻の列：横スクロールしても左に残る */
-.cal .tm{position:sticky; left:0; z-index:1; background:var(--card); border-top:1px solid var(--rule2); border-right:1px solid var(--rule); padding:3px 6px 0 0; text-align:right;}
+.cal .tm{position:sticky; left:0; z-index:2; background:var(--card); border-top:1px solid var(--rule2); border-right:1px solid var(--rule); padding:3px 6px 0 0; text-align:right;}
 .cal .tm span{font-family:var(--mono); font-size:12.5px; font-weight:700; color:var(--ink);}
 .cal .tm.half{border-top:1px dashed var(--rule);}
 .cal .tm.half span{font-size:10.5px; font-weight:500; color:var(--ink3);}
@@ -483,7 +483,7 @@ img{max-width:100%;}
 }
 .ap b{font-size:11px; flex:0 0 auto; background:rgba(255,255,255,.25); border-radius:3px; padding:0 3px;}
 /* 日表示のアポ：店名と獲得者を省略せずに */
-.cal.day .sl{min-height:44px;}
+.cal.day{grid-auto-rows:44px;}
 .apd{display:flex; flex-direction:column; justify-content:center; min-height:38px; border-radius:6px; padding:4px 8px; background:var(--cc); color:#fff; line-height:1.3;}
 .apd b{font-size:13px; overflow-wrap:anywhere;}
 .apd small{font-size:11px; opacity:.9;}
@@ -605,9 +605,6 @@ img{max-width:100%;}
 /* カレンダーの説明 */
 .m-info{min-height:110px !important; font-size:14px !important;}
 /* 1時間半の商談：続きの枠 */
-.apd.cont{min-height:26px; opacity:.45; justify-content:center;}
-.apd.cont small{font-size:10.5px;}
-.ap.cont{opacity:.4; min-height:20px;}
 .cal .sl.nostart{cursor:not-allowed;}
 .cal .sl.nostart::after{content:""; position:absolute; inset:40% 8px auto 8px; border-top:1px dotted var(--rule2);}
 .ad-info{margin-top:4px; padding:6px 8px; background:var(--card2); border-radius:6px; font-size:12.5px; white-space:pre-wrap; overflow-wrap:anywhere; max-height:160px; overflow-y:auto;}
@@ -632,3 +629,12 @@ img{max-width:100%;}
 .mv-who:empty{display:none;}
 .mv-pick{display:inline-flex; align-items:center; gap:6px; margin-top:4px; font-size:13px; font-weight:700; color:var(--blue); cursor:pointer;}
 .mv-pick input{width:18px; height:18px; margin:0;}
+/* 商談の帯（1時間半）：始まりの枠に置いて、下の枠へ重ねて伸ばす */
+.cal .sl .blk{position:absolute; top:2px; z-index:1; height:calc(var(--span) * 36px - 5px); overflow:hidden;}
+.cal.day .sl .blk{height:calc(var(--span) * 44px - 5px);}
+.apd.blk{justify-content:flex-start; min-height:0; padding:5px 8px; gap:1px;}
+.apd.blk small{font-family:var(--mono);}
+.apd.blk small + small{font-family:var(--form);}
+.ap.blk{flex-direction:column; align-items:flex-start; white-space:normal; min-height:0; padding:3px 4px; gap:1px;}
+.ap.blk .nm{overflow:hidden; display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow-wrap:anywhere;}
+.ap.blk small{font-family:var(--mono); font-weight:500; font-size:10px; opacity:.9;}

@@ -821,6 +821,18 @@ function nowLine(d, now) {
 function timeCell(h, mi) {
   return mi ? `<div class="tm half"><span>${h}:30</span></div>` : `<div class="tm"><span>${h}:00</span></div>`;
 }
+/* 商談は1時間半の帯で見せる：始まりの枠に置いて、下の枠へ重ねて伸ばす（行の高さは固定）。
+   何枠ぶんか（19:00で切る）と、同じ列で時間が重なる商談を横に並べるための「レーン」 */
+const spanOf = s => Math.max(1, Math.min(Math.ceil((s.dur || APO_MIN) / 30), (SLOT_H1 * 60 - s.when.getHours() * 60 - s.when.getMinutes()) / 30));
+function laneLayout(list) {
+  const ends = [], lane = {};
+  list.slice().sort((a, b) => a.when - b.when || (a.closer < b.closer ? -1 : 1)).forEach(s => {
+    let i = ends.findIndex(e => e <= s.when); if (i < 0) { i = ends.length; ends.push(0); }
+    ends[i] = apoEnd(s); lane[s.id] = i;
+  });
+  return {lane, n: Math.max(1, ends.length)};
+}
+const blkStyle = (s, L) => { const i = L.lane[s.id] || 0, n = L.n; return `--span:${spanOf(s)};left:calc(2px + (100% - 4px) * ${i} / ${n});width:calc((100% - 4px) / ${n}${n > 1 ? " - 2px" : ""})`; };
 function renderCal() {
   const now = new Date(), T = today(), cls = closerList();
   if (calCloser !== "all" && !cls.some(c => c.id === calCloser)) calCloser = "all";
@@ -843,6 +855,8 @@ function renderCal() {
       const g = busyMap[c.id], gs = !g ? "" : g.status === "ok" ? `<em class="gc ok" title="Googleカレンダー連携中">G</em>` : `<em class="gc ng" title="Googleカレンダーが未共有">G</em>`;
       return `<div class="hd cl"><span><i class="dot-c" style="background:${c.color}"></i>${esc(c.name)}${gs}</span><small>空き ${f}枠</small></div>`;
     }).join(""));
+    const lanesC = {};
+    cls.forEach(c => lanesC[c.id] = laneLayout(allSlots().filter(s => s.closer === c.id && s.day === dk(day) && s.when)));
     for (let h = SLOT_H0; h < SLOT_H1; h++) for (const mi of [0, 30]) {
       cal.insertAdjacentHTML("beforeend", timeCell(h, mi));
       const d = new Date(day); d.setHours(h, mi, 0, 0);
@@ -860,8 +874,8 @@ function renderCal() {
         b.setAttribute("aria-label", c.name + " " + hm(d) + (list.length ? " 商談あり" : cover ? " 商談中" : gb ? " ほかの予定あり" : past ? " 過ぎた枠" : canStart ? " 空き" : " ここからは1時間半とれない"));
         /* ほかの予定は、始まりの枠にだけ時間を書く */
         const gStart = gb && (gb.s >= d || +d === +new Date(new Date(day).setHours(SLOT_H0, 0, 0, 0)));
-        b.innerHTML = list.map(s => `<span class="apd${s.uid === U ? " mine" : ""}" style="--cc:${c.color}"><b>${esc(s.shop || "（店名なし）")}</b><small class="num">${hm(s.when)}〜${hm(apoEnd(s))} ・ 獲得 ${esc(nameOf(s.uid))}</small></span>`).join("") +
-          (cover ? `<span class="apd cont${cover.uid === U ? " mine" : ""}" style="--cc:${c.color}"><small>商談中（〜${hm(apoEnd(cover))}）</small></span>` : "") +
+        /* 商談は始まりの枠から1時間半の帯。続きの枠（cover）は帯の下になるので何も書かない */
+        b.innerHTML = list.map(s => `<span class="apd blk${s.uid === U ? " mine" : ""}" style="--cc:${c.color};${blkStyle(s, lanesC[c.id])}"><b>${esc(s.shop || "（店名なし）")}</b><small class="num">${hm(s.when)}〜${hm(apoEnd(s))}</small><small>獲得 ${esc(nameOf(s.uid))}</small></span>`).join("") +
           (gb ? `<span class="gbusy">${gStart ? `予定あり<small>${hm(gb.s)}〜${hm(gb.e)}</small>` : ""}</span>` : "") +
           (!past && canStart ? `<span class="free-mark">${hm(d)}</span>` : "") + (+dayStart(d) === +T ? nowLine(d, now) : "");
         b.onclick = () => slotTap(d, list.length ? list : cover ? [cover] : [], past, !canStart, c.id);
@@ -885,6 +899,8 @@ function renderCal() {
     cal.style.gridTemplateColumns = "";
     cal.insertAdjacentHTML("beforeend", `<div class="hd corner"></div>` + days.map(d =>
       `<div class="hd${+d === +T ? " today" : ""}${d.getDay() === 6 ? " sat" : ""}">${WD[d.getDay()]}<small>${d.getMonth() + 1}/${d.getDate()}</small></div>`).join(""));
+    const lanesD = {};   // 日ごとに、時間が重なる商談（別のクローザー）を横に並べる
+    days.forEach(day => lanesD[dk(day)] = laneLayout(allSlots().filter(s => s.day === dk(day) && s.when && byC(s))));
     for (let h = SLOT_H0; h < SLOT_H1; h++) for (const mi of [0, 30]) {
       cal.insertAdjacentHTML("beforeend", timeCell(h, mi));
       days.forEach(day => {
@@ -896,11 +912,10 @@ function renderCal() {
         const b = document.createElement("button");
         b.className = "sl" + (mi ? " half" : "") + (past ? " past" : full ? " full" : " free") + (+day === +T ? " today" : "");
         b.setAttribute("aria-label", md(d) + " " + hm(d) + (list.length ? " アポ" + list.length + "件" : past ? " 過ぎた枠" : " 空き"));
-        /* クローザーを1人に絞っているときは、続きの枠（商談中）とGoogleの予定も出す */
+        /* クローザーを1人に絞っているときは、Googleの予定も出す。続きの枠（商談中）は帯の下になる（押すとその商談） */
         const cover = calCloser !== "all" && !list.length ? apoCovering(d, calCloser, null) : null;
         const gbw = calCloser !== "all" && !list.length && !cover ? gBusyAt(d, calCloser) : null;
-        b.innerHTML = list.map(s => `<span class="ap${s.uid === U ? " mine" : ""}" style="background:${CCOL(s.closer)}"><b>${esc(CNAME(s.closer)[0])}</b><span>${esc(s.shop || "")}</span></span>`).join("") +
-          (cover ? `<span class="ap cont" style="background:${CCOL(cover.closer)}"><span>〜${hm(apoEnd(cover))}</span></span>` : "") +
+        b.innerHTML = list.map(s => `<span class="ap blk${s.uid === U ? " mine" : ""}" style="background:${CCOL(s.closer)};${blkStyle(s, lanesD[dk(day)])}"><b>${esc(CNAME(s.closer)[0])}</b><span class="nm">${esc(s.shop || "")}</span><small>${hm(s.when)}〜${hm(apoEnd(s))}</small></span>`).join("") +
           (gbw ? `<span class="gbusy wk">予定あり</span>` : "") +
           (+day === +T ? nowLine(d, now) : "");
         b.onclick = () => slotTap(d, list.length ? list : cover ? [cover] : [], past, full, calCloser !== "all" ? calCloser : undefined);
