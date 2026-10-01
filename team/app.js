@@ -218,6 +218,7 @@ function startApp() {
     slots = s.docs.map(d => ({id: d.id, ...d.data(), when: tsd(d.data().when)}));
     if (curTab === "cal") renderCal(); if (!$("msheet").hidden) checkClash();
   }, onErr("カレンダー")));
+  startFeedback();
   pollTeam(); teamTimer = setInterval(() => { if (document.visibilityState === "visible") pollTeam(); }, 30000);
   notifTimer = setInterval(checkNotifs, 15000);
   showTab(curTab);
@@ -550,7 +551,7 @@ function refreshHistSoon() { histLoadedAt = 0; if (curTab === "log" && logMode =
 /* ---------- 予定（前確など）を書く画面 ---------- */
 let editingTask = null, tKind = "前確", tApoWhen = null;
 function drawTaskKinds() {
-  $("tKinds").innerHTML = TASK_KINDS.map(k => `<button type="button" class="cl-chip" data-k="${k.k}" aria-pressed="${tKind === k.k}"><i style="background:${k.bg};outline:1px solid ${k.fg}"></i>${k.k}</button>`).join("");
+  $("tKinds").innerHTML = TASK_KINDS.map(k => `<button type="button" class="cl-chip" data-k="${esc(k.k)}" aria-pressed="${tKind === k.k}"><i style="background:${k.bg};outline:1px solid ${k.fg}"></i>${k.k}</button>`).join("");
 }
 $("tKinds").onclick = e => { const b = e.target.closest("button"); if (!b) return; tKind = b.dataset.k; drawTaskKinds(); setTaskQuick(); };
 function setTaskQuick() {
@@ -581,7 +582,7 @@ function openTask(t, pre) {
   $("tText").value = t ? t.memo.text : "";
   $("tRemind").checked = t ? t.memo.remind !== false : true;
   const act = Object.entries(members).filter(([, m]) => m.status === "active").sort((a, b) => (a[0] === U ? -1 : b[0] === U ? 1 : (a[1].name || "").localeCompare(b[1].name || "", "ja")));
-  $("tWho").innerHTML = act.map(([id, m]) => `<option value="${id}">${esc(m.name)}${id === U ? "（自分）" : ""}</option>`).join("");
+  $("tWho").innerHTML = act.map(([id, m]) => `<option value="${esc(id)}">${esc(m.name)}${id === U ? "（自分）" : ""}</option>`).join("");
   $("tWho").value = t ? t.uid : U;
   $("tDelete").hidden = !t; delete $("tDelete").dataset.arm; $("tDelete").textContent = "削除";
   drawTaskKinds(); setTaskQuick();
@@ -842,7 +843,7 @@ function renderCal() {
     const byC = s => calCloser === "all" || s.closer === calCloser;
     $("calFilter").hidden = false;
     $("calFilter").innerHTML = [{id: "all", name: "クローザー全員"}, ...cls].map(c =>
-      `<button class="chip-btn" data-c="${c.id}" aria-pressed="${calCloser === c.id}">${c.id !== "all" ? `<i class="dot-c" style="background:${c.color}"></i>` : ""}${esc(c.name)}</button>`).join("");
+      `<button class="chip-btn" data-c="${esc(c.id)}" aria-pressed="${calCloser === c.id}">${c.id !== "all" ? `<i class="dot-c" style="background:${c.color}"></i>` : ""}${esc(c.name)}</button>`).join("");
     $("legend").innerHTML = `<span>色＝クローザー</span>` + cls.map(c => `<span><i style="background:${c.color}"></i>${esc(c.name)}</span>`).join("") +
       `<span><i style="background:transparent;outline:2px solid #FFD54F;outline-offset:-2px"></i>自分が取ったアポ</span>`;
     cal.style.gridTemplateColumns = "";
@@ -1189,7 +1190,7 @@ function showDaySum() {
   $("dsCount").textContent = list.length + "件";
   $("dsList").innerHTML = list.length ? list.map(r => {
     const past = r.memo.when < now;
-    return `<div class="ds-row tap${past ? " past" : ""}" data-id="${r.id}" tabindex="0"><span class="num ds-t">${hm(r.memo.when)}</span><span class="ds-b">${resChip(r.r)} <b>${esc(r.isTask ? [r.title, r.memo.shop].filter(Boolean).join(" ") || r.r : (r.memo.shop || "（店名なし）"))}</b>${past ? `<span class="badge late">過ぎています</span>` : ""}${r.memo.text ? `<small>${esc(r.memo.text)}</small>` : ""}</span></div>`;
+    return `<div class="ds-row tap${past ? " past" : ""}" data-id="${esc(r.id)}" tabindex="0"><span class="num ds-t">${hm(r.memo.when)}</span><span class="ds-b">${resChip(r.r)} <b>${esc(r.isTask ? [r.title, r.memo.shop].filter(Boolean).join(" ") || r.r : (r.memo.shop || "（店名なし）"))}</b>${past ? `<span class="badge late">過ぎています</span>` : ""}${r.memo.text ? `<small>${esc(r.memo.text)}</small>` : ""}</span></div>`;
   }).join("") : `<div class="empty">今日の予定はありません</div>`;
   $("dsScrim").hidden = $("daySum").hidden = false;
   $("dsList").querySelectorAll(".ds-row").forEach(el => { const r = list.find(x => x.id === el.dataset.id); const go = () => { closeDaySum(); openDetail(r); }; el.onclick = go; el.onkeydown = e => { if (e.key === "Enter") go(); }; });
@@ -1286,7 +1287,7 @@ async function renderKpi() {
   const [a, b] = range(), days = Math.round((b - a) / 864e5), pa = addDays(a, -days);
   const ids = Object.keys(members).filter(id => members[id].status === "active" || members[id].status === "removed");
   const sel = $("member"), cur = sel.value || member;
-  sel.innerHTML = `<option value="all">メンバー：全員</option>` + ids.filter(id => members[id].status === "active").map(id => `<option value="${id}">メンバー：${esc(members[id].name)}${id === U ? "（自分）" : ""}</option>`).join("");
+  sel.innerHTML = `<option value="all">メンバー：全員</option>` + ids.filter(id => members[id].status === "active").map(id => `<option value="${esc(id)}">メンバー：${esc(members[id].name)}${id === U ? "（自分）" : ""}</option>`).join("");
   sel.value = [...sel.options].some(o => o.value === cur) ? cur : "all"; member = sel.value;
   let data, pdata;
   try { [data, pdata] = await Promise.all([loadStats(a, b), loadStats(pa, a)]); }
@@ -1307,7 +1308,7 @@ async function renderKpi() {
   const maxN = Math.max(1, ...rows.map(r => r.s.n)), tot = sumStats(data, "all");
   const ph = s => s.mins ? s.perHour.toFixed(1) : "–";
   $("mtable").innerHTML = `<tr><th>メンバー</th><th>架電</th><th>1時間あたり</th><th>アポ</th><th>アポ率</th><th>接続率</th><th>稼働</th><th>1日平均</th></tr>` +
-    rows.map(({u, s}) => `<tr class="pick${u === U ? " me" : ""}" data-u="${u}" style="${member !== "all" && member !== u ? "opacity:.45" : ""}">
+    rows.map(({u, s}) => `<tr class="pick${u === U ? " me" : ""}" data-u="${esc(u)}" style="${member !== "all" && member !== u ? "opacity:.45" : ""}">
       <td class="name">${esc(nameOf(u))}</td><td><span class="meter">${s.n}<i style="width:${Math.round(s.n / maxN * 56)}px"></i></span></td>
       <td><b>${ph(s)}</b></td><td>${s.apo}</td><td>${s.apoRate.toFixed(1)}%</td><td>${s.connRate.toFixed(1)}%</td><td>${fmtMins(s.mins)}</td><td>${(s.n / wd).toFixed(0)}</td></tr>`).join("") +
     `<tr><td class="name">チーム合計</td><td>${tot.n}</td><td><b>${ph(tot)}</b></td><td>${tot.apo}</td><td>${tot.apoRate.toFixed(1)}%</td><td>${tot.connRate.toFixed(1)}%</td><td>${fmtMins(tot.mins)}</td><td>${(tot.n / wd).toFixed(0)}</td></tr>`;
@@ -1386,27 +1387,102 @@ $("saveGcal").onclick = () => {
   if (v && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v)) { toast("アドレスの形が正しくありません"); return; }
   updateDoc(doc(db, "members", U), {gcalEmail: v}).then(() => toast("保存しました。15分以内に反映されます")).catch(e => toast(errMsg(e)));
 };
-$("myCloser").onchange =() => updateDoc(doc(db, "members", U), {closer: $("myCloser").checked}).then(() => toast($("myCloser").checked ? "クローザーに入りました" : "クローザーから外れました")).catch(e => toast(errMsg(e)));
+$("myCloser").onchange = () => {
+  const v = $("myCloser").checked;   // 押した瞬間の状態で決める（保存中に表示が戻ることがあるため）
+  updateDoc(doc(db, "members", U), {closer: v}).then(() => toast(v ? "クローザーに入りました" : "クローザーから外れました")).catch(e => toast(errMsg(e)));
+};
 $("appUrl").textContent = APP_URL + "?openExternalBrowser=1";
 $("copyUrl").onclick = async () => {
   try { await navigator.clipboard.writeText(APP_URL + "?openExternalBrowser=1"); toast("リンクをコピーしました"); }
   catch (_) { const r = document.createRange(); r.selectNodeContents($("appUrl")); const s = getSelection(); s.removeAllRanges(); s.addRange(r); toast("選択しました。コピーしてください"); }
 };
+/* ============================================================
+   フィードバック：全員が送れる → 竹内さん（管理者）にだけ届く
+   feedback/{id} = {uid, name, kind, text, page, env, ver, status: open/done, reply, createdAt}
+   送った人は自分の分と返事だけ見られる。ほかの人の分は見えない（ルールでも）
+   ============================================================ */
+const APP_VER = new URL(import.meta.url).searchParams.get("v") || "?";
+let fbAll = [], fbKind = "不具合", fbF = "open";
+function startFeedback() {
+  const q = me && me.role === "admin" ? collection(db, "feedback") : query(collection(db, "feedback"), where("uid", "==", U));
+  unsubs.push(onSnapshot(q, s => {
+    fbAll = s.docs.map(d => ({id: d.id, ...d.data(), createdAt: tsd(d.data().createdAt) || new Date()})).sort((a, b) => b.createdAt - a.createdAt);
+    renderFeedback(); renderAdmin();
+  }, onErr("フィードバック")));
+}
+$("fbKinds").onclick = e => {
+  const b = e.target.closest("button"); if (!b) return; fbKind = b.dataset.k;
+  $("fbKinds").querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", x === b));
+  $("fbNote").hidden = fbKind !== "不具合";
+};
+$("fbSend").onclick = async () => {
+  const text = $("fbText").value.trim();
+  if (!text) { toast("内容を書いてください"); $("fbText").focus(); return; }
+  const env = fbKind === "不具合" ? `${navigator.userAgent} / 画面 ${innerWidth}x${innerHeight}` + (matchMedia("(display-mode: standalone)").matches ? " / ホーム画面から" : "") : "";
+  $("fbSend").disabled = true;
+  try {
+    await setDoc(doc(collection(db, "feedback")), {uid: U, name: (me && me.name) || "", kind: fbKind, text, page: curTab, env, ver: APP_VER, status: "open", createdAt: serverTimestamp()});
+    $("fbText").value = "";
+    toast("送りました。ありがとうございます！");
+  } catch (e) { toast(errMsg(e)); }
+  finally { $("fbSend").disabled = false; }
+};
+$("fbFilter").onclick = e => { const b = e.target.closest("button"); if (!b) return; fbF = b.dataset.f; $("fbFilter").querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", x === b)); renderFeedback(); };
+const fbChip = k => `<span class="fb-kind k-${k === "不具合" ? "bug" : k === "こうしてほしい" ? "req" : "etc"}">${esc(k)}</span>`;
+const fbWhen = d => md(d) + " " + hm(d);
+function renderFeedback() {
+  const admin = me && me.role === "admin";
+  /* 自分が送ったもの（返事も見える） */
+  const mine = fbAll.filter(f => f.uid === U);
+  $("fbMineBox").hidden = !mine.length;
+  $("fbMine").innerHTML = mine.slice(0, 20).map(f => `<div class="fb-item">
+      <div class="fb-head">${fbChip(f.kind)}<span class="fb-date">${fbWhen(f.createdAt)}</span><span class="badge ${f.status === "done" ? "done" : "pend"}">${f.status === "done" ? "対応済み" : "確認待ち"}</span></div>
+      <div class="fb-text">${esc(f.text)}</div>
+      ${f.reply ? `<div class="fb-reply"><b>竹内さんから：</b>${esc(f.reply)}</div>` : ""}</div>`).join("");
+  if (!admin) return;
+  /* 管理者：届いたもの */
+  const open = fbAll.filter(f => f.status !== "done");
+  $("fbCount").textContent = "未対応 " + open.length + "件";
+  const list = fbF === "open" ? open : fbAll;
+  const box = $("fbInbox");
+  if (!list.length) { box.innerHTML = `<div class="empty">${fbF === "open" ? "未対応のフィードバックはありません" : "まだ届いていません"}</div>`; return; }
+  box.innerHTML = list.slice(0, 50).map(f => `<div class="fb-item${f.status === "done" ? " is-done" : ""}" data-id="${esc(f.id)}">
+      <div class="fb-head">${fbChip(f.kind)}<b>${esc(f.name || nameOf(f.uid))}</b><span class="fb-date">${fbWhen(f.createdAt)}</span>${f.status === "done" ? `<span class="badge done">対応済み</span>` : ""}</div>
+      <div class="fb-text">${esc(f.text)}</div>
+      ${f.env || f.page ? `<div class="fb-env">見ていた画面：${esc(f.page || "")}${f.ver ? "（版 " + esc(f.ver) + "）" : ""}${f.env ? "<br>" + esc(f.env) : ""}</div>` : ""}
+      <div class="fb-replybox"><input type="text" class="fb-in" maxlength="300" placeholder="返事（送った人に見えます）" value="${esc(f.reply || "")}">
+        <button class="fb-btn" data-a="reply">返事</button>
+        <button class="fb-btn ${f.status === "done" ? "" : "ok"}" data-a="toggle">${f.status === "done" ? "未対応に戻す" : "対応済みにする"}</button></div>
+    </div>`).join("");
+}
+$("fbInbox").onclick = e => {
+  const b = e.target.closest("button.fb-btn"); if (!b) return;
+  const item = b.closest(".fb-item"), id = item.dataset.id, f = fbAll.find(x => x.id === id); if (!f) return;
+  const ref = doc(db, "feedback", id);
+  if (b.dataset.a === "reply") {
+    const reply = item.querySelector(".fb-in").value.trim();
+    updateDoc(ref, {reply, repliedAt: serverTimestamp()}).then(() => toast(reply ? "返事を保存しました" : "返事を消しました")).catch(er => toast(errMsg(er)));
+  }
+  if (b.dataset.a === "toggle") updateDoc(ref, {status: f.status === "done" ? "open" : "done"}).catch(er => toast(errMsg(er)));
+};
+
 function renderAdmin() {
   const admin = me && me.role === "admin";
   const pend = Object.entries(members).filter(([, m]) => m.status === "pending");
-  $("setDot").hidden = !(admin && pend.length); $("setDot").textContent = pend.length;
+  /* 設定タブの赤い数字＝承認待ち＋未対応のフィードバック（管理者だけ） */
+  const fbOpen = admin ? fbAll.filter(f => f.status !== "done").length : 0;
+  $("setDot").hidden = !(admin && pend.length + fbOpen); $("setDot").textContent = pend.length + fbOpen;
   if (!admin) return;
   $("pendCount").textContent = pend.length + "人";
   $("pendList").innerHTML = pend.length ? pend.map(([id, m]) => `<div class="row mrow"><div class="t">${esc(m.name)}<small>${esc(m.email)}${m.closer ? " ・ クローザー希望" : ""}</small></div>
-    <div class="acts2"><button class="ok" data-a="ok" data-id="${id}">承認</button><button class="ng" data-a="rej" data-id="${id}">却下</button></div></div>`).join("")
+    <div class="acts2"><button class="ok" data-a="ok" data-id="${esc(id)}">承認</button><button class="ng" data-a="rej" data-id="${esc(id)}">却下</button></div></div>`).join("")
     : `<div class="row"><div class="t"><small>承認待ちの人はいません</small></div></div>`;
   const act = Object.entries(members).filter(([, m]) => m.status !== "pending").sort((a, b) => (a[1].status === "removed") - (b[1].status === "removed"));
   $("memCount").textContent = act.filter(([, m]) => m.status === "active").length + "人";
   $("memList").innerHTML = act.map(([id, m]) => `<div class="row mrow"><div class="avatar" style="background:${colorOf(id)};width:28px;height:28px;font-size:12px">${esc((m.name || "?")[0])}</div>
     <div class="t">${esc(m.name)}${m.role === "admin" ? "（管理者）" : ""}${m.status === "removed" ? ` <span class="badge pend">外した人</span>` : ""}<small>${esc(m.email)}${m.closer ? (busyMap[id] ? (busyMap[id].status === "ok" ? " ・ Googleカレンダー連携中" : " ・ Googleカレンダー未共有") : "") : ""}</small></div>
-    <div class="acts2">${m.status === "active" ? `<button data-a="closer" data-id="${id}" aria-pressed="${!!m.closer}" class="${m.closer ? "ok" : ""}">${m.closer ? "クローザー" : "クローザーにする"}</button>` : ""}
-    ${m.role !== "admin" ? (m.status === "active" ? `<button class="ng" data-a="rm" data-id="${id}">外す</button>` : `<button data-a="back" data-id="${id}">戻す</button>`) : ""}</div></div>`).join("");
+    <div class="acts2">${m.status === "active" ? `<button data-a="closer" data-id="${esc(id)}" aria-pressed="${!!m.closer}" class="${m.closer ? "ok" : ""}">${m.closer ? "クローザー" : "クローザーにする"}</button>` : ""}
+    ${m.role !== "admin" ? (m.status === "active" ? `<button class="ng" data-a="rm" data-id="${esc(id)}">外す</button>` : `<button data-a="back" data-id="${esc(id)}">戻す</button>`) : ""}</div></div>`).join("");
 }
 document.addEventListener("click", e => {
   const b = e.target.closest("#pendList button, #memList button"); if (!b) return;
@@ -1468,7 +1544,7 @@ function showTab(v) {
   VIEWS.forEach(x => $("v-" + x).hidden = x !== v);
   document.querySelectorAll(".tabs button").forEach(b => { if (b.dataset.go === v) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current"); });
   window.scrollTo(0, 0);
-  if (v === "cal") renderCal(); if (v === "kpi") renderKpi(); if (v === "remind") renderRemind(); if (v === "log") { renderLog(); if (logMode === "hist") loadHist(false); } if (v === "set") { renderAdmin(); renderGcal(); }
+  if (v === "cal") renderCal(); if (v === "kpi") renderKpi(); if (v === "remind") renderRemind(); if (v === "log") { renderLog(); if (logMode === "hist") loadHist(false); } if (v === "set") { renderAdmin(); renderGcal(); renderFeedback(); }
 }
 document.addEventListener("click", e => { const b = e.target.closest("[data-go]"); if (b) showTab(b.dataset.go); });
 COL = Object.fromEntries(ITEMS.map(i => [i.k, i]));
