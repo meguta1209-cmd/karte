@@ -81,6 +81,7 @@ let ITEMS = DEFAULT_ITEMS;
 let COL = {};
 let myToday = [];        // 自分の今日の記録
 let pendMine = [], pendTeam = [], undated = [], slots = [];
+const loadedFlags = {rec: false, task: false};   // 「今日の予定」は両方そろってから出す
 let unsubs = [];
 /* 購読が断られたら黙って止まらず、数秒おいて張り直す（名簿の確定直後などに起こりうる） */
 let retrying = false;
@@ -107,7 +108,7 @@ function closerList() {
 }
 const CNAME = id => (closerList().find(c => c.id === id) || {name: id === "none" ? "担当未定" : nameOf(id)}).name;
 const CCOL = id => (closerList().find(c => c.id === id) || {color: "#5F6368"}).color;
-const resChip = k => { const c = COL[k] || {bg:"#E8EAED", fg:"#3C4043"}; return `<span class="res${c.strike ? " strike" : ""}" style="background:${c.bg};color:${c.fg}">${esc(k)}</span>`; };
+const resChip = k => { const c = COL[k] || (typeof TASK_COL !== "undefined" && TASK_COL[k]) || {bg:"#E8EAED", fg:"#3C4043"}; return `<span class="res${c.strike ? " strike" : ""}" style="background:${c.bg};color:${c.fg}">${esc(k)}</span>`; };
 
 /* Firestore の記録 → 画面で使う形 */
 function recOf(snap) {
@@ -199,10 +200,14 @@ function startApp() {
   }, onErr("項目")));
   subscribeToday();
   unsubs.push(onSnapshot(query(recs, where("uid", "==", U), where("pending", "==", true)), s => {
-    pendMine = s.docs.map(recOf); renderAfterPending();
-    maybeDaySum(); cleanupOldApos();
+    recPendMine = s.docs.map(recOf); loadedFlags.rec = true; rebuildPending(); cleanupOldApos();
   }, onErr("予定")));
-  unsubs.push(onSnapshot(query(recs, where("pending", "==", true)), s => { pendTeam = s.docs.map(recOf); if (curTab === "remind") renderRemind(); }, onErr("チームの予定")));
+  unsubs.push(onSnapshot(query(recs, where("pending", "==", true)), s => { recPendTeam = s.docs.map(recOf); rebuildPending(); }, onErr("チームの予定")));
+  /* テレアポ以外の予定（前確など） */
+  unsubs.push(onSnapshot(query(collection(db, "tasks"), where("uid", "==", U), where("done", "==", false)), s => {
+    taskMine = s.docs.map(taskOf); loadedFlags.task = true; rebuildPending();
+  }, onErr("予定")));
+  unsubs.push(onSnapshot(query(collection(db, "tasks"), where("done", "==", false)), s => { taskTeam = s.docs.map(taskOf); rebuildPending(); }, onErr("チームの予定")));
   unsubs.push(onSnapshot(query(recs, where("undated", "==", true)), s => { undated = s.docs.map(recOf).sort((a, b) => a.t - b.t); renderUndated(); }, onErr("日時未定のアポ")));
   unsubs.push(onSnapshot(collection(db, "busy"), s => {
     busyMap = {};
@@ -267,15 +272,22 @@ function buildGrid() {
     grid.appendChild(b);
   });
 }
-function statInc(uid, k, hour, n) { return {c: {[uid]: {[k]: increment(n)}}, h: {[uid]: {[String(hour)]: increment(n)}}}; }
+/* 日ごとの集計に足す（n=1）／引く（n=-1）。mb は10分枠 "HHM0"（稼働時間を出すため。古い記録には無い） */
+function statInc(uid, k, hour, n, mb) {
+  const o = {c: {[uid]: {[k]: increment(n)}}, h: {[uid]: {[String(hour)]: increment(n)}}};
+  if (mb) o.m = {[uid]: {[mb]: increment(n)}};
+  return o;
+}
+const mbOf = t => pad(t.getHours()) + Math.floor(t.getMinutes() / 10) + "0";
 
 function addResult(k, btn) {
   const t = new Date(), day = dk(t), hour = t.getHours();
   const ref = doc(collection(db, "records"));
-  const data = {uid: U, r: k, t: Timestamp.fromDate(t), day, hour, memo: null, undated: k === "アポ", pending: false, done: false, slotId: null};
+  const mb = mbOf(t);
+  const data = {uid: U, r: k, t: Timestamp.fromDate(t), day, hour, mb, memo: null, undated: k === "アポ", pending: false, done: false, slotId: null};
   const b = writeBatch(db);
   b.set(ref, data);
-  b.set(doc(db, "stats", day), statInc(U, k, hour, 1), {merge: true});
+  b.set(doc(db, "stats", day), statInc(U, k, hour, 1, mb), {merge: true});
   b.commit().catch(e => toast(errMsg(e)));
   if (btn) { btn.classList.remove("pop"); void btn.offsetWidth; btn.classList.add("pop"); }
   if (navigator.vibrate) navigator.vibrate(15);
@@ -286,7 +298,7 @@ function addResult(k, btn) {
 function deleteRec(rec) {
   const b = writeBatch(db);
   b.delete(doc(db, "records", rec.id));
-  b.set(doc(db, "stats", rec.day), statInc(rec.uid, rec.r, rec.hour, -1), {merge: true});
+  b.set(doc(db, "stats", rec.day), statInc(rec.uid, rec.r, rec.hour, -1, rec.mb), {merge: true});
   if (rec.slotId) b.delete(doc(db, "slots", rec.slotId));
   return b.commit();
 }
@@ -507,11 +519,11 @@ function parseListPaste(text) {
   const shop = parts.find(p => p !== telPart && !asPhone(p)) || "";
   return {shop, tel: asPhone(telPart)};
 }
-function fillFromList(text) {
+function fillFromList(text, shopId = "mShop", telId = "mTel") {
   const p = parseListPaste(text);
   if (!p) return false;
-  if (p.shop) $("mShop").value = p.shop;
-  $("mTel").value = p.tel;
+  if (p.shop) $(shopId).value = p.shop;
+  $(telId).value = p.tel;
   toast(p.shop ? "店名と電話番号を分けて入れました" : "電話番号を入れました");
   return true;
 }
@@ -535,6 +547,81 @@ $("mPaste").onclick = async () => {
 };
 
 function refreshHistSoon() { histLoadedAt = 0; if (curTab === "log" && logMode === "hist") setTimeout(() => loadHist(false), 800); }
+/* ---------- 予定（前確など）を書く画面 ---------- */
+let editingTask = null, tKind = "前確", tApoWhen = null;
+function drawTaskKinds() {
+  $("tKinds").innerHTML = TASK_KINDS.map(k => `<button type="button" class="cl-chip" data-k="${k.k}" aria-pressed="${tKind === k.k}"><i style="background:${k.bg};outline:1px solid ${k.fg}"></i>${k.k}</button>`).join("");
+}
+$("tKinds").onclick = e => { const b = e.target.closest("button"); if (!b) return; tKind = b.dataset.k; drawTaskKinds(); setTaskQuick(); };
+function setTaskQuick() {
+  const q = $("tQuick"); q.innerHTML = "";
+  const at = (base, off, h, mi) => { const d = addDays(dayStart(base), off); d.setHours(h, mi || 0, 0, 0); return d; };
+  let opts;
+  if (tApoWhen && tKind === "前確") {
+    $("tQuickLbl").textContent = "面談（" + md(tApoWhen) + " " + hm(tApoWhen) + "）に合わせて";
+    const w = tApoWhen;
+    opts = [["面談の前日 同じ時間", at(w, -1, w.getHours(), w.getMinutes())], ["面談の日 朝10時", at(w, 0, 10)], ["面談の1時間前", new Date(w.getTime() - 36e5)], ["面談の30分前", new Date(w.getTime() - 18e5)]]
+      .filter(([, d]) => d > new Date());
+  } else {
+    $("tQuickLbl").textContent = "";
+    opts = [["1時間後", new Date(Date.now() + 36e5)], ["今日17時", at(new Date(), 0, 17)], ["明日10時", at(new Date(), 1, 10)], ["明日15時", at(new Date(), 1, 15)]];
+  }
+  opts.forEach(([l, d]) => { const b = document.createElement("button"); b.type = "button"; b.textContent = l; b.onclick = () => $("tWhen").value = toLocal(d); q.appendChild(b); });
+}
+/* t: 直す予定（無ければ新しく作る）。pre: 新しく作るときの初期値 {kind, shop, tel, apoWhen} */
+function openTask(t, pre) {
+  editingTask = t || null; pre = pre || {};
+  tKind = t ? t.r : (pre.kind || "前確");
+  tApoWhen = pre.apoWhen || null;
+  $("tTitleH").textContent = t ? "予定を直す" : "予定を追加";
+  $("tTitle").value = t ? t.title : (pre.kind === "前確" && pre.shop ? "前確の電話" : "");
+  $("tWhen").value = t && t.memo.when ? toLocal(t.memo.when) : "";
+  $("tShop").value = t ? t.memo.shop : (pre.shop || "");
+  $("tTel").value = t ? t.memo.tel : (pre.tel || "");
+  $("tText").value = t ? t.memo.text : "";
+  $("tRemind").checked = t ? t.memo.remind !== false : true;
+  const act = Object.entries(members).filter(([, m]) => m.status === "active").sort((a, b) => (a[0] === U ? -1 : b[0] === U ? 1 : (a[1].name || "").localeCompare(b[1].name || "", "ja")));
+  $("tWho").innerHTML = act.map(([id, m]) => `<option value="${id}">${esc(m.name)}${id === U ? "（自分）" : ""}</option>`).join("");
+  $("tWho").value = t ? t.uid : U;
+  $("tDelete").hidden = !t; delete $("tDelete").dataset.arm; $("tDelete").textContent = "削除";
+  drawTaskKinds(); setTaskQuick();
+  $("tScrim").hidden = $("taskSheet").hidden = false;
+  setTimeout(() => $(t ? "tTitle" : "tWhen").focus(), 50);
+}
+function closeTask() { $("tScrim").hidden = $("taskSheet").hidden = true; editingTask = null; }
+$("tCancel").onclick = closeTask; $("tScrim").onclick = closeTask;
+document.addEventListener("click", e => { if (e.target.closest("[data-newtask]")) openTask(null); });
+["tShop", "tTel"].forEach(id => $(id).addEventListener("paste", e => {
+  const t = (e.clipboardData || window.clipboardData).getData("text");
+  if (fillFromList(t, "tShop", "tTel")) e.preventDefault();
+}));
+$("tPaste").onclick = async () => {
+  try { const t = await navigator.clipboard.readText(); if (!fillFromList(t, "tShop", "tTel")) toast("店名と電話番号が見つかりませんでした"); }
+  catch (_) { $("tShop").focus(); toast("店名の欄を長押しして貼り付けてください（自動で分けます）"); }
+};
+$("tSave").onclick = async () => {
+  const w = $("tWhen").value ? new Date($("tWhen").value) : null;
+  if (!w || isNaN(w)) { toast("日時を入れてください"); $("tWhen").focus(); return; }
+  const data = {uid: $("tWho").value || U, kind: tKind, title: $("tTitle").value.trim(), shop: $("tShop").value.trim(), tel: $("tTel").value.trim(),
+    text: $("tText").value.trim(), when: Timestamp.fromDate(w), remind: $("tRemind").checked};
+  const t = editingTask;
+  $("tSave").disabled = true;
+  try {
+    if (t) await updateDoc(doc(db, "tasks", t.id), data);
+    else await setDoc(doc(collection(db, "tasks")), {...data, by: U, done: false, createdAt: serverTimestamp()});
+    closeTask();
+    toast((t ? "予定を直しました：" : "予定を入れました：") + md(w) + " " + hm(w) + (data.uid !== U ? "（担当 " + nameOf(data.uid) + "）" : ""));
+  } catch (e) { toast(errMsg(e)); }
+  finally { $("tSave").disabled = false; }
+};
+$("tDelete").onclick = () => {
+  const t = editingTask; if (!t) return;
+  const b = $("tDelete");
+  if (!b.dataset.arm) { b.dataset.arm = "1"; b.textContent = "本当に削除"; setTimeout(() => { if (b.isConnected) { delete b.dataset.arm; b.textContent = "削除"; } }, 2500); return; }
+  deleteDoc(doc(db, "tasks", t.id)).then(() => { closeTask(); toast("予定を削除しました"); }).catch(e => toast(errMsg(e)));
+};
+document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("taskSheet").hidden) closeTask(); });
+
 function closeMemo() { refreshHistSoon(); $("scrim").hidden = $("msheet").hidden = true; editing = null; }
 $("mSkip").onclick = () => {
   const r = editing; closeMemo();
@@ -632,8 +719,8 @@ async function bookSlot(rec, m, when, remind) {
     tx.set(chosen.sref, sdata);
     if (rec.draft) {
       const t = new Date();
-      tx.set(recRef, {uid: U, r: "アポ", t: Timestamp.fromDate(t), day: dk(t), hour: t.getHours(), memo, undated: false, pending: true, done: false, slotId: chosen.sref.id});
-      tx.set(doc(db, "stats", dk(t)), statInc(U, "アポ", t.getHours(), 1), {merge: true});
+      tx.set(recRef, {uid: U, r: "アポ", t: Timestamp.fromDate(t), day: dk(t), hour: t.getHours(), mb: mbOf(t), memo, undated: false, pending: true, done: false, slotId: chosen.sref.id});
+      tx.set(doc(db, "stats", dk(t)), statInc(U, "アポ", t.getHours(), 1, mbOf(t)), {merge: true});
     } else {
       tx.update(recRef, {memo, undated: false, pending: true, slotId: chosen.sref.id});
     }
@@ -855,10 +942,39 @@ function renderUndated() {
 /* ============================================================
    リマインド・通知
    ============================================================ */
+/* 再架電と「予定」（前確など）は、過ぎても3日間は残す。アポは今日以降だけ */
+const keepsLate = r => r.r === "再架電" || r.isTask;
 function visiblePending(list) {
   const from = addDays(today(), -3);
-  return list.filter(r => r.memo && r.memo.when && !r.done && (r.r === "再架電" ? r.memo.when >= from : r.memo.when >= today()));
+  return list.filter(r => r.memo && r.memo.when && !r.done && (keepsLate(r) ? r.memo.when >= from : r.memo.when >= today()));
 }
+
+/* ============================================================
+   テレアポ以外の予定（前確・折り返し待ちなど）。架電数には数えない
+   tasks/{id} = {uid: 担当, by: 作った人, kind, title, shop, tel, text, when, remind, done, createdAt}
+   リマインド・通知・今日の予定では、再架電と同じ形（memo.when など）に直して混ぜる
+   ============================================================ */
+const TASK_KINDS = [
+  {k: "前確",       bg: "#D7CCF0", fg: "#4A2F8A"},
+  {k: "折り返し待ち", bg: "#FCE3B5", fg: "#7A4A00"},
+  {k: "資料送付",   bg: "#CDE8F6", fg: "#0B5C80"},
+  {k: "その他",     bg: "#E3E6EA", fg: "#3C4043"}
+];
+const TASK_COL = Object.fromEntries(TASK_KINDS.map(t => [t.k, t]));
+let recPendMine = [], recPendTeam = [], taskMine = [], taskTeam = [];
+function taskOf(snap) {
+  const d = snap.data();
+  return {id: snap.id, isTask: true, uid: d.uid, by: d.by, r: d.kind || "その他", done: !!d.done,
+    t: tsd(d.createdAt) || new Date(), title: d.title || "",
+    memo: {shop: d.shop || "", tel: d.tel || "", text: d.text || "", when: tsd(d.when), remind: d.remind !== false}};
+}
+function rebuildPending() {
+  pendMine = recPendMine.concat(taskMine);
+  pendTeam = recPendTeam.concat(taskTeam.filter(t => !recPendTeam.some(r => r.id === t.id)));
+  renderAfterPending(); maybeDaySum();
+}
+const canEditTask = t => t.uid === U || t.by === U || (me && me.role === "admin");
+const itemLabel = r => r.isTask ? (r.title || r.r) : r.r;
 function todayMine() { const T = today(), E = addDays(T, 1); return visiblePending(pendMine).filter(r => r.memo.when >= T && r.memo.when < E).sort((a, b) => a.memo.when - b.memo.when); }
 function renderAfterPending() { renderNext(); if (curTab === "remind") renderRemind(); updateRmDot(); }
 function updateRmDot() {
@@ -867,16 +983,16 @@ function updateRmDot() {
 }
 function renderNext() {
   if (!started) return;
-  const now = new Date(), list = todayMine(), r = list.find(x => x.memo.when >= now), late = list.filter(x => x.memo.when < now && x.r === "再架電").length;
+  const now = new Date(), list = todayMine(), r = list.find(x => x.memo.when >= now), late = list.filter(x => x.memo.when < now && keepsLate(x)).length;
   const box = $("nextUp");
   if (!list.length) { box.hidden = true; return; }
   box.hidden = false;
   if (r) {
     const mins = Math.round((r.memo.when - now) / 6e4);
     const left = mins >= 60 ? Math.floor(mins / 60) + "時間" + (mins % 60 ? mins % 60 + "分" : "") : mins + "分";
-    box.innerHTML = `<span class="nu-lbl">次の予定</span><span class="num nu-t">${hm(r.memo.when)}</span><span class="nu-b">${resChip(r.r)} ${esc(r.memo.shop || "")}</span><span class="nu-left">あと${left}</span>`;
+    box.innerHTML = `<span class="nu-lbl">次の予定</span><span class="num nu-t">${hm(r.memo.when)}</span><span class="nu-b">${resChip(r.r)} ${esc(r.isTask ? [r.title, r.memo.shop].filter(Boolean).join(" ") : (r.memo.shop || ""))}</span><span class="nu-left">あと${left}</span>`;
   } else box.innerHTML = `<span class="nu-lbl">次の予定</span><span class="nu-b">今日のこのあとの予定はありません</span>`;
-  if (late) box.innerHTML += `<span class="badge late">過ぎた再架電 ${late}件</span>`;
+  if (late) box.innerHTML += `<span class="badge late">過ぎた予定 ${late}件</span>`;
   if (r) box.innerHTML += `<span class="nu-go">詳細 ›</span>`;
   box.onclick = () => r ? openDetail(r) : showTab("remind");
 }
@@ -887,7 +1003,7 @@ $("rmFilter").onclick = e => { const b = e.target.closest("button"); if (!b) ret
 function renderRemind() {
   const now = new Date(), tmr = addDays(today(), 1);
   const list = visiblePending(rmF === "me" ? pendMine : pendTeam).sort((a, b) => a.memo.when - b.memo.when);
-  const groups = [["過ぎている再架電", list.filter(r => r.memo.when < now)], ["今日", list.filter(r => r.memo.when >= now && r.memo.when < tmr)], ["明日以降", list.filter(r => r.memo.when >= tmr)]];
+  const groups = [["過ぎている予定", list.filter(r => r.memo.when < now)], ["今日", list.filter(r => r.memo.when >= now && r.memo.when < tmr)], ["明日以降", list.filter(r => r.memo.when >= tmr)]];
   const body = $("rmBody"); body.innerHTML = "";
   groups.forEach(([title, g]) => {
     const h = document.createElement("h2"); h.innerHTML = `${title} <span class="aside">${g.length}件</span>`; body.appendChild(h);
@@ -895,13 +1011,21 @@ function renderRemind() {
     if (!g.length) c.innerHTML = `<div class="empty">ありません</div>`;
     g.slice(0, 30).forEach(r => {
       const late = r.memo.when < now, mine = r.uid === U;
-      const row = document.createElement("div"); row.className = "rm" + (late ? " late" : "");
+      const row = document.createElement("div"); row.className = "rm" + (late ? " late" : "") + (r.isTask ? " task" : "");
+      const head = r.isTask
+        ? `${resChip(r.r)} ${esc(r.title || "")}${r.memo.shop ? ` <span class="t-shop">${esc(r.memo.shop)}</span>` : ""}`
+        : `${esc(r.memo.shop || "（店名なし）")}${r.r === "アポ" ? `<span class="badge apo">アポ・Zoom</span>` : ""}`;
+      const meta = r.isTask
+        ? `担当 ${esc(nameOf(r.uid))}${r.by && r.by !== r.uid ? " ・ 作成 " + esc(nameOf(r.by)) : ""}`
+        : `担当 ${esc(nameOf(r.uid))}${r.r === "アポ" && r.memo.closer ? " ・ クローザー " + esc(CNAME(r.memo.closer)) : ""} ・ ${md(r.t)} に${r.r === "アポ" ? "獲得" : "架電"}`;
+      const btns = r.isTask && canEditTask(r) ? `<button class="done">完了</button><button class="later">明日へ</button>`
+        : r.r === "再架電" && mine ? `<button class="done">かけた</button><button class="later">明日へ</button>` : `<button class="edit">詳細</button>`;
       row.innerHTML = `<div class="time">${hm(r.memo.when)}<small>${md(r.memo.when)}</small></div>
-        <div class="info"><div class="shop">${esc(r.memo.shop || "（店名なし）")}${r.r === "アポ" ? `<span class="badge apo">アポ・Zoom</span>` : ""}${late ? `<span class="badge late">期限切れ</span>` : ""}</div>
-        <div class="meta">担当 ${esc(nameOf(r.uid))}${r.r === "アポ" && r.memo.closer ? " ・ クローザー " + esc(CNAME(r.memo.closer)) : ""} ・ ${md(r.t)} に${r.r === "アポ" ? "獲得" : "架電"}</div>
+        <div class="info"><div class="shop">${head}${late ? `<span class="badge late">期限切れ</span>` : ""}</div>
+        <div class="meta">${meta}</div>
         ${r.memo.tel ? `<div class="tel-line num">☎ ${esc(r.memo.tel)}</div>` : ""}
         ${r.memo.text ? `<div class="memo">${esc(r.memo.text)}</div>` : ""}</div>
-        <div class="btns">${r.r === "再架電" && mine ? `<button class="done">かけた</button><button class="later">明日へ</button>` : `<button class="edit">詳細</button>`}</div>`;
+        <div class="btns">${btns}</div>`;
       const d = row.querySelector(".done"), l = row.querySelector(".later"), ed = row.querySelector(".edit");
       if (d) d.onclick = e => { e.stopPropagation(); markDone(r); };
       if (l) l.onclick = e => { e.stopPropagation(); postpone(r); };
@@ -915,6 +1039,11 @@ function renderRemind() {
   });
 }
 function markDone(r) {
+  if (r.isTask) {   // 予定は架電ではないので、完了にするだけ
+    updateDoc(doc(db, "tasks", r.id), {done: true, doneAt: serverTimestamp()}).catch(e => toast(errMsg(e)));
+    toast("「" + itemLabel(r) + "」を完了にしました");
+    return;
+  }
   histLoadedAt = 0;
   updateDoc(doc(db, "records", r.id), {done: true, pending: false}).catch(e => toast(errMsg(e)));
   showTab("count"); toast("今回の結果のボタンを押してください");
@@ -923,7 +1052,8 @@ function postpone(r) {
   refreshHistSoon();
   const now = new Date();
   const w = addDays(dayStart(r.memo.when < now ? now : r.memo.when), 1); w.setHours(r.memo.when.getHours(), r.memo.when.getMinutes());
-  updateDoc(doc(db, "records", r.id), {"memo.when": Timestamp.fromDate(w)}).catch(e => toast(errMsg(e)));
+  const p = r.isTask ? updateDoc(doc(db, "tasks", r.id), {when: Timestamp.fromDate(w)}) : updateDoc(doc(db, "records", r.id), {"memo.when": Timestamp.fromDate(w)});
+  p.catch(e => toast(errMsg(e)));
   toast(md(w) + " " + hm(w) + " に延期しました");
 }
 
@@ -933,25 +1063,31 @@ let detailRec = null;
 function openDetail(r) {
   if (!r) return;
   detailRec = r;
-  const m = r.memo || {}, mine = r.uid === U, w = m.when, now = new Date();
-  $("rdTitle").innerHTML = resChip(r.r) + " " + esc(m.shop || "（店名なし）");
+  const m = r.memo || {}, mine = r.isTask ? canEditTask(r) : r.uid === U, w = m.when, now = new Date();
+  $("rdTitle").innerHTML = resChip(r.r) + " " + esc(r.isTask ? ([r.title, m.shop].filter(Boolean).join(" ") || r.r) : (m.shop || "（店名なし）"));
   const rows = [];
   if (w) {
     const mins = Math.round((w - now) / 6e4);
-    const left = mins > 0 && mins < 24 * 60 ? `<span class="rd-left">あと${mins >= 60 ? Math.floor(mins / 60) + "時間" + (mins % 60 ? mins % 60 + "分" : "") : mins + "分"}</span>` : mins <= 0 && r.r === "再架電" && !r.done ? `<span class="badge late">過ぎています</span>` : "";
-    rows.push([r.r === "アポ" ? "面談日時" : "かけ直す日時", `<b class="num">${dayWord(w)} ${md(w)} ${hm(w)}</b>${left}`]);
+    const left = mins > 0 && mins < 24 * 60 ? `<span class="rd-left">あと${mins >= 60 ? Math.floor(mins / 60) + "時間" + (mins % 60 ? mins % 60 + "分" : "") : mins + "分"}</span>` : mins <= 0 && keepsLate(r) && !r.done ? `<span class="badge late">過ぎています</span>` : "";
+    rows.push([r.isTask ? "日時" : r.r === "アポ" ? "面談日時" : "かけ直す日時", `<b class="num">${dayWord(w)} ${md(w)} ${hm(w)}</b>${left}`]);
   } else if (r.r === "アポ") rows.push(["面談日時", `<span class="badge late">日時未定</span>`]);
+  if (r.isTask && m.shop && r.title) rows.push(["店名", esc(m.shop)]);
   if (r.r === "アポ" && m.closer) rows.push(["クローザー", `<i class="dot-c" style="background:${CCOL(m.closer)}"></i>${esc(CNAME(m.closer))}`]);
-  rows.push([r.r === "アポ" ? "獲得" : "担当", esc(nameOf(r.uid)) + `<small>${md(r.t)} ${hm(r.t)}</small>`]);
+  if (r.isTask) rows.push(["担当", esc(nameOf(r.uid)) + (r.by && r.by !== r.uid ? `<small>作成 ${esc(nameOf(r.by))}</small>` : "")]);
+  else rows.push([r.r === "アポ" ? "獲得" : "担当", esc(nameOf(r.uid)) + `<small>${md(r.t)} ${hm(r.t)}</small>`]);
   rows.push(["メモ", m.text ? `<span class="rd-memo">${esc(m.text)}</span>` : `<span class="rd-none">なし</span>`]);
   $("rdTel").innerHTML = m.tel
     ? `<a class="rd-call" href="${telHref(m.tel)}"><span>☎</span><b class="num">${esc(m.tel)}</b><small>押すと電話をかける</small></a><button class="rd-copy" id="rdCopy">コピー</button>`
-    : `<div class="rd-notel">電話番号は入っていません${mine ? "（「メモを編集」から入れられます）" : ""}</div>`;
+    : `<div class="rd-notel">電話番号は入っていません${mine ? "（「" + (r.isTask ? "編集" : "メモを編集") + "」から入れられます）" : ""}</div>`;
   $("rdBody").innerHTML = rows.map(([k, v]) => `<div class="rd-row"><span class="k">${k}</span><span class="v">${v}</span></div>`).join("");
   const acts = [];
-  if (mine && r.r === "再架電" && !r.done && w) acts.push(`<button class="primary" data-a="done">かけた（結果を押す）</button>`, `<button data-a="later">明日へ延期</button>`);
+  if (r.isTask && mine && !r.done) acts.push(`<button class="primary" data-a="done">完了にする</button>`, `<button data-a="later">明日へ延期</button>`);
+  if (!r.isTask && mine && r.r === "再架電" && !r.done && w) acts.push(`<button class="primary" data-a="done">かけた（結果を押す）</button>`, `<button data-a="later">明日へ延期</button>`);
+  /* アポからは、前確の予定をそのまま作れる */
+  if (!r.isTask && r.r === "アポ") acts.push(`<button data-a="prec">＋ 前確の予定を作る</button>`);
   $("rdActs").innerHTML = acts.join(""); $("rdActs").hidden = !acts.length;
   $("rdEdit").hidden = !mine;
+  $("rdEdit").textContent = r.isTask ? "編集" : "メモを編集";
   $("rdScrim").hidden = $("recDetail").hidden = false;
   if ($("rdCopy")) $("rdCopy").onclick = async () => {
     try { await navigator.clipboard.writeText(m.tel); toast("電話番号をコピーしました"); }
@@ -960,12 +1096,13 @@ function openDetail(r) {
 }
 function closeDetail() { $("rdScrim").hidden = $("recDetail").hidden = true; detailRec = null; }
 $("rdClose").onclick = closeDetail; $("rdScrim").onclick = closeDetail;
-$("rdEdit").onclick = () => { const r = detailRec; closeDetail(); if (r) openMemo(r); };
+$("rdEdit").onclick = () => { const r = detailRec; closeDetail(); if (r) (r.isTask ? openTask(r) : openMemo(r)); };
 $("rdActs").onclick = e => {
   const b = e.target.closest("button"); if (!b || !detailRec) return;
   const r = detailRec; closeDetail();
   if (b.dataset.a === "done") markDone(r);
   if (b.dataset.a === "later") postpone(r);
+  if (b.dataset.a === "prec") openTask(null, {kind: "前確", shop: (r.memo || {}).shop, tel: (r.memo || {}).tel, apoWhen: (r.memo || {}).when});
 };
 document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("recDetail").hidden) closeDetail(); });
 /* 3日以上前に終わった自分のアポは、リマインドの対象から外しておく */
@@ -998,14 +1135,16 @@ function showAlert(rec, mode, force) {
   const now = mode === "now";
   if (!force && !$(now ? "swOnTime" : "swBefore").checked) return;
   alertRec = rec;
-  const kind = rec.r === "アポ" ? "アポ（Zoom）" : "再架電";
+  const kind = rec.isTask ? rec.r : rec.r === "アポ" ? "アポ（Zoom）" : "再架電";
+  const canDone = rec.r === "再架電" || rec.isTask;
   $("alertBar").classList.toggle("now", now);
   $("alTag").textContent = now ? kind + "の時間です" : kind + "まで あと15分";
   $("alTime").textContent = hm(rec.memo.when);
-  $("alShop").textContent = rec.memo.shop || "（店名なし）";
+  $("alShop").textContent = rec.isTask ? ([rec.title, rec.memo.shop].filter(Boolean).join(" ") || rec.r) : (rec.memo.shop || "（店名なし）");
   $("alMemo").textContent = rec.memo.text || ""; $("alMemo").hidden = !rec.memo.text;
-  $("alDone").hidden = !now || rec.r !== "再架電"; $("alSnooze").hidden = !now;
-  $("alOpen").classList.toggle("primary", !now || rec.r !== "再架電");
+  $("alDone").hidden = !now || !canDone; $("alSnooze").hidden = !now;
+  $("alDone").textContent = rec.isTask ? "完了" : "かけた";
+  $("alOpen").classList.toggle("primary", !now || !canDone);
   $("alertBar").hidden = false;
   beep(now ? 3 : 2);
   if ($("swVib").checked && navigator.vibrate) navigator.vibrate(now ? [300, 100, 300, 100, 300] : [200, 100, 200]);
@@ -1036,7 +1175,7 @@ function checkNotifs() {
 /* その日はじめて開いたときの「今日の予定」（機械ごとに1日1回） */
 let pendLoaded = false;
 function maybeDaySum() {
-  if (!pendLoaded) { pendLoaded = true; }
+  if (!loadedFlags.rec || !loadedFlags.task) return;
   if (!$("swMorning").checked) return;
   const k = "team-daysum";
   if (lsGet(k, "") === dk(today())) return;
@@ -1049,8 +1188,8 @@ function showDaySum() {
   $("dsCount").textContent = list.length + "件";
   $("dsList").innerHTML = list.length ? list.map(r => {
     const past = r.memo.when < now;
-    return `<div class="ds-row tap${past ? " past" : ""}" data-id="${r.id}" tabindex="0"><span class="num ds-t">${hm(r.memo.when)}</span><span class="ds-b">${resChip(r.r)} <b>${esc(r.memo.shop || "（店名なし）")}</b>${past ? `<span class="badge late">過ぎています</span>` : ""}${r.memo.text ? `<small>${esc(r.memo.text)}</small>` : ""}</span></div>`;
-  }).join("") : `<div class="empty">今日の再架電・アポはありません</div>`;
+    return `<div class="ds-row tap${past ? " past" : ""}" data-id="${r.id}" tabindex="0"><span class="num ds-t">${hm(r.memo.when)}</span><span class="ds-b">${resChip(r.r)} <b>${esc(r.isTask ? [r.title, r.memo.shop].filter(Boolean).join(" ") || r.r : (r.memo.shop || "（店名なし）"))}</b>${past ? `<span class="badge late">過ぎています</span>` : ""}${r.memo.text ? `<small>${esc(r.memo.text)}</small>` : ""}</span></div>`;
+  }).join("") : `<div class="empty">今日の予定はありません</div>`;
   $("dsScrim").hidden = $("daySum").hidden = false;
   $("dsList").querySelectorAll(".ds-row").forEach(el => { const r = list.find(x => x.id === el.dataset.id); const go = () => { closeDaySum(); openDetail(r); }; el.onclick = go; el.onkeydown = e => { if (e.key === "Enter") go(); }; });
   if (list.length) beep(1);
@@ -1095,20 +1234,49 @@ async function loadStats(a, b) {
   statCache[key] = {at: Date.now(), data};
   return data;
 }
+/* 1人・1日の稼働時間（分）。1時間ごとに決める：
+   ・その時間帯の架電が全部10分枠に入っている → 電話をかけた10分枠の数×10分
+   ・10分枠に入っていない架電がある（この機能より前の記録や、古い版の画面からの記録）→ その1時間を60分
+   ・架電が0の時間帯は数えない（古い版の画面で取り消して10分枠だけ残った分を除くため）
+   10分枠の数はその時間帯の架電数を超えないように抑える */
+function activeMin(dayDoc, uid) {
+  const h = (dayDoc.h || {})[uid] || {}, m = (dayDoc.m || {})[uid] || {};
+  const mSum = {}, mBuckets = {};
+  Object.entries(m).forEach(([k, v]) => {
+    if (v > 0) { const hr = +k.slice(0, 2); mSum[hr] = (mSum[hr] || 0) + v; mBuckets[hr] = (mBuckets[hr] || 0) + 1; }
+  });
+  let min = 0;
+  Object.entries(h).forEach(([hr, v]) => {
+    if (!(v > 0)) return;
+    const k = +hr;
+    min += v > (mSum[k] || 0) ? 60 : 10 * Math.min(mBuckets[k] || 0, v);
+  });
+  return min;
+}
 function sumStats(data, who) {
-  const c = {}; let n = 0;
+  const c = {}; let n = 0, mins = 0;
   Object.values(data).forEach(day => Object.entries(day.c || {}).forEach(([uid, m]) => {
     if (who !== "all" && uid !== who) return;
     Object.entries(m).forEach(([k, v]) => { c[k] = (c[k] || 0) + v; n += v; });
+    mins += activeMin(day, uid);
   }));
   const apo = c["アポ"] || 0, conn = apo + (c["オーナー断り"] || 0) + (c["NG"] || 0);
-  return {n, apo, c, apoRate: n ? apo / n * 100 : 0, connRate: n ? conn / n * 100 : 0};
+  return {n, apo, c, apoRate: n ? apo / n * 100 : 0, connRate: n ? conn / n * 100 : 0,
+    mins, perHour: mins ? n / (mins / 60) : 0};
+}
+/* 稼働時間の見せ方：10時間未満は「3時間20分」、それ以上は「42.5時間」 */
+function fmtMins(mins) {
+  if (!mins) return "0分";
+  if (mins >= 600) return (mins / 60).toFixed(1) + "時間";
+  const h = Math.floor(mins / 60), m = mins % 60;
+  return (h ? h + "時間" : "") + (m ? m + "分" : "");
 }
 const workDays = (a, b) => { let n = 0; for (let d = new Date(a); d < b; d = addDays(d, 1)) if (d.getDay() !== 0) n++; return Math.max(n, 1); };
 function delta(cur, prev, unit) {
   const d = cur - prev;
-  if (Math.abs(d) < (unit === "%" ? 0.05 : 0.5)) return `<span class="d flat">前期比 ±0</span>`;
-  const s = (d > 0 ? "▲" : "▼") + (unit === "%" ? Math.abs(d).toFixed(1) + "pt" : Math.round(Math.abs(d)));
+  const dec = unit === "%" || unit === "件/時" || unit === "時間";
+  if (Math.abs(d) < (dec ? 0.05 : 0.5)) return `<span class="d flat">前期比 ±0</span>`;
+  const s = (d > 0 ? "▲" : "▼") + (unit === "%" ? Math.abs(d).toFixed(1) + "pt" : dec ? Math.abs(d).toFixed(1) + (unit === "時間" ? "h" : "") : Math.round(Math.abs(d)));
   return `<span class="d ${d > 0 ? "up" : "down"}">前期比 ${s}</span>`;
 }
 let kpiSeq = 0;
@@ -1126,7 +1294,9 @@ async function renderKpi() {
   const s = sumStats(data, member), p = sumStats(pdata, member);
   $("tiles").innerHTML = [
     ["架電", s.n, "", delta(s.n, p.n)], ["アポ", s.apo, "", delta(s.apo, p.apo)],
-    ["アポ率", s.apoRate.toFixed(1), "%", delta(s.apoRate, p.apoRate, "%")], ["接続率", s.connRate.toFixed(1), "%", delta(s.connRate, p.connRate, "%")]
+    ["アポ率", s.apoRate.toFixed(1), "%", delta(s.apoRate, p.apoRate, "%")], ["接続率", s.connRate.toFixed(1), "%", delta(s.connRate, p.connRate, "%")],
+    ["1時間あたり", s.mins ? s.perHour.toFixed(1) : "–", s.mins ? "件" : "", s.mins ? delta(s.perHour, p.perHour, "件/時") : `<span class="d flat">&nbsp;</span>`],
+    ["稼働時間", fmtMins(s.mins), "", delta(s.mins / 60, p.mins / 60, "時間")]
   ].map(([k, v, u, d]) => `<div class="card tile"><div class="k">${k}</div><div class="v">${v}<small>${u}</small></div>${d}</div>`).join("");
 
   const wd = workDays(a, b);
@@ -1134,11 +1304,12 @@ async function renderKpi() {
   const rows = [...uids].map(u => ({u, s: sumStats(data, u)})).filter(r => r.s.n || (members[r.u] && members[r.u].status === "active"))
     .sort((x, y) => y.s.apo - x.s.apo || y.s.n - x.s.n);
   const maxN = Math.max(1, ...rows.map(r => r.s.n)), tot = sumStats(data, "all");
-  $("mtable").innerHTML = `<tr><th>メンバー</th><th>架電</th><th>アポ</th><th>アポ率</th><th>接続率</th><th>1日平均</th></tr>` +
+  const ph = s => s.mins ? s.perHour.toFixed(1) : "–";
+  $("mtable").innerHTML = `<tr><th>メンバー</th><th>架電</th><th>1時間あたり</th><th>アポ</th><th>アポ率</th><th>接続率</th><th>稼働</th><th>1日平均</th></tr>` +
     rows.map(({u, s}) => `<tr class="pick${u === U ? " me" : ""}" data-u="${u}" style="${member !== "all" && member !== u ? "opacity:.45" : ""}">
       <td class="name">${esc(nameOf(u))}</td><td><span class="meter">${s.n}<i style="width:${Math.round(s.n / maxN * 56)}px"></i></span></td>
-      <td>${s.apo}</td><td>${s.apoRate.toFixed(1)}%</td><td>${s.connRate.toFixed(1)}%</td><td>${(s.n / wd).toFixed(0)}</td></tr>`).join("") +
-    `<tr><td class="name">チーム合計</td><td>${tot.n}</td><td>${tot.apo}</td><td>${tot.apoRate.toFixed(1)}%</td><td>${tot.connRate.toFixed(1)}%</td><td>${(tot.n / wd).toFixed(0)}</td></tr>`;
+      <td><b>${ph(s)}</b></td><td>${s.apo}</td><td>${s.apoRate.toFixed(1)}%</td><td>${s.connRate.toFixed(1)}%</td><td>${fmtMins(s.mins)}</td><td>${(s.n / wd).toFixed(0)}</td></tr>`).join("") +
+    `<tr><td class="name">チーム合計</td><td>${tot.n}</td><td><b>${ph(tot)}</b></td><td>${tot.apo}</td><td>${tot.apoRate.toFixed(1)}%</td><td>${tot.connRate.toFixed(1)}%</td><td>${fmtMins(tot.mins)}</td><td>${(tot.n / wd).toFixed(0)}</td></tr>`;
   $("mtable").querySelectorAll("tr.pick").forEach(tr => tr.onclick = () => { member = member === tr.dataset.u ? "all" : tr.dataset.u; $("member").value = member; renderKpi(); });
 
   const who = u => member === "all" || u === member;
@@ -1154,7 +1325,7 @@ async function renderKpi() {
     $("chartTitle").textContent = "日別の架電数";
     for (let d = new Date(a); d < b; d = addDays(d, 1)) {
       const st = sumStats(data[dk(d)] ? {x: data[dk(d)]} : {}, member);
-      buckets.push({lbl: (d.getMonth() + 1) + "/" + d.getDate(), tip: md(d), n: st.n, apo: st.apo});
+      buckets.push({lbl: (d.getMonth() + 1) + "/" + d.getDate(), tip: md(d), n: st.n, apo: st.apo, perHour: st.mins ? st.perHour : null});
     }
   }
   drawChart(buckets);
@@ -1184,7 +1355,7 @@ function drawChart(bk) {
   const show = e => {
     const r = e.target.closest(".hit"); if (!r) { tip.hidden = true; return; }
     const i = +r.dataset.i, x = bk[i], bb = svg.getBoundingClientRect(), sc = bb.width / W;
-    tip.innerHTML = `${x.tip}　架電 <b>${x.n}</b>` + (x.apo != null ? `　アポ <b>${x.apo}</b>` : "");
+    tip.innerHTML = `${x.tip}　架電 <b>${x.n}</b>` + (x.apo != null ? `　アポ <b>${x.apo}</b>` : "") + (x.perHour != null ? `<br>1時間あたり <b>${x.perHour.toFixed(1)}</b>` : "");
     tip.style.left = Math.min(Math.max((L + slot * i + slot / 2) * sc + 12, 90), bb.width - 60) + "px"; tip.style.top = (y(vals[i]) * sc + 4) + "px"; tip.hidden = false;
   };
   svg.addEventListener("pointermove", show); svg.addEventListener("pointerdown", show); svg.addEventListener("pointerleave", () => tip.hidden = true);
@@ -1302,4 +1473,18 @@ document.addEventListener("click", e => { const b = e.target.closest("[data-go]"
 COL = Object.fromEntries(ITEMS.map(i => [i.k, i]));
 buildGrid();
 
-if ("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js").catch(() => {});
+/* 新しい版を出したら、開きっぱなしの画面も入れ替える。
+   画面に戻ってきたときに新しい版を確かめ、入れ替わったら（入力中でなければ）読み込み直す */
+if ("serviceWorker" in navigator) {
+  const hadController = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.register("./sw.js").then(reg => {
+    document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") reg.update().catch(() => {}); });
+  }).catch(() => {});
+  let reloading = false;
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (!hadController || reloading) return;                // 初めて入ったときは読み込み直さない
+    const busy = () => ["msheet", "itemSheet", "taskSheet"].some(id => $(id) && !$(id).hidden);
+    const go = () => { if (busy()) { setTimeout(go, 5000); return; } reloading = true; location.reload(); };
+    go();
+  });
+}

@@ -104,6 +104,7 @@
     </div>
     <button class="nextup" id="nextUp" hidden></button>
     <button class="undated" id="undatedMine" hidden></button>
+    <button class="link-add-task" data-newtask="1">＋ テレアポ以外の予定を入れる（前確など）</button>
     <div class="grid" id="grid"></div>
     <div class="acts">
       <button id="undo">↶ ひとつ戻す</button>
@@ -193,12 +194,13 @@
     <div class="card chart" id="chart"></div>
     <h2>結果の内訳</h2>
     <div class="card brk" id="brk"></div>
-    <p class="defs">アポ率＝アポ÷架電。接続率（オーナーと話せた率）＝（アポ＋オーナー断り＋NG）÷架電。前期比＝同じ日数だけさかのぼった期間との差。</p>
+    <p class="defs">アポ率＝アポ÷架電。接続率（オーナーと話せた率）＝（アポ＋オーナー断り＋NG）÷架電。1時間あたり＝架電÷稼働時間。稼働時間＝電話をかけた10分の枠の合計（休憩など、かけていない時間は入らない。10分の枠の情報が無い古い記録は、かけた時間帯を1時間として数える）。前期比＝同じ日数だけさかのぼった期間との差。</p>
   </section>
 
   <!-- リマインド -->
   <section id="v-remind" hidden>
     <h1 class="screen">リマインド</h1>
+    <button class="btn-add-task" data-newtask="1">＋ 予定を追加（前確・折り返し待ちなど）</button>
     <div class="chips" id="rmFilter">
       <button class="chip-btn" data-f="me" aria-pressed="true">自分の分</button>
       <button class="chip-btn" data-f="all" aria-pressed="false">チーム全員</button>
@@ -314,6 +316,36 @@
     <div class="foot">
       <button id="mSkip">あとで</button>
       <button class="primary" id="mSave">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- テレアポ以外の予定（前確など） -->
+<div class="scrim" id="tScrim" hidden></div>
+<div class="msheet" id="taskSheet" role="dialog" aria-modal="true" aria-labelledby="tTitleH" hidden>
+  <div class="in">
+    <h3 id="tTitleH">予定を追加</h3>
+    <p class="hint">テレアポ以外の予定です。架電数には数えません。時間の15分前とちょうどの時間に通知します。</p>
+    <div class="fld"><label>種類</label><div class="quick" id="tKinds"></div></div>
+    <div class="fld"><label for="tTitle">内容</label><input id="tTitle" maxlength="40" placeholder="例）前確の電話、資料をLINEで送る"></div>
+    <div class="fld">
+      <label for="tWhen">日時</label>
+      <input type="datetime-local" id="tWhen">
+      <div class="quick-lbl" id="tQuickLbl"></div>
+      <div class="quick" id="tQuick"></div>
+    </div>
+    <div class="fld"><label for="tWho">担当</label><select id="tWho" class="member"></select></div>
+    <button type="button" class="btn-paste" id="tPaste">📋 リストからコピーした店名と電話番号を貼り付け</button>
+    <div class="two">
+      <div class="fld"><label for="tShop">店名（あれば）</label><input id="tShop" placeholder="例）ほぐし処 こもれび"></div>
+      <div class="fld"><label for="tTel">電話番号（あれば）</label><input id="tTel" inputmode="tel" placeholder="例）075-000-0000"></div>
+    </div>
+    <div class="fld"><label for="tText">メモ</label><textarea id="tText" placeholder="確認すること、話す内容など"></textarea></div>
+    <label class="inline-sw"><span class="sw"><input type="checkbox" id="tRemind" checked><span></span></span>15分前とちょうどの時間にアプリで通知</label>
+    <div class="foot">
+      <button id="tDelete" class="danger-btn" hidden>削除</button>
+      <button id="tCancel">やめる</button>
+      <button class="primary" id="tSave">保存</button>
     </div>
   </div>
 </div>

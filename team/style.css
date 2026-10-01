@@ -141,7 +141,7 @@ h2 .aside{float:right; letter-spacing:0; font-weight:400;}
 .range{display:flex; gap:6px; align-items:center; font-size:13px; flex-wrap:wrap;}
 .range input{border:1px solid var(--rule); background:var(--card); border-radius:6px; padding:4px 6px;}
 select.member{border:1px solid var(--rule); background:var(--card); border-radius:8px; padding:6px 10px; font-size:14px; width:100%;}
-.tiles{display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-top:12px;}
+.tiles{display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-top:12px;}
 @media (max-width:460px){ .tiles{grid-template-columns:repeat(2,1fr);} }
 .tile{padding:10px 12px;}
 .tile .k{font-size:11.5px; color:var(--ink2);}
@@ -552,3 +552,9 @@ img{max-width:100%;}
 .hist-sum b{color:var(--ink);}
 .badge.done{background:var(--ok-soft); color:var(--ok);}
 .hrow .memo .tel-line{display:inline; margin:0;}
+/* テレアポ以外の予定 */
+.btn-add-task{width:100%; min-height:44px; margin-bottom:10px; border-radius:8px; border:1.5px dashed var(--blue); background:var(--blue-soft); color:var(--blue); font-weight:700; font-size:14px;}
+.link-add-task{display:block; margin:8px 0 0; border:0; background:none; color:var(--blue); font-size:12.5px; font-weight:700; padding:2px 0; text-align:left;}
+.rm.task .shop .res{margin-right:4px;}
+.t-shop{font-weight:400; color:var(--ink2); font-size:13px;}
+.danger-btn{color:var(--red) !important; flex:0 0 auto !important; padding:0 14px;}
