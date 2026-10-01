@@ -39,6 +39,23 @@ const DEFAULT_ITEMS = [
   {k:"NG",           bg:"#473822", fg:"#FFFFFF"},
   {k:"再架電",       bg:"#BFE1F6", fg:"#0A53A8"}
 ];
+/* ボタンの意味（迷ったときの目安）。項目の編集で説明を書けば、そちらが優先 */
+const DEFAULT_DESC = {
+  "留守": "誰も出なかった（呼び出し音だけ・留守番電話）",
+  "受けブロ": "受付やスタッフに止められて、オーナーにつないでもらえなかった",
+  "オーナー断り": "オーナー（決める人）と話せたけど、断られた",
+  "接客中": "出た人に「接客中・手が離せない」と言われた（あとでかけ直す）",
+  "ガチャ切り": "話の途中で一方的に切られた",
+  "使われてない": "「この番号は使われていません」と流れた（閉店・番号ちがい）",
+  "オーナー不在": "「オーナーは今いない・休み・外出中」と言われた",
+  "繋がらない": "話し中・電波が届かない・すぐ切れるなどで、つながらなかった",
+  "アポ": "商談の約束が取れた → 日時とクローザーを入れる",
+  "本社管理": "「本社（本部）が決めているので、店では決められない」と言われた",
+  "NG（業者系）": "「業者・営業の電話はお断り」と言われた（もうかけない）",
+  "NG": "「もうかけてこないで」と言われた（もうかけない）",
+  "再架電": "かけ直す約束をした・「また電話して」と言われた → 日時を入れるとリマインドが届く"
+};
+const descOf = it => (it.desc != null && it.desc !== "" ? it.desc : DEFAULT_DESC[it.k]) || "";
 const PALETTE = [
   ["#E8EAED","#3C4043"], ["#D5D8DC","#3C4043"], ["#5F6368","#FFFFFF"],
   ["#BFE1F6","#0A53A8"], ["#C6DBE1","#215A6C"], ["#BDE7E0","#0B5B4F"], ["#D4EDBC","#11734B"],
@@ -67,6 +84,17 @@ const tsd = v => v && typeof v.toDate === "function" ? v.toDate() : (v instanceo
 const lsGet = (k, d) => { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (_) { return d; } };
 const lsSet = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (_) {} };
 let tt;
+/* 結果ボタンの意味の一覧 */
+function openHelp() {
+  $("hpList").innerHTML = ITEMS.map(it => `<div class="hp-row">${resChip(it.k)}<span>${esc(descOf(it) || "（説明はまだありません）")}</span></div>`).join("");
+  $("hpScrim").hidden = $("helpDlg").hidden = false;
+}
+function closeHelp() { $("hpScrim").hidden = $("helpDlg").hidden = true; }
+document.addEventListener("click", e => {
+  if (e.target.closest("#openHelp")) openHelp();
+  if (e.target.closest("#hpClose") || e.target.closest("#hpScrim")) closeHelp();
+});
+document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("helpDlg").hidden) closeHelp(); });
 /* toast(文, ボタン名, 押したとき, ボタン名2, 押したとき2 …)。ボタンはいくつでも */
 function toast(msg, ...acts) {
   const el = $("toast"); el.textContent = msg;
@@ -282,6 +310,7 @@ function renderMe() {
   $("myCloser").checked = !!me.closer;
   renderGcal();
   $("adminBox").hidden = me.role !== "admin";
+  $("lineBox").hidden = me.role !== "admin";   // 準備中の事情はメンバーには見せない
 }
 const grid = $("grid");
 function buildGrid() {
@@ -294,6 +323,7 @@ function buildGrid() {
       `<span style="${it.strike ? "text-decoration:line-through" : ""}">${esc(it.k)}</span><span class="n">0</span>` +
       (it.k === "アポ" || it.k === "再架電" ? `<span class="memo-mark">＋詳細</span>` : "");
     b.onclick = () => addResult(it.k, b);
+    if (descOf(it)) b.title = descOf(it);   // PCはマウスを乗せると意味が出る
     grid.appendChild(b);
   });
   /* PC（マウスのある機械）だけ、キーボードでも押せることを一行で知らせる */
@@ -360,7 +390,7 @@ async function pollTeam() {
 
 /* キーボード：1〜0・Q…で +1、Backspace / Ctrl+Z でひとつ戻す */
 document.addEventListener("keydown", e => {
-  if (!started || curTab !== "count" || !$("msheet").hidden || !$("itemSheet").hidden || !$("moveDlg").hidden || e.isComposing || e.altKey || e.metaKey) return;
+  if (!started || curTab !== "count" || !$("msheet").hidden || !$("itemSheet").hidden || !$("moveDlg").hidden || !$("helpDlg").hidden || e.isComposing || e.altKey || e.metaKey) return;
   if (e.target.closest && e.target.closest("input, textarea, select")) return;
   if ((e.ctrlKey && e.key.toLowerCase() === "z") || (!e.ctrlKey && e.key === "Backspace")) { e.preventDefault(); $("undo").click(); return; }
   if (e.ctrlKey || e.repeat) return;
@@ -824,7 +854,11 @@ const monday = d => addDays(dayStart(d), -((d.getDay() + 6) % 7));
 let wkStart = monday(new Date()), pickMode = false, pickReturn = "count", calCloser = "all";
 /* 表示：週（月〜土）か日（クローザーごとの列）。スマホは日、PCは週から始める。選んだ方を覚える */
 let calView = lsGet("team-calview", innerWidth < 640 ? "day" : "week");
-let calDay = today(); if (calDay.getDay() === 0) calDay = addDays(calDay, 1);
+/* 日表示の最初の日：ふだんは今日。営業が終わった時間（22:00）を過ぎたら明日。日曜は次の月曜 */
+const calStartDay = () => { let d = today(); if (new Date().getHours() >= SLOT_H1) d = addDays(d, 1); if (d.getDay() === 0) d = addDays(d, 1); return d; };
+let calDay = calStartDay();
+/* 開いたままで22:00を過ぎたとき：日表示が今日のままなら、カレンダーを開いた時に明日へ */
+function rollCalDay() { if (calView === "day" && !pickMode && +calDay === +today() && +calStartDay() !== +today()) { calDay = calStartDay(); wkStart = monday(calDay); } }
 const skipSun = (d, step) => { let x = addDays(d, step); if (x.getDay() === 0) x = addDays(x, step); return x; };
 $("wkPrev").onclick = () => {
   if (calView === "day") { calDay = skipSun(calDay, -1); wkStart = monday(calDay); } else wkStart = addDays(wkStart, -7);
@@ -842,7 +876,7 @@ $("calView").onclick = e => {
   else wkStart = monday(calDay);
   renderCal();
 };
-$("calToday").onclick = () => { calDay = today(); if (calDay.getDay() === 0) calDay = addDays(calDay, 1); wkStart = monday(calDay); renderCal(); };
+$("calToday").onclick = () => { calDay = calStartDay(); wkStart = monday(calView === "day" ? calDay : new Date()); renderCal(); };
 async function loadPastWeek() {
   if (wkStart >= addDays(today(), -7)) return;
   try {
@@ -922,7 +956,8 @@ function renderCal() {
       });
     }
     $("wkSub").textContent = (off === 0 ? "今日" : off === 1 ? "明日" : off === -1 ? "昨日" : "") + "　アポ " + count + "件 ・ 空き " + free + "枠";
-    $("calToday").hidden = off === 0;
+    $("calToday").hidden = +calDay === +calStartDay();
+    $("calToday").textContent = +calStartDay() === +today() ? "今日へ" : "明日へ";
     $("calDefs").textContent = "空いている枠を押すと、そのクローザーで、その時間から1時間半の商談を登録できます。商談を押すと詳細が出ます。";
   } else {
     /* ---- 週表示：月〜土 ---- */
@@ -962,7 +997,7 @@ function renderCal() {
       });
     }
     $("wkSub").textContent = (wOff === 0 ? "今週" : wOff === 1 ? "来週" : wOff === -1 ? "先週" : "") + "　アポ " + count + "件 ・ 空き " + free + "枠";
-    $("calToday").hidden = wOff === 0;
+    $("calToday").hidden = wOff === 0; $("calToday").textContent = "今週へ";
     $("calDefs").textContent = "枠を押すと、商談の詳細を見るか、空いていればその時間から1時間半の商談を登録できます。クローザー1人につき同じ時間は1件まで" +
       (calCloser === "all" ? "で、全員が埋まっている時間だけ「埋まり」になります。" : "。今は" + CNAME(calCloser) + "さんの予定だけ表示しています。");
   }
@@ -1293,6 +1328,18 @@ function maybeDaySum() {
   lsSet(k, dk(today()));
   showDaySum();
 }
+/* 予定が0件の日に出す、前向きになる一言（日ごとに替わる。同じ日は同じ言葉） */
+const CHEERS = [
+  "今日の1本目が、未来のアポ。いってらっしゃい！",
+  "予定ゼロは伸びしろ！ 今日つくりにいきましょう",
+  "まずは1本。声があったまったら、流れは来ます",
+  "断られても大丈夫。アポはその先で待ってます",
+  "今日のヒーローは、あなたかも。いきましょう！",
+  "笑顔の声は、電話の向こうにもちゃんと届きます",
+  "1本ずつ、ていねいに。それがいちばんの近道です",
+  "昨日の自分を1本こえたら、今日は勝ち！"
+];
+const cheerOf = d => CHEERS[Math.floor(d.getTime() / 864e5) % CHEERS.length];
 function showDaySum() {
   const list = todayMine(), now = new Date();
   $("dsDate").textContent = md(today());
@@ -1300,7 +1347,9 @@ function showDaySum() {
   $("dsList").innerHTML = list.length ? list.map(r => {
     const past = r.memo.when < now;
     return `<div class="ds-row tap${past ? " past" : ""}" data-id="${esc(r.id)}" tabindex="0"><span class="num ds-t">${hm(r.memo.when)}</span><span class="ds-b">${resChip(r.r)} <b>${esc(r.isTask ? [r.title, r.memo.shop].filter(Boolean).join(" ") || r.r : (r.memo.shop || "（店名なし）"))}</b>${past ? `<span class="badge late">過ぎています</span>` : ""}${r.memo.text ? `<small>${esc(r.memo.text)}</small>` : ""}</span></div>`;
-  }).join("") : `<div class="empty">今日の予定はありません</div>`;
+  }).join("") : `<div class="ds-cheer"><b>${esc(cheerOf(today()))}</b><small>今日の予定はまだありません。取れたアポや再架電は、ここに並びます</small></div>`;
+  $("dsGo").hidden = !list.length;
+  $("dsOk").textContent = list.length ? "確認した" : "いってきます！";
   $("dsScrim").hidden = $("daySum").hidden = false;
   $("dsList").querySelectorAll(".ds-row").forEach(el => { const r = list.find(x => x.id === el.dataset.id); const go = () => { closeDaySum(); openDetail(r); }; el.onclick = go; el.onkeydown = e => { if (e.key === "Enter") go(); }; });
   if (list.length) beep(1);
@@ -1650,6 +1699,7 @@ function renderMoveNag() {
     : !p.has ? "この端末のブラウザには、" + md(new Date(MOVE_FROM + "T00:00")) + "からの前のカウンターの記録はありません"
     : n ? "まだ引っ越していない記録が " + n + "件あります" : "引っ越し済みです（前のカウンターの記録は、そのまま残してあります）";
   $("openMove").hidden = !p || !p.has || !!p.owner;
+  $("moveRow").hidden = !p || !p.has;   // このブラウザに前のカウンターの記録が無い人には出さない
 }
 const movePicked = () => movePlan ? movePlan.rows.filter(r => r.add.length && r.pick) : [];
 function renderMoveGo() {
@@ -1865,9 +1915,9 @@ document.addEventListener("click", e => {
 
 /* 結果の項目の編集（管理者） */
 let draftItems = [];
-$("editItems").onclick = () => { draftItems = ITEMS.map(i => ({...i, open: false})); drawItems(); $("itemSheet").hidden = false; };
+$("editItems").onclick = () => { draftItems = ITEMS.map(i => ({...i, desc: descOf(i), open: false})); drawItems(); $("itemSheet").hidden = false; };   // 説明は今出ているもの（決まった文も）を入れておく
 $("itemCancel").onclick = () => $("itemSheet").hidden = true;
-$("addItem").onclick = () => { const [bg, fg] = PALETTE[draftItems.length % PALETTE.length]; draftItems.push({k: "", bg, fg, open: false}); drawItems(); const ins = document.querySelectorAll("#itemList input"); ins[ins.length - 1].focus(); };
+$("addItem").onclick = () => { const [bg, fg] = PALETTE[draftItems.length % PALETTE.length]; draftItems.push({k: "", bg, fg, open: false}); drawItems(); const ins = document.querySelectorAll("#itemList input:not(.desc)"); ins[ins.length - 1].focus(); };
 function drawItems() {
   const box = $("itemList"); box.innerHTML = "";
   draftItems.forEach((it, i) => {
@@ -1882,6 +1932,8 @@ function drawItems() {
       mk("↓", i === draftItems.length - 1, () => { [draftItems[i + 1], draftItems[i]] = [draftItems[i], draftItems[i + 1]]; drawItems(); }),
       mk("✕", false, () => { draftItems.splice(i, 1); drawItems(); }, "rm"));
     wrap.appendChild(row);
+    const ds = document.createElement("input"); ds.className = "desc"; ds.value = it.desc || ""; ds.maxLength = 80; ds.placeholder = "説明（どんなときに押すか）"; ds.oninput = () => { it.desc = ds.value; };
+    wrap.appendChild(ds);
     if (it.open) {
       const pal = document.createElement("div"); pal.className = "pal";
       PALETTE.forEach(([bg, fg]) => { const p = document.createElement("button"); p.style.background = bg; p.style.color = fg; p.textContent = "あ"; if (bg === it.bg) p.className = "on"; p.onclick = () => { it.bg = bg; it.fg = fg; it.open = false; drawItems(); }; pal.appendChild(p); });
@@ -1896,7 +1948,7 @@ $("itemSave").onclick = () => {
   const seen = {}; let dup = null; list.forEach(d => { if (seen[d.k]) dup = d.k; seen[d.k] = 1; });
   if (dup) { toast("「" + dup + "」が2つあります"); return; }
   if (!list.length) { toast("項目が1つもありません"); return; }
-  setDoc(doc(db, "config", "items"), {list: list.map(({k, bg, fg, strike}) => strike ? {k, bg, fg, strike: true} : {k, bg, fg})})
+  setDoc(doc(db, "config", "items"), {list: list.map(({k, bg, fg, strike, desc}) => Object.assign({k, bg, fg}, strike ? {strike: true} : {}, (desc || "").trim() ? {desc: desc.trim()} : {}))})
     .then(() => { $("itemSheet").hidden = true; toast("保存しました。全員の画面に反映されます"); }).catch(e => toast(errMsg(e)));
 };
 $("itemsNote").textContent = "全員のボタンが変わります";
@@ -1912,11 +1964,32 @@ function showTab(v) {
   VIEWS.forEach(x => $("v-" + x).hidden = x !== v);
   document.querySelectorAll(".tabs button").forEach(b => { if (b.dataset.go === v) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current"); });
   window.scrollTo(0, 0);
-  if (v === "cal") renderCal(); if (v === "kpi") renderKpi(); if (v === "remind") renderRemind(); if (v === "log") { renderLog(); if (logMode === "hist") loadHist(false); } if (v === "set") { renderAdmin(); renderGcal(); renderFeedback(); if (movePlan) renderMoveNag(); else refreshMove(); }
+  if (v === "cal") { rollCalDay(); renderCal(); } if (v === "kpi") renderKpi(); if (v === "remind") renderRemind(); if (v === "log") { renderLog(); if (logMode === "hist") loadHist(false); } if (v === "set") { renderAdmin(); renderGcal(); renderFeedback(); if (movePlan) renderMoveNag(); else refreshMove(); }
 }
 document.addEventListener("click", e => { const b = e.target.closest("[data-go]"); if (b) showTab(b.dataset.go); });
 COL = Object.fromEntries(ITEMS.map(i => [i.k, i]));
 buildGrid();
+
+/* PC（広い画面）のカウント画面は2列：左＝結果ボタン、右＝次の予定・日時未定・戻す・直近の記録。
+   スマホ・狭い画面は今まで通りの1列（並びを覚えておいて戻す） */
+const WIDE = matchMedia("(min-width: 1000px)");
+const SIDE_IDS = ["nextUp", "undatedMine", "gcalNag", "moveNag", "cntActs", "cntNote", "recentH", "recent", "recentAll"];
+const COUNT_ORDER = [...$("v-count").children];
+function layoutCount() {
+  const sec = $("v-count");
+  if (WIDE.matches) {
+    const main = $("cntMain") || Object.assign(document.createElement("div"), {id: "cntMain", className: "cnt-main"});
+    const side = $("cntSide") || Object.assign(document.createElement("div"), {id: "cntSide", className: "cnt-side"});
+    COUNT_ORDER.forEach(el => (SIDE_IDS.includes(el.id) ? side : main).appendChild(el));
+    sec.append(main, side); sec.classList.add("two-col");
+  } else {
+    COUNT_ORDER.forEach(el => sec.appendChild(el));
+    ["cntMain", "cntSide"].forEach(id => { if ($(id)) $(id).remove(); });
+    sec.classList.remove("two-col");
+  }
+}
+layoutCount();
+WIDE.addEventListener("change", layoutCount);
 
 /* 新しい版を出したら、開きっぱなしの画面も入れ替える。
    画面に戻ってきたときに新しい版を確かめ、入れ替わったら（入力中でなければ）読み込み直す */

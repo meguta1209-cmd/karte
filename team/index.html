@@ -18,7 +18,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=BIZ+UDPGothic:wght@400;700&family=Roboto+Mono:wght@500;700&display=swap">
-<link rel="stylesheet" href="./style.css?v=23">
+<link rel="stylesheet" href="./style.css?v=24">
 <script>
 /* LINEの中のブラウザではGoogleログインが通らない（途中の情報を覚えておけない）。
    LINEは ?openExternalBrowser=1 を付けると Safari / Chrome で開き直してくれるので、自動で付け直す */
@@ -112,15 +112,15 @@
     <div class="move-nag" id="moveNag" hidden><button class="mv-open" id="moveOpen"></button><button class="mv-x" id="moveX" aria-label="引っ越しの案内を消す">×</button></div>
     <div class="grid" id="grid"></div>
     <button class="link-add-task" data-newtask="1">＋ 予定を入れる（再架電・前確など）</button>
-    <p class="keyhelp" id="keyHelp"></p>
-    <div class="acts">
+    <div class="grid-foot"><p class="keyhelp" id="keyHelp"></p><button class="link-help" id="openHelp" type="button">？ ボタンの意味</button></div>
+    <div class="acts" id="cntActs">
       <button id="undo">↶ ひとつ戻す</button>
       <button id="memoLast">✎ 直前の記録にメモ</button>
     </div>
-    <p class="note">「アポ」「再架電」を押すと、詳細と日時を書く画面が開きます。ほかの結果も、下の記録を押せばメモを付けられます。</p>
-    <h2>直近の記録 <span class="aside">新しい順に15件</span></h2>
+    <p class="note" id="cntNote">「アポ」「再架電」を押すと、詳細と日時を書く画面が開きます。ほかの結果も、直近の記録を押せばメモを付けられます。</p>
+    <h2 id="recentH">直近の記録 <span class="aside">新しい順に15件</span></h2>
     <div class="card" id="recent"></div>
-    <button class="btn-plain" data-go="log">今日の記録をすべて見る</button>
+    <button class="btn-plain" id="recentAll" data-go="log">今日の記録をすべて見る</button>
   </section>
 
   <!-- 記録 -->
@@ -240,7 +240,7 @@
       <div class="row"><div class="t">役職<small id="myJobNote">変えるときは管理者（竹内さん）に伝えてください</small></div><span class="val" id="myJob"></span></div>
       <div class="row"><div class="t">クローザーもやる<small>オンにするとカレンダーの担当に出ます</small></div>
         <label class="sw"><input type="checkbox" id="myCloser" aria-label="クローザーもやる"><span></span></label></div>
-      <div class="row"><div class="t">前のカウンターから引っ越す<small id="moveState">確かめています…</small></div><button class="chip-btn" id="openMove" hidden>開く</button></div>
+      <div class="row" id="moveRow" hidden><div class="t">前のカウンターから引っ越す<small id="moveState">確かめています…</small></div><button class="chip-btn" id="openMove" hidden>開く</button></div>
     </div>
 
     <div id="gcalBox" hidden>
@@ -291,8 +291,8 @@
     </div>
     <div id="fbMineBox" hidden><h2>自分が送ったもの</h2><div class="card" id="fbMine"></div></div>
 
-    <h2>LINEグループへの日報</h2>
-    <div class="card set"><div class="row"><div class="t">準備中<small>費用の相談が終わったら付けます</small></div></div></div>
+    <div id="lineBox" hidden><h2>LINEグループへの日報 <span class="aside">管理者だけに見えています</span></h2>
+    <div class="card set"><div class="row"><div class="t">準備中<small>費用の相談が終わったら付けます</small></div></div></div></div>
 
     <button class="btn-plain danger" id="logout">ログアウト</button>
   </section>
@@ -425,6 +425,15 @@
   <div class="ds-foot"><button id="ggLater">あとで</button><button id="ggClose" class="primary">閉じる</button></div>
 </div>
 
+<!-- 結果ボタンの意味 -->
+<div class="scrim" id="hpScrim" hidden></div>
+<div class="daysum hpd" id="helpDlg" role="dialog" aria-modal="true" aria-labelledby="hpTitle" hidden>
+  <div class="ds-head"><h3 id="hpTitle">結果ボタンの意味</h3></div>
+  <p class="ds-note">迷ったときの目安です。</p>
+  <div id="hpList"></div>
+  <div class="ds-foot"><button id="hpClose" class="primary">閉じる</button></div>
+</div>
+
 <!-- 前のカウンターからの引っ越し -->
 <div class="scrim" id="mvScrim" hidden></div>
 <div class="daysum mvd" id="moveDlg" role="dialog" aria-modal="true" aria-labelledby="mvTitle" hidden>
@@ -466,6 +475,6 @@
 <div class="offline" id="offline" hidden>オフライン中：つながったら送ります</div>
 <div class="toast" id="toast"></div>
 
-<script type="module" src="./app.js?v=23"></script>
+<script type="module" src="./app.js?v=24"></script>
 </body>
 </html>
