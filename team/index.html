@@ -18,7 +18,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=BIZ+UDPGothic:wght@400;700&family=Roboto+Mono:wght@500;700&display=swap">
-<link rel="stylesheet" href="./style.css?v=15">
+<link rel="stylesheet" href="./style.css?v=16">
 <script>
 /* LINEの中のブラウザではGoogleログインが通らない（途中の情報を覚えておけない）。
    LINEは ?openExternalBrowser=1 を付けると Safari / Chrome で開き直してくれるので、自動で付け直す */
@@ -105,6 +105,7 @@
     <button class="nextup" id="nextUp" hidden></button>
     <button class="undated" id="undatedMine" hidden></button>
     <button class="gcal-nag" id="gcalNag" hidden>📅 Googleカレンダーの連携がまだです（クローザー）<span>手順を見る ›</span></button>
+    <button class="move-nag" id="moveNag" hidden></button>
     <button class="link-add-task" data-newtask="1">＋ 予定を入れる（再架電・前確など）</button>
     <div class="grid" id="grid"></div>
     <div class="acts">
@@ -233,6 +234,7 @@
       <div class="row"><div class="t">名前<small id="myMail"></small></div><input type="text" id="myName" maxlength="12" aria-label="名前"><button class="chip-btn" id="saveName">保存</button></div>
       <div class="row"><div class="t">クローザーもやる<small>オンにするとカレンダーの担当に出ます</small></div>
         <label class="sw"><input type="checkbox" id="myCloser" aria-label="クローザーもやる"><span></span></label></div>
+      <div class="row"><div class="t">前のカウンターから引っ越す<small id="moveState">確かめています…</small></div><button class="chip-btn" id="openMove" hidden>開く</button></div>
     </div>
 
     <div id="gcalBox" hidden>
@@ -417,6 +419,18 @@
   <div class="ds-foot"><button id="ggLater">あとで</button><button id="ggClose" class="primary">閉じる</button></div>
 </div>
 
+<!-- 前のカウンターからの引っ越し -->
+<div class="scrim" id="mvScrim" hidden></div>
+<div class="daysum mvd" id="moveDlg" role="dialog" aria-modal="true" aria-labelledby="mvTitle" hidden>
+  <div class="ds-head"><h3 id="mvTitle">📦 前のカウンターから引っ越し</h3><span class="num ds-count" id="mvCount"></span></div>
+  <p class="ds-note">このパソコンのブラウザに残っている、前のカウンターの記録をチーム版に入れます。押した日・時刻のまま入るので、KPI（1時間あたり・稼働時間も）と履歴に、その日の分として出ます。前のカウンターの記録は消しません。</p>
+  <p class="mv-who" id="mvWho"></p>
+  <div class="mv-rows" id="mvRows"></div>
+  <p class="mv-note" id="mvNote" hidden></p>
+  <p class="ds-note">アポは日時・クローザーの記録が無いので、カレンダーには入りません。同じ日を二重に足すことはありません。</p>
+  <div class="ds-foot"><button id="mvSkip">引っ越さない</button><button id="mvClose">閉じる</button><button id="mvGo" class="primary">引っ越す</button></div>
+</div>
+
 <!-- アプリ内リマインド -->
 <div class="alert" id="alertBar" role="alert" hidden>
   <div class="in">
@@ -446,6 +460,6 @@
 <div class="offline" id="offline" hidden>オフライン中：つながったら送ります</div>
 <div class="toast" id="toast"></div>
 
-<script type="module" src="./app.js?v=15"></script>
+<script type="module" src="./app.js?v=16"></script>
 </body>
 </html>

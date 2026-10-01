@@ -3,10 +3,11 @@
    ・Googleでログイン → 名前を登録 → 管理者が承認 → 使える
    ・データは Firestore（kekka-counter-2026）
        members/{uid}   名簿（name, email, closer, status: pending/active/removed, role）
-       records/{id}    1架電＝1件（uid, r, t, day, hour, memo, undated, pending, done, slotId）
+       records/{id}    1架電＝1件（uid, r, t, day, hour, memo, undated, pending, done, slotId。前のカウンターから引っ越した分は src:"old"）
        slots/{日_時刻_クローザー}  アポの枠。1枠1件なので二重予約できない
        stats/{日}      日ごとの集計 c.{uid}.{結果} / h.{uid}.{時}（KPIとチーム数はここだけ読む）
        config/items    結果の項目（管理者が編集）
+       imports/{uid}   前のカウンターからの引っ越しの進み具合 days.{日} = {n, last, done, skip}
    ・カレンダーとアポはリアルタイム、チームの架電数は30秒ごとに読む（無料枠に収めるため）
    ============================================================ */
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
@@ -92,7 +93,7 @@ const onErr = what => e => {
   toast(what + "の読み込みをやり直しています…");
   setTimeout(() => { retrying = false; if (!U || !me || me.status !== "active") return; stopAll(); startApp(); }, 3000);
 };
-let started = false;
+let started = false, itemsLoaded = false;
 
 const nameOf = uid => (members[uid] && members[uid].name) || "（退出した人）";
 function colorOf(uid) {
@@ -108,6 +109,7 @@ function closerList() {
 }
 const CNAME = id => (closerList().find(c => c.id === id) || {name: id === "none" ? "担当未定" : nameOf(id)}).name;
 const CCOL = id => (closerList().find(c => c.id === id) || {color: "#5F6368"}).color;
+const OLD_BADGE = `<span class="badge old">前のカウンター</span>`;   // 前のカウンターから引っ越した記録の印
 const resChip = k => { const c = COL[k] || (typeof TASK_COL !== "undefined" && TASK_COL[k]) || {bg:"#E8EAED", fg:"#3C4043"}; return `<span class="res${c.strike ? " strike" : ""}" style="background:${c.bg};color:${c.fg}">${esc(k)}</span>`; };
 
 /* Firestore の記録 → 画面で使う形 */
@@ -180,7 +182,10 @@ $("btnRegister").onclick = async () => {
   $("btnRegister").disabled = false;
 };
 
-function stopAll() { unsubs.forEach(f => { try { f(); } catch (_) {} }); unsubs = []; started = false; clearInterval(teamTimer); clearInterval(notifTimer); }
+function stopAll() {
+  unsubs.forEach(f => { try { f(); } catch (_) {} }); unsubs = []; started = false; clearInterval(teamTimer); clearInterval(notifTimer);
+  movePlan = null; $("moveNag").hidden = true; if (!moving) $("mvScrim").hidden = $("moveDlg").hidden = true;   // 前の人の引っ越しの案内を残さない
+}
 
 /* ============================================================
    本体の開始：リアルタイムの購読を張る
@@ -195,7 +200,7 @@ function startApp() {
   }, onErr("メンバー")));
   unsubs.push(onSnapshot(doc(db, "config", "items"), s => {
     const list = s.exists() && Array.isArray(s.data().list) && s.data().list.length ? s.data().list : DEFAULT_ITEMS;
-    ITEMS = list; COL = Object.fromEntries(ITEMS.map(i => [i.k, i]));
+    ITEMS = list; COL = Object.fromEntries(ITEMS.map(i => [i.k, i])); itemsLoaded = true;
     buildGrid(); renderCount();
   }, onErr("項目")));
   subscribeToday();
@@ -225,6 +230,7 @@ function startApp() {
   pollTeam(); teamTimer = setInterval(() => { if (document.visibilityState === "visible") pollTeam(); }, 30000);
   notifTimer = setInterval(checkNotifs, 15000);
   showTab(curTab);
+  setTimeout(() => { if (!lsGet(MOVE_SKIP, false)) refreshMove(); }, 1500);   // 前のカウンターの記録がこのブラウザに残っていれば、引っ越しの案内を出す
 }
 function subscribeToday() {
   listenDay = dk(today());
@@ -334,7 +340,7 @@ async function pollTeam() {
 
 /* キーボード：1〜0・Q…で +1、Backspace / Ctrl+Z でひとつ戻す */
 document.addEventListener("keydown", e => {
-  if (!started || curTab !== "count" || !$("msheet").hidden || !$("itemSheet").hidden || e.isComposing || e.altKey || e.metaKey) return;
+  if (!started || curTab !== "count" || !$("msheet").hidden || !$("itemSheet").hidden || !$("moveDlg").hidden || e.isComposing || e.altKey || e.metaKey) return;
   if (e.target.closest && e.target.closest("input, textarea, select")) return;
   if ((e.ctrlKey && e.key.toLowerCase() === "z") || (!e.ctrlKey && e.key === "Backspace")) { e.preventDefault(); $("undo").click(); return; }
   if (e.ctrlKey || e.repeat) return;
@@ -415,7 +421,8 @@ function renderHist(loading) {
     list.forEach(r => {
       const m = r.memo || {}, w = m.when;
       let st = "";
-      if (r.r === "アポ") st = !w ? `<span class="badge late">日時未定</span>` : w < now ? `<span class="badge done">面談済み</span>` : "";
+      if (r.src === "old" && !w) st = OLD_BADGE;
+      else if (r.r === "アポ") st = !w ? `<span class="badge late">日時未定</span>` : w < now ? `<span class="badge done">面談済み</span>` : "";
       else st = r.done ? `<span class="badge done">かけた</span>` : w && w < now ? `<span class="badge late">期限切れ</span>` : !w ? `<span class="badge pend">日時なし</span>` : "";
       const row = document.createElement("div"); row.className = "rec hrow tap"; row.tabIndex = 0;
       row.innerHTML = `<span class="tm">${hm(r.t)}</span><span class="body">${resChip(r.r)}${w ? `<span class="when">${r.r === "アポ" ? "面談" : "再架電"} ${md(w)} ${hm(w)}</span>` : ""}${st}
@@ -438,7 +445,7 @@ function fillRecs(box, list, withDelete) {
   list.forEach(r => {
     const row = document.createElement("div"); row.className = "rec"; row.setAttribute("role", "button"); row.tabIndex = 0;
     const w = r.memo && r.memo.when;
-    const when = w ? `<span class="when">${r.r === "アポ" ? "面談" : "再架電"} ${md(w)} ${hm(w)}</span>` : (r.r === "アポ" ? `<span class="badge late">日時未定</span>` : "");
+    const when = w ? `<span class="when">${r.r === "アポ" ? "面談" : "再架電"} ${md(w)} ${hm(w)}</span>` : r.src === "old" ? OLD_BADGE : (r.r === "アポ" ? `<span class="badge late">日時未定</span>` : "");
     row.innerHTML = `<span class="tm">${hm(r.t)}</span><span class="body">${resChip(r.r)}${when}` +
       (r.memo && (r.memo.shop || r.memo.text) ? `<div class="memo">${memoLine(r.memo)}</div>` : `<div class="add">＋ メモを付ける</div>`) + `</span>`;
     const hasInfo = r.memo && (r.memo.shop || r.memo.tel || r.memo.text || r.memo.when);
@@ -630,7 +637,7 @@ document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("taskSh
 function closeMemo() { refreshHistSoon(); $("scrim").hidden = $("msheet").hidden = true; editing = null; }
 $("mSkip").onclick = () => {
   const r = editing; closeMemo();
-  if (r && r.uid === U && !r.draft && r.r === "アポ" && !(r.memo && r.memo.when)) toast("日時未定のアポとして残しました");
+  if (r && r.uid === U && !r.draft && r.src !== "old" && r.r === "アポ" && !(r.memo && r.memo.when)) toast("日時未定のアポとして残しました");
 };
 $("scrim").onclick = closeMemo;
 document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("msheet").hidden) closeMemo(); });
@@ -693,10 +700,10 @@ $("mSave").onclick = async () => {
       toast((rec.draft ? "アポを登録しました（アポ+1）" : "保存しました。" + md(w) + " " + hm(w)) + "（クローザー " + CNAME(cl) + "）");
     } else if (rec.r === "アポ") {
       const b = writeBatch(db);
-      b.update(doc(db, "records", rec.id), {memo: m, undated: true, pending: false, slotId: null});
+      b.update(doc(db, "records", rec.id), {memo: m, undated: rec.src !== "old", pending: false, slotId: null});   // 前のカウンターから来たアポは「日時未定」に出さない
       if (rec.slotId) b.delete(doc(db, "slots", rec.slotId));
       b.commit().catch(e => toast(errMsg(e)));
-      closeMemo(); toast("日時未定のアポとして保存しました");
+      closeMemo(); toast(rec.src === "old" ? "メモを保存しました" : "日時未定のアポとして保存しました");
     } else if (rec.r === "再架電") {
       updateDoc(doc(db, "records", rec.id), {memo: {...m, when: w ? Timestamp.fromDate(w) : null, remind}, pending: !!w && !rec.done}).catch(e => toast(errMsg(e)));
       closeMemo(); toast(w ? "保存しました。" + md(w) + " " + hm(w) + " にリマインドします" : "メモを保存しました");
@@ -1118,7 +1125,7 @@ function openDetail(r) {
     const mins = Math.round((w - now) / 6e4);
     const left = mins > 0 && mins < 24 * 60 ? `<span class="rd-left">あと${mins >= 60 ? Math.floor(mins / 60) + "時間" + (mins % 60 ? mins % 60 + "分" : "") : mins + "分"}</span>` : mins <= 0 && keepsLate(r) && !r.done ? `<span class="badge late">過ぎています</span>` : "";
     rows.push([r.isTask ? "日時" : r.r === "アポ" ? "商談日時" : "かけ直す日時", `<b class="num">${dayWord(w)} ${md(w)} ${hm(w)}${r.r === "アポ" && !r.isTask ? "〜" + hm(new Date(w.getTime() + APO_MIN * 6e4)) : ""}</b>${left}`]);
-  } else if (r.r === "アポ") rows.push(["面談日時", `<span class="badge late">日時未定</span>`]);
+  } else if (r.r === "アポ") rows.push(["面談日時", r.src === "old" ? OLD_BADGE + `<small>日時は残っていません</small>` : `<span class="badge late">日時未定</span>`]);
   if (r.isTask && m.shop && r.title) rows.push(["店名", esc(m.shop)]);
   if (r.r === "アポ" && m.closer) rows.push(["クローザー", `<i class="dot-c" style="background:${CCOL(m.closer)}"></i>${esc(CNAME(m.closer))}`]);
   if (r.isTask) rows.push(["担当", esc(nameOf(r.uid)) + (r.by && r.by !== r.uid ? `<small>作成 ${esc(nameOf(r.by))}</small>` : "")]);
@@ -1309,7 +1316,9 @@ function sumStats(data, who) {
     Object.entries(m).forEach(([k, v]) => { c[k] = (c[k] || 0) + v; n += v; });
     mins += activeMin(day, uid);
   }));
-  const apo = c["アポ"] || 0, conn = apo + (c["オーナー断り"] || 0) + (c["NG"] || 0);
+  /* 接続＝アポ＋オーナー断り＋NG（項目名を「NG（業者系）」のように変えても数える） */
+  const isNG = k => k === "NG" || k.startsWith("NG（") || k.startsWith("NG(");
+  const apo = c["アポ"] || 0, conn = apo + (c["オーナー断り"] || 0) + Object.keys(c).filter(isNG).reduce((a, k) => a + c[k], 0);
   return {n, apo, c, apoRate: n ? apo / n * 100 : 0, connRate: n ? conn / n * 100 : 0,
     mins, perHour: mins ? n / (mins / 60) : 0};
 }
@@ -1460,7 +1469,7 @@ function closeGcalGuide() { $("ggScrim").hidden = $("gcalGuide").hidden = true; 
 /* まだ連携していないクローザーには、その日はじめて開いたときに1回だけ手順を出す（機械ごと） */
 function maybeGcalGuide() {
   if (!me || !me.closer || !busyLoaded || gcalLinked()) return;
-  if (!$("daySum").hidden || !$("msheet").hidden) { setTimeout(maybeGcalGuide, 4000); return; }   // 今日の予定などが開いていたら後で
+  if (!$("daySum").hidden || !$("msheet").hidden || !$("moveDlg").hidden) { setTimeout(maybeGcalGuide, 4000); return; }   // 今日の予定などが開いていたら後で
   const k = "team-gcal-guide";
   if (lsGet(k, "") === dk(today())) return;
   lsSet(k, dk(today()));
@@ -1489,6 +1498,197 @@ $("myCloser").onchange = () => {
     if (v && !gcalLinked()) { lsSet("team-gcal-guide", dk(today())); openGcalGuide(); }   // オンにしたら、そのまま連携の手順へ
   }).catch(e => toast(errMsg(e)));
 };
+/* ============================================================
+   前のカウンター（karte/counter/）からの引っ越し
+   前のカウンターは同じサイトなので、この端末のブラウザに残っている記録
+   （localStorage "kekka-counter-v1" = [{t: 押した時刻(ミリ秒), r: 結果}]）をそのまま読める。
+   ・1件ずつ records（src:"old"）にして stats/{日} に足す → KPI・1時間あたり・稼働・履歴に、その日の分として出る
+   ・アポでも日時・クローザーの記録が無いので、カレンダーや「日時未定のアポ」には出さない
+   ・チーム版でも数えている日は、チーム版で数えていた時間（その日の最初〜最後の記録）の外の分だけを足す候補にして、
+     足すかどうかを日ごとに選べる（両方で押した分を二重にしない）
+   ・二重に足さない：imports/{uid}.days[日] = {n: 足した件数, last: 最後に足した時刻, done, skip}。
+     記録・集計と同じトランザクションで書くので、途中で切れても続きから。ほかのタブで同時に押しても、印が合わなければ止める
+   ・今日の分は done にしない（このあと前のカウンターで押した分も、次に開いたときに足せる）。過ぎた日で足すものが無い日は done
+   ・前のカウンターの記録は消さない。引っ越した人をこのブラウザに覚えておき（ほかの人のアカウントには出さない）、
+     前のカウンターの画面に「引っ越し済み」を出す
+   ============================================================ */
+const OLD_KEY = "kekka-counter-v1", MOVED_KEY = "kekka-counter-moved-v1", MOVE_SKIP = "team-move-skip";
+const OLD_RENAME = {"使われていない": "使われてない"};   // チーム版で名前が違う項目
+const MOVE_CHUNK = 400;                                  // 1回のトランザクションで入れる件数
+let movePlan = null, moving = false;
+/* 前のカウンターの項目名 → チーム版の項目名。名前の違う項目と、
+   チーム版で「NG（業者系）」のように後ろに説明を足した項目は、チーム版の名前に合わせる */
+function teamName(r) {
+  if (COL[r]) return r;
+  if (OLD_RENAME[r] && COL[OLD_RENAME[r]]) return OLD_RENAME[r];
+  const hit = ITEMS.filter(i => i.k.startsWith(r + "（") || i.k.startsWith(r + "("));
+  return hit.length === 1 ? hit[0].k : (OLD_RENAME[r] || r);
+}
+function oldEntries() {
+  const raw = lsGet(OLD_KEY, []);
+  if (!Array.isArray(raw)) return [];
+  const lim = Date.now() + 6e4;
+  return raw.filter(e => e && Number.isFinite(e.t) && e.t > 0 && e.t <= lim && typeof e.r === "string" && e.r.trim())
+    .map(e => { const o = e.r.trim().slice(0, 30); return {t: e.t, o, r: teamName(o)}; })
+    .filter(e => !/^__.*__$/.test(e.r))
+    .sort((a, b) => a.t - b.t);
+}
+/* 日ごとに「何件足すか」を決める。足す件数・理由を画面に出す */
+async function buildMovePlan() {
+  const mv = lsGet(MOVED_KEY, null);
+  if (mv && mv.uid && mv.uid !== U) return {rows: [], add: 0, has: true, owner: mv.name || "ほかの人"};   // このブラウザの記録は、別の人が引っ越し済み
+  const list = oldEntries();
+  if (!list.length) return {rows: [], add: 0, has: false};
+  const byDay = {};
+  list.forEach(e => { const d = dk(new Date(e.t)); (byDay[d] = byDay[d] || []).push(e); });
+  const keys = Object.keys(byDay).sort(), T = dk(today());
+  const mk = await getDoc(doc(db, "imports", U));
+  const prog = (mk.exists() && mk.data().days) || {};
+  const todo = keys.filter(d => !(prog[d] && prog[d].done));
+  const st = {};
+  if (todo.length) {
+    const s = await getDocs(query(collection(db, "stats"), where(documentId(), ">=", todo[0]), where(documentId(), "<=", todo[todo.length - 1])));
+    s.forEach(d => st[d.id] = d.data());
+  }
+  const rows = [], settle = {};
+  for (const d of keys) {
+    const p = prog[d], all = byDay[d];
+    if (p && p.done) { rows.push({day: d, all: all.length, add: [], st: p.skip ? "skip" : "done", before: p.n || 0}); continue; }
+    const before = p ? p.n || 0 : 0, last = p && p.last ? p.last : 0;
+    const cand = all.filter(e => e.t > last);   // まだ足していない分
+    const mine = Object.values(((st[d] || {}).c || {})[U] || {}).reduce((a, v) => a + v, 0) - before;
+    let win = null;
+    if (cand.length && mine > 0) {   // この日はチーム版でも数えている → チーム版で数えていた時間の外だけ
+      const s = await getDocs(query(collection(db, "records"), where("uid", "==", U), where("day", "==", d)));
+      const ts = s.docs.map(x => x.data()).filter(x => x.src !== "old").map(x => tsd(x.t)).filter(Boolean).map(x => x.getTime());
+      if (ts.length) win = {from: Math.min(...ts), to: Math.max(...ts), n: ts.length};
+    }
+    const add = win ? cand.filter(e => e.t < win.from || e.t > win.to) : cand;
+    if (!add.length && d < T) settle[d] = {done: true};   // 過ぎた日で足すものが無い → 次からは読まない
+    rows.push({day: d, all: all.length, add, before, last, win, inWin: cand.length - add.length, st: add.length ? "add" : before ? "done" : "none", pick: true});
+  }
+  if (Object.keys(settle).length) setDoc(doc(db, "imports", U), {days: settle}, {merge: true}).catch(() => {});
+  return {rows, add: rows.reduce((a, r) => a + r.add.length, 0), has: true};
+}
+async function refreshMove() {
+  if (!U || !me || me.status !== "active" || moving) return;
+  if (!itemsLoaded) { setTimeout(refreshMove, 1000); return; }   // 項目名を合わせるので、項目が届いてから
+  const who = U;
+  let plan = null;
+  try { plan = await buildMovePlan(); } catch (e) { console.error("引っ越しの確認", e); }
+  if (U !== who) return;   // 確かめている間に別の人に替わった
+  movePlan = plan;
+  renderMoveNag();
+}
+function renderMoveNag() {
+  const p = movePlan, n = p ? p.add : 0;
+  const days = p ? p.rows.filter(r => r.add.length).map(r => r.day) : [];
+  $("moveNag").hidden = !n || !!lsGet(MOVE_SKIP, false);
+  if (n) $("moveNag").innerHTML = `<span class="mt">📦 前のカウンターの記録が <b class="num">${n}</b>件あります（${days.map(d => md(new Date(d + "T00:00"))).join("・")}）</span><span class="mg">チーム版に引っ越す ›</span>`;
+  $("moveState").textContent = !p ? "確かめています…" : p.owner ? "このブラウザの前の記録は、" + p.owner + "さんが引っ越し済みです"
+    : !p.has ? "この端末のブラウザには、前のカウンターの記録がありません"
+    : n ? "まだ引っ越していない記録が " + n + "件あります" : "引っ越し済みです（前のカウンターの記録は、そのまま残してあります）";
+  $("openMove").hidden = !p || !p.has || !!p.owner;
+}
+const movePicked = () => movePlan ? movePlan.rows.filter(r => r.add.length && r.pick) : [];
+function renderMoveGo() {
+  const n = movePicked().reduce((a, r) => a + r.add.length, 0);
+  $("mvCount").textContent = n ? n + "件" : "";
+  $("mvGo").disabled = !n;
+  $("mvGo").textContent = n ? "引っ越す" : movePlan && movePlan.add ? "足す日を選んでください" : "済んでいます";
+}
+function openMove() {
+  const p = movePlan; if (!p || p.owner) return;
+  const adds = p.rows.flatMap(r => r.add);
+  const extra = [...new Set(adds.map(e => e.r))].filter(k => !COL[k]);
+  const renamed = {}; adds.forEach(e => { if (e.o !== e.r) renamed[e.o] = e.r; });
+  const span = w => w.from === w.to ? hm(new Date(w.from)) : hm(new Date(w.from)) + "〜" + hm(new Date(w.to));
+  $("mvRows").innerHTML = p.rows.slice().reverse().map(r => {
+    const d = new Date(r.day + "T00:00");
+    const apo = r.add.filter(e => e.r === "アポ").length;
+    const v = r.st === "skip" ? `<span class="mv-why">足さないことにした日です</span>`
+      : r.st === "done" ? (r.before ? `<span class="badge done">引っ越し済み</span>` : `<span class="mv-why">足すものはありません</span>`)
+      : r.st === "none" ? `<span class="mv-why">${r.win ? "チーム版で数えた時間（" + span(r.win) + "）と重なるので足しません" : "足すものはありません"}</span>`
+      : `<b class="num">${r.add.length}</b>件を足す${apo ? `<small>（アポ ${apo}）</small>` : ""}` +
+        (r.win ? `<span class="mv-why">この日はチーム版でも ${r.win.n}件 数えています（${span(r.win)}）。${r.inWin ? "その時間の " + r.inWin + "件は二重になるので足しません。" : ""}</span>` +
+          `<label class="mv-pick"><input type="checkbox" data-day="${esc(r.day)}"${r.pick ? " checked" : ""}> この日を足す</label>` : "") +
+        (r.before ? `<span class="mv-why">前回の続きから（${r.before}件は済み）</span>` : "");
+    return `<div class="mv-row"><span class="mv-d">${md(d)}${r.day === dk(today()) ? "（今日）" : ""}</span><span class="mv-v">${v}</span></div>`;
+  }).join("");
+  $("mvWho").textContent = p.add ? "「" + ((me && me.name) || "") + "」さんの記録として入れます。" : "";
+  $("mvNote").innerHTML = [
+    Object.keys(renamed).map(k => `「${esc(k)}」は「${esc(renamed[k])}」として入れます。`).join(""),
+    extra.length ? `チーム版のボタンに無い項目（${extra.map(esc).join("・")}）は、その名前のまま架電数とKPIの内訳に入ります。` : ""
+  ].filter(Boolean).join("<br>");
+  $("mvNote").hidden = !$("mvNote").innerHTML;
+  $("mvSkip").hidden = !p.add;
+  renderMoveGo();
+  $("mvScrim").hidden = $("moveDlg").hidden = false;
+}
+$("mvRows").onchange = e => {
+  const c = e.target.closest("input[data-day]"); if (!c || !movePlan) return;
+  const r = movePlan.rows.find(x => x.day === c.dataset.day); if (r) r.pick = c.checked;
+  renderMoveGo();
+};
+function closeMove() { if (moving) return; $("mvScrim").hidden = $("moveDlg").hidden = true; }
+async function runMove() {
+  const plan = movePlan, rows = movePicked();
+  const total = rows.reduce((a, r) => a + r.add.length, 0);
+  if (moving || !plan || !total) return;
+  if (!navigator.onLine) { toast("オフラインです。つながってからもう一度押してください"); return; }
+  const who = U, T = dk(today()), markRef = doc(db, "imports", who);
+  moving = true; $("mvGo").disabled = true; $("mvSkip").hidden = true; $("mvClose").disabled = true;
+  let doneAll = 0, failed = null;
+  const inc = o => Object.fromEntries(Object.entries(o).map(([k, v]) => [k, increment(v)]));
+  try {
+    for (const row of rows) {
+      let n = row.before, last = row.last;
+      for (let i = 0; i < row.add.length; i += MOVE_CHUNK) {
+        if (U !== who) throw new Error("USER");
+        const part = row.add.slice(i, i + MOVE_CHUNK), end = i + MOVE_CHUNK >= row.add.length;
+        const wasN = n, wasLast = last, newLast = part[part.length - 1].t;
+        $("mvGo").textContent = `引っ越し中… ${doneAll}/${total}`;
+        await runTransaction(db, async tx => {
+          const s = await tx.get(markRef);
+          const cur = s.exists() && s.data().days ? s.data().days[row.day] : null;
+          if ((cur ? cur.last || 0 : 0) !== wasLast || (cur && cur.done)) throw new Error("MOVED");   // ほかで進んだ → 止める
+          const c = Object.create(null), h = Object.create(null), m = Object.create(null);   // 項目名をそのままキーにするので素の入れ物で
+          part.forEach(e => {
+            const t = new Date(e.t), hour = t.getHours(), mb = mbOf(t);
+            tx.set(doc(collection(db, "records")), {uid: who, r: e.r, t: Timestamp.fromDate(t), day: row.day, hour, mb, memo: null, undated: false, pending: false, done: false, slotId: null, src: "old"});
+            c[e.r] = (c[e.r] || 0) + 1; h[hour] = (h[hour] || 0) + 1; m[mb] = (m[mb] || 0) + 1;
+          });
+          tx.set(doc(db, "stats", row.day), {c: {[who]: inc(c)}, h: {[who]: inc(h)}, m: {[who]: inc(m)}}, {merge: true});
+          tx.set(markRef, {days: {[row.day]: {n: wasN + part.length, last: newLast, done: end && row.day < T,
+            from: row.win ? row.win.from : null, to: row.win ? row.win.to : null, at: serverTimestamp()}}}, {merge: true});
+        });
+        n = wasN + part.length; last = newLast; doneAll += part.length;
+        lsSet(MOVED_KEY, {uid: who, name: (me && me.name) || "", at: Date.now()});   // このブラウザの記録は、この人のもの
+      }
+    }
+    /* 「この日を足す」を外した日は、次から聞かない */
+    const skip = {};
+    plan.rows.filter(r => r.add.length && !r.pick).forEach(r => skip[r.day] = {done: true, skip: true});
+    if (Object.keys(skip).length) await setDoc(markRef, {days: skip}, {merge: true});
+  } catch (e) { console.error("引っ越し", e); failed = e; }
+  moving = false; $("mvClose").disabled = false;
+  Object.keys(statCache).forEach(k => delete statCache[k]);
+  refreshHistSoon();
+  if (failed) toast(failed.message === "MOVED" ? "ほかの画面で引っ越しが進んでいました。もう一度確かめます"
+    : failed.message === "USER" ? "ログインしている人が替わったので止めました"
+    : (doneAll ? doneAll + "件まで入れました。" : "") + errMsg(failed) + "。もう一度押すと続きから入れます");
+  else toast(doneAll + "件を引っ越しました");
+  if (!failed) { closeMove(); if (curTab === "kpi") renderKpi(); }
+  await refreshMove();
+  if (failed && !$("moveDlg").hidden) { if (movePlan && !movePlan.owner) openMove(); else closeMove(); }
+}
+$("moveNag").onclick = openMove;
+$("openMove").onclick = openMove;
+$("mvGo").onclick = runMove;
+$("mvClose").onclick = closeMove; $("mvScrim").onclick = closeMove;
+$("mvSkip").onclick = () => { lsSet(MOVE_SKIP, true); closeMove(); renderMoveNag(); toast("設定画面の「前のカウンターから引っ越す」から、いつでも引っ越せます"); };
+document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("moveDlg").hidden) closeMove(); });
+
 $("appUrl").textContent = APP_URL + "?openExternalBrowser=1";
 $("copyUrl").onclick = async () => {
   try { await navigator.clipboard.writeText(APP_URL + "?openExternalBrowser=1"); toast("リンクをコピーしました"); }
@@ -1642,7 +1842,7 @@ function showTab(v) {
   VIEWS.forEach(x => $("v-" + x).hidden = x !== v);
   document.querySelectorAll(".tabs button").forEach(b => { if (b.dataset.go === v) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current"); });
   window.scrollTo(0, 0);
-  if (v === "cal") renderCal(); if (v === "kpi") renderKpi(); if (v === "remind") renderRemind(); if (v === "log") { renderLog(); if (logMode === "hist") loadHist(false); } if (v === "set") { renderAdmin(); renderGcal(); renderFeedback(); }
+  if (v === "cal") renderCal(); if (v === "kpi") renderKpi(); if (v === "remind") renderRemind(); if (v === "log") { renderLog(); if (logMode === "hist") loadHist(false); } if (v === "set") { renderAdmin(); renderGcal(); renderFeedback(); if (movePlan) renderMoveNag(); else refreshMove(); }
 }
 document.addEventListener("click", e => { const b = e.target.closest("[data-go]"); if (b) showTab(b.dataset.go); });
 COL = Object.fromEntries(ITEMS.map(i => [i.k, i]));
