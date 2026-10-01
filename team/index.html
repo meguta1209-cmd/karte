@@ -18,7 +18,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=BIZ+UDPGothic:wght@400;700&family=Roboto+Mono:wght@500;700&display=swap">
-<link rel="stylesheet" href="./style.css?v=26">
+<link rel="stylesheet" href="./style.css?v=27">
 <script>
 /* LINEの中のブラウザではGoogleログインが通らない（途中の情報を覚えておけない）。
    LINEは ?openExternalBrowser=1 を付けると Safari / Chrome で開き直してくれるので、自動で付け直す */
@@ -280,7 +280,7 @@
       <button id="tryPre">15分前を試す</button>
       <button id="tryNow">ちょうどを試す</button>
     </div>
-    <p class="defs">通知の設定はこの機械ごとに保存されます。画面を閉じていた間に過ぎた通知は、次に開いたときに出ます。</p>
+    <p class="defs">通知の設定はこの機械ごとに保存されます。画面を閉じていた間に過ぎた通知は、30分以内なら次に開いたときに出ます。それより前の予定は、リマインドの「過ぎている予定」に残ります。</p>
 
     <h2>フィードバックを送る <span class="aside">竹内さんに届きます</span></h2>
     <div class="card fb-form">
@@ -476,6 +476,6 @@
 <div class="offline" id="offline" hidden>オフライン中：つながったら送ります</div>
 <div class="toast" id="toast"></div>
 
-<script type="module" src="./app.js?v=26"></script>
+<script type="module" src="./app.js?v=27"></script>
 </body>
 </html>
