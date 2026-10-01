@@ -609,8 +609,10 @@ img{max-width:100%;}
 .cal .sl.nostart::after{content:""; position:absolute; inset:40% 8px auto 8px; border-top:1px dotted var(--rule2);}
 .ad-info{margin-top:4px; padding:6px 8px; background:var(--card2); border-radius:6px; font-size:12.5px; white-space:pre-wrap; overflow-wrap:anywhere; max-height:160px; overflow-y:auto;}
 /* 前のカウンターからの引っ越し */
-.move-nag{margin-top:8px; width:100%; display:flex; flex-wrap:wrap; align-items:center; gap:4px 8px; text-align:left; padding:9px 12px; border-radius:8px;
-  border:1.5px solid var(--blue); background:var(--blue-soft); color:var(--blue); font-size:13px; font-weight:700;}
+.move-nag{margin-top:8px; display:flex; align-items:stretch; border:1.5px solid var(--blue); background:var(--blue-soft); border-radius:8px; overflow:hidden;}
+.move-nag .mv-open{flex:1; min-width:0; display:flex; flex-wrap:wrap; align-items:center; gap:4px 8px; text-align:left; padding:9px 12px; border:0; background:none; color:var(--blue); font-size:13px; font-weight:700;}
+.move-nag .mv-x{flex:0 0 auto; width:42px; border:0; border-left:1px solid var(--rule2); background:none; color:var(--blue); font-size:18px; font-weight:700;}
+.move-nag .mv-x:hover{background:rgba(30,78,134,.08);}
 .move-nag .mt{flex:1 1 auto;}
 .move-nag .mg{margin-left:auto; white-space:nowrap; font-size:12.5px;}
 .mvd{z-index:53;}   /* 通知の帯・記録の詳細・連携の手順より下 */

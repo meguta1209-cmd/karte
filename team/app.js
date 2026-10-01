@@ -1541,6 +1541,7 @@ $("myCloser").onchange = () => {
 const OLD_KEY = "kekka-counter-v1", MOVED_KEY = "kekka-counter-moved-v1", MOVE_SKIP = "team-move-skip";
 const OLD_RENAME = {"使われていない": "使われてない"};   // チーム版で名前が違う項目
 const MOVE_CHUNK = 400;                                  // 1回のトランザクションで入れる件数
+const MOVE_FROM = "2026-10-01";                          // この日から後の分だけ入れる（それより前の日は入れない。竹内さんの指定）
 let movePlan = null, moving = false;
 /* 前のカウンターの項目名 → チーム版の項目名。名前の違う項目と、
    チーム版で「NG（業者系）」のように後ろに説明を足した項目は、チーム版の名前に合わせる */
@@ -1563,7 +1564,7 @@ function oldEntries() {
 async function buildMovePlan() {
   const mv = lsGet(MOVED_KEY, null);
   if (mv && mv.uid && mv.uid !== U) return {rows: [], add: 0, has: true, owner: mv.name || "ほかの人"};   // このブラウザの記録は、別の人が引っ越し済み
-  const list = oldEntries();
+  const list = oldEntries().filter(e => dk(new Date(e.t)) >= MOVE_FROM);
   if (!list.length) return {rows: [], add: 0, has: false};
   const byDay = {};
   list.forEach(e => { const d = dk(new Date(e.t)); (byDay[d] = byDay[d] || []).push(e); });
@@ -1610,9 +1611,9 @@ function renderMoveNag() {
   const p = movePlan, n = p ? p.add : 0;
   const days = p ? p.rows.filter(r => r.add.length).map(r => r.day) : [];
   $("moveNag").hidden = !n || !!lsGet(MOVE_SKIP, false);
-  if (n) $("moveNag").innerHTML = `<span class="mt">📦 前のカウンターの記録が <b class="num">${n}</b>件あります（${days.map(d => md(new Date(d + "T00:00"))).join("・")}）</span><span class="mg">チーム版に引っ越す ›</span>`;
+  if (n) $("moveOpen").innerHTML = `<span class="mt">📦 前のカウンターの記録が <b class="num">${n}</b>件あります（${days.map(d => md(new Date(d + "T00:00"))).join("・")}）</span><span class="mg">チーム版に引っ越す ›</span>`;
   $("moveState").textContent = !p ? "確かめています…" : p.owner ? "このブラウザの前の記録は、" + p.owner + "さんが引っ越し済みです"
-    : !p.has ? "この端末のブラウザには、前のカウンターの記録がありません"
+    : !p.has ? "この端末のブラウザには、" + md(new Date(MOVE_FROM + "T00:00")) + "からの前のカウンターの記録はありません"
     : n ? "まだ引っ越していない記録が " + n + "件あります" : "引っ越し済みです（前のカウンターの記録は、そのまま残してあります）";
   $("openMove").hidden = !p || !p.has || !!p.owner;
 }
@@ -1708,7 +1709,9 @@ async function runMove() {
   await refreshMove();
   if (failed && !$("moveDlg").hidden) { if (movePlan && !movePlan.owner) openMove(); else closeMove(); }
 }
-$("moveNag").onclick = openMove;
+$("moveOpen").onclick = openMove;
+/* 引っ越すものが無い人・引っ越さない人は、×で案内を消せる（設定からはいつでも開ける） */
+$("moveX").onclick = () => { lsSet(MOVE_SKIP, true); renderMoveNag(); toast("消しました。設定の「前のカウンターから引っ越す」から、いつでも引っ越せます"); };
 $("openMove").onclick = openMove;
 $("mvGo").onclick = runMove;
 $("mvClose").onclick = closeMove; $("mvScrim").onclick = closeMove;
