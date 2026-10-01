@@ -18,7 +18,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=BIZ+UDPGothic:wght@400;700&family=Roboto+Mono:wght@500;700&display=swap">
-<link rel="stylesheet" href="./style.css?v=17">
+<link rel="stylesheet" href="./style.css?v=18">
 <script>
 /* LINEの中のブラウザではGoogleログインが通らない（途中の情報を覚えておけない）。
    LINEは ?openExternalBrowser=1 を付けると Safari / Chrome で開き直してくれるので、自動で付け直す */
@@ -57,6 +57,9 @@
     <h2>はじめまして</h2>
     <p id="regMail"></p>
     <div class="fld"><label for="regName">名前（チームで表示されます）</label><input id="regName" maxlength="12" placeholder="例）竹内" autocomplete="name"></div>
+    <div class="fld"><label>役職</label>
+      <div class="chips job-chips" id="regJob" role="radiogroup" aria-label="役職"><button type="button" class="chip-btn" data-j="プレイヤー" aria-pressed="true">プレイヤー</button><button type="button" class="chip-btn" data-j="事務" aria-pressed="false">事務</button><button type="button" class="chip-btn" data-j="管理職" aria-pressed="false">管理職</button></div>
+      <small class="fld-note">プレイヤー＝電話をかける人</small></div>
     <label class="check"><input type="checkbox" id="regCloser"><span>クローザーもやる<small>商談の担当としてカレンダーに出ます</small></span></label>
     <button class="primary" id="btnRegister">登録して承認を待つ</button>
     <p class="err" id="regErr" hidden></p>
@@ -232,6 +235,7 @@
     <h2>自分のアカウント</h2>
     <div class="card set">
       <div class="row"><div class="t">名前<small id="myMail"></small></div><input type="text" id="myName" maxlength="12" aria-label="名前"><button class="chip-btn" id="saveName">保存</button></div>
+      <div class="row"><div class="t">役職<small id="myJobNote">変えるときは管理者（竹内さん）に伝えてください</small></div><span class="val" id="myJob"></span></div>
       <div class="row"><div class="t">クローザーもやる<small>オンにするとカレンダーの担当に出ます</small></div>
         <label class="sw"><input type="checkbox" id="myCloser" aria-label="クローザーもやる"><span></span></label></div>
       <div class="row"><div class="t">前のカウンターから引っ越す<small id="moveState">確かめています…</small></div><button class="chip-btn" id="openMove" hidden>開く</button></div>
@@ -460,6 +464,6 @@
 <div class="offline" id="offline" hidden>オフライン中：つながったら送ります</div>
 <div class="toast" id="toast"></div>
 
-<script type="module" src="./app.js?v=17"></script>
+<script type="module" src="./app.js?v=18"></script>
 </body>
 </html>

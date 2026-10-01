@@ -154,7 +154,7 @@ onAuthStateChanged(auth, u => {
   meUnsub = onSnapshot(doc(db, "members", u.uid), {includeMetadataChanges: true}, async snap => {
     if (!snap.exists()) {
       if ((u.email || "").toLowerCase() === ADMIN_EMAIL) {     // 管理者は最初から有効
-        await setDoc(doc(db, "members", u.uid), {name: "竹内", email: u.email, closer: false, status: "active", role: "admin", createdAt: serverTimestamp()});
+        await setDoc(doc(db, "members", u.uid), {name: "竹内", email: u.email, job: "管理職", closer: false, status: "active", role: "admin", createdAt: serverTimestamp()});
         return;
       }
       $("regMail").textContent = u.email + " でログイン中";
@@ -172,12 +172,20 @@ onAuthStateChanged(auth, u => {
   }, e => { $("loginErr").hidden = false; $("loginErr").textContent = "読み込めませんでした（" + e.code + "）"; gate("gLogin"); });
 });
 
+/* 役職（表示と、KPIの表に出すかどうかだけに使う。権限は role で別） */
+const JOBS = ["プレイヤー", "事務", "管理職"];
+const isPlayer = m => !m || !m.job || m.job === "プレイヤー";   // まだ役職が無い人はプレイヤー扱い
+let regJob = "プレイヤー";
+$("regJob").onclick = e => {
+  const b = e.target.closest("button"); if (!b) return;
+  regJob = b.dataset.j; $("regJob").querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", x === b));
+};
 $("btnRegister").onclick = async () => {
   const name = $("regName").value.trim();
   if (!name) { $("regErr").hidden = false; $("regErr").textContent = "名前を入れてください"; return; }
   $("btnRegister").disabled = true;
   try {
-    await setDoc(doc(db, "members", U), {name, email: auth.currentUser.email, closer: $("regCloser").checked, status: "pending", role: "member", createdAt: serverTimestamp()});
+    await setDoc(doc(db, "members", U), {name, email: auth.currentUser.email, job: regJob, closer: $("regCloser").checked, status: "pending", role: "member", createdAt: serverTimestamp()});
   } catch (e) { $("regErr").hidden = false; $("regErr").textContent = "登録できませんでした（" + (e.code || e.message) + "）"; }
   $("btnRegister").disabled = false;
 };
@@ -264,6 +272,8 @@ function renderMe() {
   $("todayLbl").textContent = md(today());
   $("myMail").textContent = auth.currentUser ? auth.currentUser.email : "";
   if (document.activeElement !== $("myName")) $("myName").value = me.name || "";
+  $("myJob").textContent = me.job || "未設定";
+  $("myJobNote").textContent = me.role === "admin" ? "上の「メンバー」の欄で変えられます（自分の分も）" : "変えるときは管理者（竹内さん）に伝えてください";
   $("myCloser").checked = !!me.closer;
   renderGcal();
   $("adminBox").hidden = me.role !== "admin";
@@ -1374,7 +1384,8 @@ async function renderKpi() {
 
   const wd = workDays(a, b);
   const uids = new Set(ids); Object.values(data).forEach(d => Object.keys(d.c || {}).forEach(u => uids.add(u)));
-  const rows = [...uids].map(u => ({u, s: sumStats(data, u)})).filter(r => r.s.n || (members[r.u] && members[r.u].status === "active"))
+  /* 表に出すのは、その期間に電話をかけた人と、プレイヤーの人（事務・管理職で0件の人は出さない） */
+  const rows = [...uids].map(u => ({u, s: sumStats(data, u)})).filter(r => r.s.n || (members[r.u] && members[r.u].status === "active" && isPlayer(members[r.u])))
     .sort((x, y) => y.s.apo - x.s.apo || y.s.n - x.s.n);
   const maxN = Math.max(1, ...rows.map(r => r.s.n)), tot = sumStats(data, "all");
   const ph = s => s.mins ? s.perHour.toFixed(1) : "–";
@@ -1787,16 +1798,23 @@ function renderAdmin() {
   $("setDot").hidden = !(admin && pend.length + fbOpen); $("setDot").textContent = pend.length + fbOpen;
   if (!admin) return;
   $("pendCount").textContent = pend.length + "人";
-  $("pendList").innerHTML = pend.length ? pend.map(([id, m]) => `<div class="row mrow"><div class="t">${esc(m.name)}<small>${esc(m.email)}${m.closer ? " ・ クローザー希望" : ""}</small></div>
+  $("pendList").innerHTML = pend.length ? pend.map(([id, m]) => `<div class="row mrow"><div class="t">${esc(m.name)}<span class="badge job">${esc(m.job || "役職未設定")}</span><small>${esc(m.email)}${m.closer ? " ・ クローザー希望" : ""}</small></div>
     <div class="acts2"><button class="ok" data-a="ok" data-id="${esc(id)}">承認</button><button class="ng" data-a="rej" data-id="${esc(id)}">却下</button></div></div>`).join("")
     : `<div class="row"><div class="t"><small>承認待ちの人はいません</small></div></div>`;
   const act = Object.entries(members).filter(([, m]) => m.status !== "pending").sort((a, b) => (a[1].status === "removed") - (b[1].status === "removed"));
   $("memCount").textContent = act.filter(([, m]) => m.status === "active").length + "人";
   $("memList").innerHTML = act.map(([id, m]) => `<div class="row mrow"><div class="avatar" style="background:${colorOf(id)};width:28px;height:28px;font-size:12px">${esc((m.name || "?")[0])}</div>
-    <div class="t">${esc(m.name)}${m.role === "admin" ? "（管理者）" : ""}${m.status === "removed" ? ` <span class="badge pend">外した人</span>` : ""}<small>${esc(m.email)}${m.closer ? (busyMap[id] ? (busyMap[id].status === "ok" ? " ・ Googleカレンダー連携中" : " ・ Googleカレンダー未共有") : "") : ""}</small></div>
+    <div class="t">${esc(m.name)}${m.role === "admin" ? "（管理者）" : ""}${m.status === "removed" ? ` <span class="badge pend">外した人</span>` : ""}<small>${esc(m.email)}${m.closer ? (busyMap[id] ? (busyMap[id].status === "ok" ? " ・ Googleカレンダー連携中" : " ・ Googleカレンダー未共有") : "") : ""}</small>
+      ${m.status === "active" ? `<select class="job-sel" data-id="${esc(id)}" aria-label="${esc(m.name)}さんの役職">${m.job ? "" : `<option value="" selected>役職を選ぶ</option>`}${JOBS.map(j => `<option${m.job === j ? " selected" : ""}>${j}</option>`).join("")}</select>` : (m.job ? `<span class="badge job">${esc(m.job)}</span>` : "")}</div>
     <div class="acts2">${m.status === "active" ? `<button data-a="closer" data-id="${esc(id)}" aria-pressed="${!!m.closer}" class="${m.closer ? "ok" : ""}">${m.closer ? "クローザー" : "クローザーにする"}</button>` : ""}
     ${m.role !== "admin" ? (m.status === "active" ? `<button class="ng" data-a="rm" data-id="${esc(id)}">外す</button>` : `<button data-a="back" data-id="${esc(id)}">戻す</button>`) : ""}</div></div>`).join("");
 }
+/* 役職を変える（管理者） */
+document.addEventListener("change", e => {
+  const s = e.target.closest("#memList select.job-sel"); if (!s || !s.value) return;
+  const m = members[s.dataset.id] || {};
+  updateDoc(doc(db, "members", s.dataset.id), {job: s.value}).then(() => toast(m.name + "さんを「" + s.value + "」にしました")).catch(er => toast(errMsg(er)));
+});
 document.addEventListener("click", e => {
   const b = e.target.closest("#pendList button, #memList button"); if (!b) return;
   const id = b.dataset.id, a = b.dataset.a, ref = doc(db, "members", id), m = members[id] || {};
