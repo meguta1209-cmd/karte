@@ -584,3 +584,21 @@ img{max-width:100%;}
 .fb-in{flex:1; min-width:10em; border:1px solid var(--rule); background:var(--card2); border-radius:6px; padding:5px 8px; font-size:14px;}
 .fb-btn{border:1px solid var(--rule); background:var(--card2); border-radius:6px; padding:4px 10px; font-size:12.5px; font-weight:700;}
 .fb-btn.ok{background:var(--blue); color:var(--on-blue); border-color:var(--blue);}
+/* クローザー向け：Googleカレンダー連携の手順 */
+.gcal-nag{margin-top:8px; width:100%; display:flex; align-items:center; gap:8px; text-align:left; padding:9px 12px; border-radius:8px;
+  border:1.5px solid #E0B43A; background:var(--warn-soft); color:var(--warn); font-size:13px; font-weight:700;}
+.gcal-nag span{margin-left:auto; white-space:nowrap; font-size:12.5px;}
+.ggd{z-index:57;}
+.gg-status{border-radius:8px; padding:9px 12px; font-size:13px; margin:4px 0 10px;}
+.gg-status.wait{background:var(--card2); color:var(--ink2);}
+.gg-status.ng{background:var(--warn-soft); color:var(--warn);}
+.gg-status.ok{background:var(--ok-soft); color:var(--ok); font-weight:700; font-size:14px;}
+.gg-steps{margin:0 0 10px; padding-left:22px; display:flex; flex-direction:column; gap:8px; font-size:14px;}
+.gg-steps small{display:block; color:var(--ink3); font-size:12px;}
+.gg-steps a{color:var(--blue); font-weight:700;}
+.gg-mail{font-family:var(--mono); font-weight:700; background:var(--blue-soft); color:var(--blue); padding:1px 6px; border-radius:4px; overflow-wrap:anywhere;}
+.gg-copy{border:1px solid var(--rule); background:var(--card2); border-radius:6px; padding:1px 8px; font-size:12px; font-weight:700;}
+.gg-email small{color:var(--ink3); font-size:11.5px;}
+.gg-row{display:flex; gap:6px;}
+.gg-row input{flex:1; min-width:0;}
+.gg-row button{border:1px solid var(--rule); background:var(--card2); border-radius:8px; padding:0 14px; font-weight:700;}

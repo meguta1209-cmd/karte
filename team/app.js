@@ -209,10 +209,13 @@ function startApp() {
   }, onErr("予定")));
   unsubs.push(onSnapshot(query(collection(db, "tasks"), where("done", "==", false)), s => { taskTeam = s.docs.map(taskOf); rebuildPending(); }, onErr("チームの予定")));
   unsubs.push(onSnapshot(query(recs, where("undated", "==", true)), s => { undated = s.docs.map(recOf).sort((a, b) => a.t - b.t); renderUndated(); }, onErr("日時未定のアポ")));
-  unsubs.push(onSnapshot(collection(db, "busy"), s => {
+  unsubs.push(onSnapshot(collection(db, "busy"), {includeMetadataChanges: true}, s => {   // サーバーの最新が届いたことも知りたいので
     busyMap = {};
     s.forEach(d => { const x = d.data(); busyMap[d.id] = {...x, updatedAt: tsd(x.updatedAt), blocks: (x.blocks || []).map(b => ({s: tsd(b.s), e: tsd(b.e)})).filter(b => b.s && b.e)}; });
-    if (curTab === "cal") renderCal(); if (curTab === "set") renderGcal(); if (!$("msheet").hidden) checkClash();
+    /* 端末にとっておいた古い分ではなく、サーバーの最新が届いてから「連携がまだ」を判断する */
+    if (!s.metadata.fromCache) busyLoaded = true;
+    if (curTab === "cal") renderCal(); renderGcal(); if (!$("msheet").hidden) checkClash();
+    maybeGcalGuide();
   }, onErr("クローザーの予定")));
   unsubs.push(onSnapshot(query(collection(db, "slots"), where("day", ">=", dk(addDays(today(), -7)))), s => {
     slots = s.docs.map(d => ({id: d.id, ...d.data(), when: tsd(d.data().when)}));
@@ -1370,26 +1373,77 @@ $("saveName").onclick = () => {
   const n = $("myName").value.trim(); if (!n) { toast("名前を入れてください"); return; }
   updateDoc(doc(db, "members", U), {name: n}).then(() => toast("名前を保存しました")).catch(e => toast(errMsg(e)));
 };
-/* Googleカレンダー連携の状態（クローザーだけ） */
+/* Googleカレンダー連携の状態（クローザーだけ）。設定画面・カウント画面のボタン・手順の画面をまとめて更新 */
+let busyLoaded = false;
+const gcalLinked = () => !!(busyMap[U] && busyMap[U].status === "ok");
+function gcalState() {
+  const g = busyMap[U];
+  const at = g && g.updatedAt ? hm(g.updatedAt) + " 確認" : "";
+  if (!g) return {cls: "", pill: "確認待ち", text: "共有してから最大15分で確認されます"};
+  if (g.status === "ok") return {cls: "ok", pill: "連携中", text: "予定を読み込めています（" + at + "）"};
+  if (g.status === "no_email") return {cls: "ng", pill: "未共有", text: "アドレスが入っていません（" + at + "）"};
+  return {cls: "ng", pill: "未共有", text: (g.email ? g.email + " の" : "") + "カレンダーがまだ共有されていません（" + at + "）"};
+}
 function renderGcal() {
   if (!me) return;
-  $("gcalBox").hidden = !me.closer;
-  if (!me.closer) return;
+  const closer = !!me.closer, st = gcalState(), linked = gcalLinked();
+  $("gcalBox").hidden = !closer;
+  $("gcalNag").hidden = !closer || linked || !busyLoaded;
+  if (!closer) return;
   if (document.activeElement !== $("gcalEmail")) $("gcalEmail").value = me.gcalEmail || me.email || "";
-  const g = busyMap[U], pill = $("gcalPill");
-  if (!g) { pill.className = "pill"; pill.textContent = "準備中"; $("gcalStatus").textContent = "同期の係が動き始めると、ここに状態が出ます"; $("gcalHow").hidden = false; return; }
-  const at = g.updatedAt ? hm(g.updatedAt) + " 更新" : "";
-  if (g.status === "ok") { pill.className = "pill ok"; pill.textContent = "連携中"; $("gcalStatus").textContent = "予定を読み込めています（" + at + "）"; $("gcalHow").hidden = true; }
-  else { pill.className = "pill ng"; pill.textContent = "未共有"; $("gcalStatus").textContent = (g.status === "no_email" ? "アドレスが入っていません" : "カレンダーがまだ共有されていません") + (at ? "（" + at + "）" : ""); $("gcalHow").hidden = false; }
+  $("gcalPill").className = "pill " + st.cls; $("gcalPill").textContent = st.pill;
+  $("gcalStatus").textContent = st.text;
+  $("gcalHow").hidden = linked; $("openGuide").hidden = linked;
+  renderGuideStatus();
 }
-$("saveGcal").onclick = () => {
-  const v = $("gcalEmail").value.trim();
-  if (v && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v)) { toast("アドレスの形が正しくありません"); return; }
-  updateDoc(doc(db, "members", U), {gcalEmail: v}).then(() => toast("保存しました。15分以内に反映されます")).catch(e => toast(errMsg(e)));
+/* 手順の画面 */
+function renderGuideStatus() {
+  if ($("gcalGuide").hidden) return;
+  const st = gcalState(), linked = gcalLinked();
+  $("ggStatus").className = "gg-status " + (linked ? "ok" : st.cls === "ng" ? "ng" : "wait");
+  $("ggStatus").innerHTML = linked ? "✓ 連携できました！ あなたの予定の時間が、チームのカレンダーに出ています" : `<b>今の状態：${esc(st.pill)}</b>　${esc(st.text)}`;
+  $("ggSteps").hidden = linked;
+  $("ggLater").hidden = linked;
+  $("ggClose").textContent = linked ? "完了" : "閉じる";
+}
+function openGcalGuide() {
+  if (!me) return;
+  if (document.activeElement !== $("ggEmail")) $("ggEmail").value = me.gcalEmail || me.email || "";
+  $("ggScrim").hidden = $("gcalGuide").hidden = false;
+  renderGuideStatus();
+}
+function closeGcalGuide() { $("ggScrim").hidden = $("gcalGuide").hidden = true; }
+/* まだ連携していないクローザーには、その日はじめて開いたときに1回だけ手順を出す（機械ごと） */
+function maybeGcalGuide() {
+  if (!me || !me.closer || !busyLoaded || gcalLinked()) return;
+  if (!$("daySum").hidden || !$("msheet").hidden) { setTimeout(maybeGcalGuide, 4000); return; }   // 今日の予定などが開いていたら後で
+  const k = "team-gcal-guide";
+  if (lsGet(k, "") === dk(today())) return;
+  lsSet(k, dk(today()));
+  openGcalGuide();
+}
+$("gcalNag").onclick = openGcalGuide;
+$("openGuide").onclick = openGcalGuide;
+$("ggLater").onclick = () => { lsSet("team-gcal-guide", dk(today())); closeGcalGuide(); toast("設定画面の「連携の手順を開く」から、いつでも見られます"); };
+$("ggClose").onclick = closeGcalGuide; $("ggScrim").onclick = closeGcalGuide;
+$("ggCopy").onclick = async () => {
+  try { await navigator.clipboard.writeText(ADMIN_EMAIL); toast("コピーしました：" + ADMIN_EMAIL); }
+  catch (_) { const s = getSelection(), rg = document.createRange(); rg.selectNodeContents($("gcalGuide").querySelector(".gg-mail")); s.removeAllRanges(); s.addRange(rg); toast("選択しました。コピーしてください"); }
 };
+function saveGcalEmail(v) {
+  v = String(v || "").trim();
+  if (v && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v)) { toast("アドレスの形が正しくありません"); return; }
+  updateDoc(doc(db, "members", U), {gcalEmail: v}).then(() => toast("保存しました。15分以内に確認されます")).catch(e => toast(errMsg(e)));
+}
+$("saveGcal").onclick = () => saveGcalEmail($("gcalEmail").value);
+$("ggSave").onclick = () => saveGcalEmail($("ggEmail").value);
+document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("gcalGuide").hidden) closeGcalGuide(); });
 $("myCloser").onchange = () => {
   const v = $("myCloser").checked;   // 押した瞬間の状態で決める（保存中に表示が戻ることがあるため）
-  updateDoc(doc(db, "members", U), {closer: v}).then(() => toast(v ? "クローザーに入りました" : "クローザーから外れました")).catch(e => toast(errMsg(e)));
+  updateDoc(doc(db, "members", U), {closer: v}).then(() => {
+    toast(v ? "クローザーに入りました" : "クローザーから外れました");
+    if (v && !gcalLinked()) { lsSet("team-gcal-guide", dk(today())); openGcalGuide(); }   // オンにしたら、そのまま連携の手順へ
+  }).catch(e => toast(errMsg(e)));
 };
 $("appUrl").textContent = APP_URL + "?openExternalBrowser=1";
 $("copyUrl").onclick = async () => {
