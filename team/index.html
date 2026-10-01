@@ -18,7 +18,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=BIZ+UDPGothic:wght@400;700&family=Roboto+Mono:wght@500;700&display=swap">
-<link rel="stylesheet" href="./style.css?v=19">
+<link rel="stylesheet" href="./style.css?v=20">
 <script>
 /* LINEの中のブラウザではGoogleログインが通らない（途中の情報を覚えておけない）。
    LINEは ?openExternalBrowser=1 を付けると Safari / Chrome で開き直してくれるので、自動で付け直す */
@@ -109,8 +109,8 @@
     <button class="undated" id="undatedMine" hidden></button>
     <button class="gcal-nag" id="gcalNag" hidden>📅 Googleカレンダーの連携がまだです（クローザー）<span>手順を見る ›</span></button>
     <div class="move-nag" id="moveNag" hidden><button class="mv-open" id="moveOpen"></button><button class="mv-x" id="moveX" aria-label="引っ越しの案内を消す">×</button></div>
-    <button class="link-add-task" data-newtask="1">＋ 予定を入れる（再架電・前確など）</button>
     <div class="grid" id="grid"></div>
+    <button class="link-add-task" data-newtask="1">＋ 予定を入れる（再架電・前確など）</button>
     <div class="acts">
       <button id="undo">↶ ひとつ戻す</button>
       <button id="memoLast">✎ 直前の記録にメモ</button>
@@ -464,6 +464,6 @@
 <div class="offline" id="offline" hidden>オフライン中：つながったら送ります</div>
 <div class="toast" id="toast"></div>
 
-<script type="module" src="./app.js?v=19"></script>
+<script type="module" src="./app.js?v=20"></script>
 </body>
 </html>

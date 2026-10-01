@@ -554,7 +554,7 @@ img{max-width:100%;}
 .hrow .memo .tel-line{display:inline; margin:0;}
 /* テレアポ以外の予定 */
 .btn-add-task{width:100%; min-height:44px; margin-bottom:10px; border-radius:8px; border:1.5px dashed var(--blue); background:var(--blue-soft); color:var(--blue); font-weight:700; font-size:14px;}
-.link-add-task{display:flex; align-items:center; justify-content:center; gap:6px; width:100%; min-height:40px; margin:8px 0 0; padding:6px 12px;
+.link-add-task{display:flex; align-items:center; justify-content:center; gap:6px; width:100%; min-height:40px; margin:10px 0 0; padding:6px 12px;
   border:1.5px solid var(--blue); border-radius:8px; background:var(--card); color:var(--blue); font-size:13px; font-weight:700; text-align:center;}
 .link-add-task:hover{background:var(--blue-soft);}
 .rm.task .shop .res{margin-right:4px;}
