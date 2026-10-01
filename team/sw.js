@@ -1,5 +1,6 @@
 /* 結果カウンター チーム版 — オフライン用サービスワーカー
-   アプリを更新したら CACHE の数字を1つ上げること。
+   アプリを更新したら CACHE の数字を1つ上げ、index.html の app.js?v= と style.css?v= も同じ数字にすること
+   （ブラウザが古い app.js をとっておいて使うのを防ぐため）。
 
    重要（beat/sw.js と同じ作法）:
    - このSWは /karte/team/ 配下だけを扱う。スコープ外のリクエストには
@@ -8,7 +9,7 @@
    - キャッシュ削除は "team-" で始まるものだけ。caches.keys() は
      オリジン全体を返すので、無条件に消すと訪販カルテのキャッシュまで消える。
 */
-const CACHE = "team-v11";
+const CACHE = "team-v12";
 const ASSETS = [
   "./",
   "./index.html",
@@ -28,7 +29,7 @@ function scopePath() {
 self.addEventListener("install", e => {
   e.waitUntil(
     caches.open(CACHE)
-      .then(c => c.addAll(ASSETS))
+      .then(c => c.addAll(ASSETS.map(u => new Request(u, { cache: "reload" }))))   // 入れるときも取り直す
       .then(() => self.skipWaiting())
       .catch(() => self.skipWaiting())
   );
@@ -57,7 +58,7 @@ self.addEventListener("fetch", e => {
   /* 更新がすぐ反映されるよう、常にネットワーク優先。圏外のときだけキャッシュ */
   if (req.mode === "navigate") {
     e.respondWith(
-      fetch(req)
+      fetch(req.url, { cache: "no-cache", credentials: "same-origin" })   // ブラウザがとっておいた古いページは使わず、毎回サーバーに確かめる
         .then(res => {
           const copy = res.clone();
           caches.open(CACHE).then(c => c.put("./index.html", copy)).catch(() => {});
@@ -69,7 +70,7 @@ self.addEventListener("fetch", e => {
   }
 
   e.respondWith(
-    fetch(req)
+    fetch(req, { cache: "no-cache" })   // app.js なども同じ。変わっていなければ確認だけで済む（304）
       .then(res => {
         if (res && res.ok) {
           const copy = res.clone();
@@ -77,6 +78,6 @@ self.addEventListener("fetch", e => {
         }
         return res;
       })
-      .catch(() => caches.match(req).then(r => r || new Response("", { status: 503 })))
+      .catch(() => caches.match(req, { ignoreSearch: true }).then(r => r || new Response("", { status: 503 })))
   );
 });
