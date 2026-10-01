@@ -716,7 +716,7 @@ function closeMemo() { refreshHistSoon(); $("scrim").hidden = $("msheet").hidden
 $("mUndo").onclick = () => { const r = editing; if (!r) return; closeMemo(); undoRec(r, r.r); };
 /* 「あとで」：日時と枠はそのままにして、入れた店名・電話・メモ（アポはカレンダーの説明も）は残す。
    カレンダーから開いた新しいアポ（draft、まだ記録が無い）は何も作らずに閉じる */
-$("mSkip").onclick = () => {
+function skipMemo() {
   const r = editing, changed = memoChanged();
   const shop = $("mShop").value.trim(), tel = $("mTel").value.trim(), text = $("mText").value.trim(), info = $("mInfo").value.trim();
   closeMemo();
@@ -734,8 +734,11 @@ $("mSkip").onclick = () => {
   b.commit().catch(e => toast(errMsg(e)));
   toast(r.r === "アポ" ? (undatedApo ? "店名などを保存しました。日時は未定のままです" : "店名などを保存しました（日時はそのまま）")
     : r.r === "再架電" && !(r.memo && r.memo.when) ? "メモを保存しました。日時はまだ入っていません" : "メモを保存しました");
-};
-const tryCloseMemo = () => guardClose("msheet", memoChanged(), closeMemo, "mSave");
+}
+$("mSkip").onclick = skipMemo;
+/* 外側を押した・Esc：自分の記録で入力が変わっていたら「あとで」と同じく保存して閉じる（どう閉じても消えない）。
+   カレンダーから開いた新しいアポ（draft）は保存すると件数が増えるので、今まで通り1回目は知らせるだけ */
+const tryCloseMemo = () => (editing && !editing.draft && editing.uid === U && memoChanged()) ? skipMemo() : guardClose("msheet", memoChanged(), closeMemo, "mSave");
 $("scrim").onclick = tryCloseMemo;
 document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("msheet").hidden) tryCloseMemo(); });
 $("mWhen").addEventListener("input", checkClash);
@@ -1226,6 +1229,7 @@ function postpone(r) {
   refreshHistSoon();
   const now = new Date();
   const w = addDays(dayStart(r.memo.when < now ? now : r.memo.when), 1); w.setHours(r.memo.when.getHours(), r.memo.when.getMinutes());
+  if (w.getDay() === 0) w.setDate(w.getDate() + 1);   // 日曜は休みなので月曜へ
   const p = r.isTask ? updateDoc(doc(db, "tasks", r.id), {when: Timestamp.fromDate(w)}) : updateDoc(doc(db, "records", r.id), {"memo.when": Timestamp.fromDate(w)});
   p.catch(e => toast(errMsg(e)));
   toast(md(w) + " " + hm(w) + " に延期しました");
@@ -1570,7 +1574,7 @@ const gcalLinked = () => !!(busyMap[U] && busyMap[U].status === "ok");
 function gcalState() {
   const g = busyMap[U];
   const at = g && g.updatedAt ? hm(g.updatedAt) + " 確認" : "";
-  if (!g) return {cls: "", pill: "確認待ち", text: "共有してから最大15分で確認されます"};
+  if (!g) return {cls: "", pill: "未共有", text: "まだ共有されていません。共有すると15分以内に「連携できました」に変わります"};
   if (g.status === "ok") return {cls: "ok", pill: "連携中", text: "予定を読み込めています（" + at + "）"};
   if (g.status === "no_email") return {cls: "ng", pill: "未共有", text: "アドレスが入っていません（" + at + "）"};
   return {cls: "ng", pill: "未共有", text: (g.email ? g.email + " の" : "") + "カレンダーがまだ共有されていません（" + at + "）"};
