@@ -958,7 +958,6 @@ const TASK_KINDS = [
   {k: "前確",       bg: "#D7CCF0", fg: "#4A2F8A"},
   {k: "再架電",     bg: "#BFE1F6", fg: "#0A53A8"},
   {k: "折り返し待ち", bg: "#FCE3B5", fg: "#7A4A00"},
-  {k: "資料送付",   bg: "#CDE8F6", fg: "#0B5C80"},
   {k: "その他",     bg: "#E3E6EA", fg: "#3C4043"}
 ];
 const TASK_COL = Object.fromEntries(TASK_KINDS.map(t => [t.k, t]));
