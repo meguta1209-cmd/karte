@@ -501,3 +501,17 @@ img{max-width:100%;}
 .inapp b{color:var(--warn); font-size:15px;}
 .inapp p{margin:6px 0 10px; font-size:13px; color:var(--ink);}
 .inapp button{width:100%; min-height:42px; border-radius:8px; border:0; background:var(--blue); color:var(--on-blue); font-weight:700;}
+/* Googleカレンダーの「予定あり」 */
+.gbusy{display:flex; flex-direction:column; justify-content:center; flex:1; min-height:32px; border-radius:5px; padding:3px 7px;
+  background:repeating-linear-gradient(135deg, var(--card2) 0 6px, var(--rule) 6px 8px); color:var(--ink2); font-size:11.5px; font-weight:700; line-height:1.3;}
+.gbusy small{font-family:var(--mono); font-weight:500; font-size:10.5px;}
+.gbusy.wk{min-height:24px; font-size:10px; padding:2px 4px;}
+.gbusy:empty{background:repeating-linear-gradient(135deg, var(--card2) 0 6px, var(--rule) 6px 8px);}
+.gc{font-style:normal; font-size:9.5px; font-weight:700; margin-left:4px; padding:0 4px; border-radius:3px;}
+.gc.ok{background:var(--ok-soft); color:var(--ok);}
+.gc.ng{background:var(--red-soft); color:var(--red);}
+.pill.ng{background:var(--red-soft); color:var(--red);}
+.howto{margin-top:8px; background:var(--card); border:1px solid var(--rule); border-radius:10px; padding:12px 14px; font-size:13px;}
+.howto ol{margin:6px 0; padding-left:20px; display:flex; flex-direction:column; gap:4px;}
+.howto p{margin:6px 0 0; color:var(--ink2); font-size:12.5px;}
+.howto a{color:var(--blue);}

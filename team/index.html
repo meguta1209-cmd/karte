@@ -210,6 +210,24 @@
         <label class="sw"><input type="checkbox" id="myCloser" aria-label="クローザーもやる"><span></span></label></div>
     </div>
 
+    <div id="gcalBox" hidden>
+      <h2>Googleカレンダー連携（クローザー）</h2>
+      <div class="card set">
+        <div class="row"><div class="t">状態<small id="gcalStatus"></small></div><span class="pill" id="gcalPill"></span></div>
+        <div class="row"><div class="t">使うGoogleカレンダー<small>ふだんの予定を入れているGoogleアカウントのアドレス</small></div><input type="text" id="gcalEmail" inputmode="email" aria-label="Googleカレンダーのアドレス"><button class="chip-btn" id="saveGcal">保存</button></div>
+      </div>
+      <div class="howto" id="gcalHow">
+        <b>最初に1回だけ：カレンダーを共有する</b>
+        <ol>
+          <li>パソコンで <a href="https://calendar.google.com/calendar/u/0/r/settings" target="_blank" rel="noopener">Googleカレンダーの設定</a> を開く</li>
+          <li>左の「マイカレンダーの設定」で自分の名前のカレンダーを押す</li>
+          <li>「特定のユーザーまたはグループと共有する」→「ユーザーやグループを追加」</li>
+          <li><b>meguta1209@gmail.com</b> を入れて、権限を「<b>予定の表示（時間枠のみ、詳細は非表示）</b>」にして送信</li>
+        </ol>
+        <p>チームに見えるのは「予定あり」と時間だけです。予定の名前や中身は見えません。共有から15分以内に反映されます。アプリで取ったアポは、このカレンダーに【Zoom面談】の招待として届きます。</p>
+      </div>
+    </div>
+
     <h2>アプリの通知（どの画面を開いていても出る）</h2>
     <div class="card set">
       <div class="row"><div class="t">今日の予定まとめ<small>その日はじめてアプリを開いたときに、今日の再架電・アポを一覧で出す</small></div>

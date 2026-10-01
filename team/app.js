@@ -204,6 +204,11 @@ function startApp() {
   }, onErr("予定")));
   unsubs.push(onSnapshot(query(recs, where("pending", "==", true)), s => { pendTeam = s.docs.map(recOf); if (curTab === "remind") renderRemind(); }, onErr("チームの予定")));
   unsubs.push(onSnapshot(query(recs, where("undated", "==", true)), s => { undated = s.docs.map(recOf).sort((a, b) => a.t - b.t); renderUndated(); }, onErr("日時未定のアポ")));
+  unsubs.push(onSnapshot(collection(db, "busy"), s => {
+    busyMap = {};
+    s.forEach(d => { const x = d.data(); busyMap[d.id] = {...x, updatedAt: tsd(x.updatedAt), blocks: (x.blocks || []).map(b => ({s: tsd(b.s), e: tsd(b.e)})).filter(b => b.s && b.e)}; });
+    if (curTab === "cal") renderCal(); if (curTab === "set") renderGcal(); if (!$("msheet").hidden) checkClash();
+  }, onErr("クローザーの予定")));
   unsubs.push(onSnapshot(query(collection(db, "slots"), where("day", ">=", dk(addDays(today(), -7)))), s => {
     slots = s.docs.map(d => ({id: d.id, ...d.data(), when: tsd(d.data().when)}));
     if (curTab === "cal") renderCal(); if (!$("msheet").hidden) checkClash();
@@ -245,6 +250,7 @@ function renderMe() {
   $("myMail").textContent = auth.currentUser ? auth.currentUser.email : "";
   if (document.activeElement !== $("myName")) $("myName").value = me.name || "";
   $("myCloser").checked = !!me.closer;
+  renderGcal();
   $("adminBox").hidden = me.role !== "admin";
 }
 const grid = $("grid");
@@ -440,6 +446,8 @@ function checkClash() {
     if (!free.length) { box.className = "clash"; box.textContent = "この時間はクローザー全員が埋まっています"; return; }
     box.className = "clash ok"; box.textContent = md(d) + " " + hm(d) + " 空いているクローザー：" + free.map(c => c.name).join("・"); return;
   }
+  const gb = gBusyAt(d, selCloser);
+  if (gb && !slotsAt(d, editing).some(s => s.closer === selCloser)) { box.className = "clash"; box.textContent = CNAME(selCloser) + "さんはこの時間、ほかの予定があります（" + hm(gb.s) + "〜" + hm(gb.e) + "）" + (free.length ? "。空いているのは " + free.map(c => c.name).join("・") : ""); return; }
   const hit = slotsAt(d, editing).find(s => s.closer === selCloser);
   if (hit) { box.className = "clash"; box.textContent = CNAME(selCloser) + "さんはこの時間埋まっています（" + nameOf(hit.uid) + "さんのアポ：" + (hit.shop || "店名なし") + "）" + (free.length ? "。空いているのは " + free.map(c => c.name).join("・") : ""); return; }
   box.className = "clash ok"; box.textContent = md(d) + " " + hm(d) + " " + CNAME(selCloser) + "さん 空いています";
@@ -515,7 +523,10 @@ const slotIdOf = (d, c) => dk(d) + "_" + pad(d.getHours()) + pad(d.getMinutes())
 let extraSlots = [];      // 過去の週を見るときに一度だけ読んだ分
 const allSlots = () => slots.concat(extraSlots.filter(x => !slots.some(s => s.id === x.id)));
 function slotsAt(d, except) { const k = dk(d) + " " + hm(d); return allSlots().filter(s => s.day + " " + s.time === k && !(except && s.recId === except.id)); }
-const closerBusy = (d, cid, except) => slotsAt(d, except).some(s => s.closer === cid);
+/* Googleカレンダーの「予定あり」（時間だけ）。busy/{uid}.blocks = [{s, e}] */
+let busyMap = {};
+const gBusyAt = (d, cid) => { const b = busyMap[cid]; if (!b) return null; const e = new Date(d.getTime() + 18e5); return (b.blocks || []).find(x => x.s < e && x.e > d) || null; };
+const closerBusy = (d, cid, except) => slotsAt(d, except).some(s => s.closer === cid) || !!gBusyAt(d, cid);
 const freeClosers = (d, except) => closerList().filter(c => !closerBusy(d, c.id, except));
 const slotOpen = (d, except, cid) => (!cid || cid === "auto" || cid === "all") ? freeClosers(d, except).length > 0 : !closerBusy(d, cid, except);
 function freeSlots(from, n) {
@@ -582,20 +593,25 @@ function renderCal() {
     cal.insertAdjacentHTML("beforeend", `<div class="hd corner"></div>` + cls.map(c => {
       let f = 0;
       for (let h = SLOT_H0; h < SLOT_H1; h++) for (const mi of [0, 30]) { const d = new Date(day); d.setHours(h, mi, 0, 0); if (d >= now && !closerBusy(d, c.id, null)) f++; }
-      return `<div class="hd cl"><span><i class="dot-c" style="background:${c.color}"></i>${esc(c.name)}</span><small>空き ${f}枠</small></div>`;
+      const g = busyMap[c.id], gs = !g ? "" : g.status === "ok" ? `<em class="gc ok" title="Googleカレンダー連携中">G</em>` : `<em class="gc ng" title="Googleカレンダーが未共有">G</em>`;
+      return `<div class="hd cl"><span><i class="dot-c" style="background:${c.color}"></i>${esc(c.name)}${gs}</span><small>空き ${f}枠</small></div>`;
     }).join(""));
     for (let h = SLOT_H0; h < SLOT_H1; h++) for (const mi of [0, 30]) {
       cal.insertAdjacentHTML("beforeend", timeCell(h, mi));
       const d = new Date(day); d.setHours(h, mi, 0, 0);
       const at = slotsAt(d, null);
       cls.forEach(c => {
-        const list = at.filter(s => s.closer === c.id), past = d < now, full = list.length > 0;
+        const list = at.filter(s => s.closer === c.id), past = d < now;
+        const gb = list.length ? null : gBusyAt(d, c.id), full = list.length > 0 || !!gb;
         if (!past && !full) free++;
         count += list.length;
         const b = document.createElement("button");
         b.className = "sl" + (mi ? " half" : "") + (past ? " past" : full ? " full" : " free");
-        b.setAttribute("aria-label", c.name + " " + hm(d) + (full ? " アポあり" : past ? " 過ぎた枠" : " 空き"));
+        b.setAttribute("aria-label", c.name + " " + hm(d) + (list.length ? " アポあり" : gb ? " ほかの予定あり" : past ? " 過ぎた枠" : " 空き"));
+        /* ほかの予定は、始まりの枠にだけ時間を書く */
+        const gStart = gb && (gb.s >= d || +d === +new Date(new Date(day).setHours(SLOT_H0, 0, 0, 0)));
         b.innerHTML = list.map(s => `<span class="apd${s.uid === U ? " mine" : ""}" style="--cc:${c.color}"><b>${esc(s.shop || "（店名なし）")}</b><small>獲得 ${esc(nameOf(s.uid))}</small></span>`).join("") +
+          (gb ? `<span class="gbusy">${gStart ? `予定あり<small>${hm(gb.s)}〜${hm(gb.e)}</small>` : ""}</span>` : "") +
           (!past && !full ? `<span class="free-mark">${hm(d)}</span>` : "") + (+dayStart(d) === +T ? nowLine(d, now) : "");
         b.onclick = () => slotTap(d, list, past, full, c.id);
         cal.appendChild(b);
@@ -629,7 +645,9 @@ function renderCal() {
         const b = document.createElement("button");
         b.className = "sl" + (mi ? " half" : "") + (past ? " past" : full ? " full" : " free") + (+day === +T ? " today" : "");
         b.setAttribute("aria-label", md(d) + " " + hm(d) + (list.length ? " アポ" + list.length + "件" : past ? " 過ぎた枠" : " 空き"));
+        const gbw = calCloser !== "all" && !list.length ? gBusyAt(d, calCloser) : null;
         b.innerHTML = list.map(s => `<span class="ap${s.uid === U ? " mine" : ""}" style="background:${CCOL(s.closer)}"><b>${esc(CNAME(s.closer)[0])}</b><span>${esc(s.shop || "")}</span></span>`).join("") +
+          (gbw ? `<span class="gbusy wk">予定あり</span>` : "") +
           (+day === +T ? nowLine(d, now) : "");
         b.onclick = () => slotTap(d, list, past, full);
         cal.appendChild(b);
@@ -654,6 +672,7 @@ function slotTap(d, list, past, full, closerId) {
     $("mWhen").value = toLocal(d); finishPick(); setQuick("アポ"); checkClash(); return;
   }
   if (list.length) { showApoDetail(d, list, past); return; }
+  if (full && !past) { toast("この時間はクローザーにほかの予定があります"); return; }
   if (past) return;
   newApoAt(d, closerId);
 }
@@ -995,7 +1014,24 @@ $("saveName").onclick = () => {
   const n = $("myName").value.trim(); if (!n) { toast("名前を入れてください"); return; }
   updateDoc(doc(db, "members", U), {name: n}).then(() => toast("名前を保存しました")).catch(e => toast(errMsg(e)));
 };
-$("myCloser").onchange = () => updateDoc(doc(db, "members", U), {closer: $("myCloser").checked}).then(() => toast($("myCloser").checked ? "クローザーに入りました" : "クローザーから外れました")).catch(e => toast(errMsg(e)));
+/* Googleカレンダー連携の状態（クローザーだけ） */
+function renderGcal() {
+  if (!me) return;
+  $("gcalBox").hidden = !me.closer;
+  if (!me.closer) return;
+  if (document.activeElement !== $("gcalEmail")) $("gcalEmail").value = me.gcalEmail || me.email || "";
+  const g = busyMap[U], pill = $("gcalPill");
+  if (!g) { pill.className = "pill"; pill.textContent = "準備中"; $("gcalStatus").textContent = "同期の係が動き始めると、ここに状態が出ます"; $("gcalHow").hidden = false; return; }
+  const at = g.updatedAt ? hm(g.updatedAt) + " 更新" : "";
+  if (g.status === "ok") { pill.className = "pill ok"; pill.textContent = "連携中"; $("gcalStatus").textContent = "予定を読み込めています（" + at + "）"; $("gcalHow").hidden = true; }
+  else { pill.className = "pill ng"; pill.textContent = "未共有"; $("gcalStatus").textContent = (g.status === "no_email" ? "アドレスが入っていません" : "カレンダーがまだ共有されていません") + (at ? "（" + at + "）" : ""); $("gcalHow").hidden = false; }
+}
+$("saveGcal").onclick = () => {
+  const v = $("gcalEmail").value.trim();
+  if (v && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v)) { toast("アドレスの形が正しくありません"); return; }
+  updateDoc(doc(db, "members", U), {gcalEmail: v}).then(() => toast("保存しました。15分以内に反映されます")).catch(e => toast(errMsg(e)));
+};
+$("myCloser").onchange =() => updateDoc(doc(db, "members", U), {closer: $("myCloser").checked}).then(() => toast($("myCloser").checked ? "クローザーに入りました" : "クローザーから外れました")).catch(e => toast(errMsg(e)));
 $("appUrl").textContent = APP_URL + "?openExternalBrowser=1";
 $("copyUrl").onclick = async () => {
   try { await navigator.clipboard.writeText(APP_URL + "?openExternalBrowser=1"); toast("リンクをコピーしました"); }
@@ -1013,7 +1049,7 @@ function renderAdmin() {
   const act = Object.entries(members).filter(([, m]) => m.status !== "pending").sort((a, b) => (a[1].status === "removed") - (b[1].status === "removed"));
   $("memCount").textContent = act.filter(([, m]) => m.status === "active").length + "人";
   $("memList").innerHTML = act.map(([id, m]) => `<div class="row mrow"><div class="avatar" style="background:${colorOf(id)};width:28px;height:28px;font-size:12px">${esc((m.name || "?")[0])}</div>
-    <div class="t">${esc(m.name)}${m.role === "admin" ? "（管理者）" : ""}${m.status === "removed" ? ` <span class="badge pend">外した人</span>` : ""}<small>${esc(m.email)}</small></div>
+    <div class="t">${esc(m.name)}${m.role === "admin" ? "（管理者）" : ""}${m.status === "removed" ? ` <span class="badge pend">外した人</span>` : ""}<small>${esc(m.email)}${m.closer ? (busyMap[id] ? (busyMap[id].status === "ok" ? " ・ Googleカレンダー連携中" : " ・ Googleカレンダー未共有") : "") : ""}</small></div>
     <div class="acts2">${m.status === "active" ? `<button data-a="closer" data-id="${id}" aria-pressed="${!!m.closer}" class="${m.closer ? "ok" : ""}">${m.closer ? "クローザー" : "クローザーにする"}</button>` : ""}
     ${m.role !== "admin" ? (m.status === "active" ? `<button class="ng" data-a="rm" data-id="${id}">外す</button>` : `<button data-a="back" data-id="${id}">戻す</button>`) : ""}</div></div>`).join("");
 }
@@ -1077,7 +1113,7 @@ function showTab(v) {
   VIEWS.forEach(x => $("v-" + x).hidden = x !== v);
   document.querySelectorAll(".tabs button").forEach(b => { if (b.dataset.go === v) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current"); });
   window.scrollTo(0, 0);
-  if (v === "cal") renderCal(); if (v === "kpi") renderKpi(); if (v === "remind") renderRemind(); if (v === "log") renderLog(); if (v === "set") renderAdmin();
+  if (v === "cal") renderCal(); if (v === "kpi") renderKpi(); if (v === "remind") renderRemind(); if (v === "log") renderLog(); if (v === "set") { renderAdmin(); renderGcal(); }
 }
 document.addEventListener("click", e => { const b = e.target.closest("[data-go]"); if (b) showTab(b.dataset.go); });
 COL = Object.fromEntries(ITEMS.map(i => [i.k, i]));
