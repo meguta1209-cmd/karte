@@ -404,11 +404,62 @@ function openMemo(rec) {
     $("mWhen").value = m.when ? toLocal(m.when) : ""; $("mRemind").checked = m.remind !== false; setQuick(kind);
   }
   ["mShop", "mTel", "mText", "mWhen"].forEach(id => $(id).readOnly = !mine);
+  $("mPaste").hidden = !mine;
   $("mSave").hidden = !mine; $("mSkip").textContent = mine ? "あとで" : "閉じる";
   checkClash();
   $("scrim").hidden = $("msheet").hidden = false;
   if (mine) setTimeout(() => $(timed ? "mShop" : "mText").focus(), 50);
 }
+/* ---------- リストからの貼り付け：「店名[タブ/改行]（住所）[タブ/改行]電話番号」を店名と電話に分ける ---------- */
+const toHalf = s => String(s || "").normalize("NFKC").replace(/[ー‐―−–—]/g, "-");
+function asPhone(s) {
+  const n = toHalf(s).trim();
+  if (!/^[+\d][\d\-()\s]*$/.test(n)) return "";
+  const digits = n.replace(/\D/g, "");
+  return digits.length >= 10 && digits.length <= 13 ? n.replace(/\s/g, "") : "";
+}
+function parseListPaste(text) {
+  const raw = String(text || "").replace(/\r/g, "");
+  let parts = raw.split(/[\t\n]+/).map(s => s.trim()).filter(Boolean);
+  if (parts.length === 1 && asPhone(parts[0])) return {shop: "", tel: asPhone(parts[0])};
+  if (parts.length < 2) {
+    /* 1行で「店名 06-…」のように空白で並んでいるとき */
+    const m = toHalf(raw).trim().match(/^(.*?)[\s]+([+\d][\d\-()]{8,}\d)$/);
+    if (!m) return null;
+    parts = [raw.trim().slice(0, raw.trim().length - m[2].length).trim(), m[2]];
+  }
+  const telPart = parts.find(p => asPhone(p));
+  if (!telPart) return null;
+  const shop = parts.find(p => p !== telPart && !asPhone(p)) || "";
+  return {shop, tel: asPhone(telPart)};
+}
+function fillFromList(text) {
+  const p = parseListPaste(text);
+  if (!p) return false;
+  if (p.shop) $("mShop").value = p.shop;
+  $("mTel").value = p.tel;
+  toast(p.shop ? "店名と電話番号を分けて入れました" : "電話番号を入れました");
+  return true;
+}
+["mShop", "mTel"].forEach(id => {
+  $(id).addEventListener("paste", e => {
+    if ($(id).readOnly) return;
+    const t = (e.clipboardData || window.clipboardData).getData("text");
+    if (fillFromList(t)) e.preventDefault();
+  });
+});
+/* 貼り付けで1行にまとまって入ったときも分ける（スマホの貼り付けなど） */
+$("mShop").addEventListener("input", () => { const v = $("mShop").value; if (/\d{2,}.*\d{3,}\s*$/.test(toHalf(v)) && parseListPaste(v)) fillFromList(v); });
+$("mPaste").onclick = async () => {
+  try {
+    const t = await navigator.clipboard.readText();
+    if (!fillFromList(t)) toast("店名と電話番号が見つかりませんでした。リストで店名と電話番号のセルをコピーしてから押してください");
+  } catch (_) {
+    $("mShop").focus();
+    toast("ここで読めなかったので、店名の欄を長押しして貼り付けてください（自動で分けます）");
+  }
+};
+
 function closeMemo() { $("scrim").hidden = $("msheet").hidden = true; editing = null; }
 $("mSkip").onclick = () => {
   const r = editing; closeMemo();
