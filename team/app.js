@@ -67,10 +67,15 @@ const tsd = v => v && typeof v.toDate === "function" ? v.toDate() : (v instanceo
 const lsGet = (k, d) => { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (_) { return d; } };
 const lsSet = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (_) {} };
 let tt;
-function toast(msg, actLabel, act) {
+/* toast(文, ボタン名, 押したとき, ボタン名2, 押したとき2 …)。ボタンはいくつでも */
+function toast(msg, ...acts) {
   const el = $("toast"); el.textContent = msg;
-  if (actLabel) { const b = document.createElement("button"); b.textContent = actLabel; b.onclick = () => { el.classList.remove("on"); act(); }; el.appendChild(b); }
-  el.classList.add("on"); clearTimeout(tt); tt = setTimeout(() => el.classList.remove("on"), actLabel ? 3500 : 2200);
+  for (let i = 0; i + 1 < acts.length; i += 2) {
+    if (!acts[i]) continue;
+    const b = document.createElement("button"), f = acts[i + 1]; b.textContent = acts[i];
+    b.onclick = () => { el.classList.remove("on"); f(); }; el.appendChild(b);
+  }
+  el.classList.add("on"); clearTimeout(tt); tt = setTimeout(() => el.classList.remove("on"), acts.length > 2 ? 4500 : acts.length ? 3500 : 2200);
 }
 const errMsg = e => (e && e.code === "permission-denied") ? "権限がありません" : (e && e.message === "FULL") ? "その時間は埋まっています" : (e && e.code === "unavailable") ? "オフラインのため保存できません" : "保存できませんでした";
 
@@ -291,6 +296,9 @@ function buildGrid() {
     b.onclick = () => addResult(it.k, b);
     grid.appendChild(b);
   });
+  /* PC（マウスのある機械）だけ、キーボードでも押せることを一行で知らせる */
+  const ks = KEYS.slice(0, ITEMS.length).toUpperCase();
+  $("keyHelp").textContent = ks ? "キーボードの " + (ks.length <= 10 ? "1〜" + ks.slice(-1) : "1〜0・" + ks.slice(10).split("").join("・")) + " でも押せます／Backspace でひとつ戻す" : "";
 }
 /* 日ごとの集計に足す（n=1）／引く（n=-1）。mb は10分枠 "HHM0"（稼働時間を出すため。古い記録には無い） */
 function statInc(uid, k, hour, n, mb) {
@@ -313,7 +321,9 @@ function addResult(k, btn) {
   if (navigator.vibrate) navigator.vibrate(15);
   const rec = {...data, id: ref.id, t};
   if (k === "アポ" || k === "再架電") openMemo(rec);
-  else toast(k + " +1", "メモを付ける", () => openMemo(myToday.find(r => r.id === rec.id) || rec));
+  else toast(k + " +1",
+    "取り消す", () => deleteRec(myToday.find(r => r.id === rec.id) || rec).then(() => toast("「" + k + "」を取り消しました")).catch(e => toast(errMsg(e))),
+    "メモを付ける", () => openMemo(myToday.find(r => r.id === rec.id) || rec));
 }
 function deleteRec(rec) {
   const b = writeBatch(db);
@@ -457,7 +467,7 @@ function fillRecs(box, list, withDelete) {
     const w = r.memo && r.memo.when;
     const when = w ? `<span class="when">${r.r === "アポ" ? "面談" : "再架電"} ${md(w)} ${hm(w)}</span>` : r.src === "old" ? OLD_BADGE : (r.r === "アポ" ? `<span class="badge late">日時未定</span>` : "");
     row.innerHTML = `<span class="tm">${hm(r.t)}</span><span class="body">${resChip(r.r)}${when}` +
-      (r.memo && (r.memo.shop || r.memo.text) ? `<div class="memo">${memoLine(r.memo)}</div>` : `<div class="add">＋ メモを付ける</div>`) + `</span>`;
+      (r.memo && (r.memo.shop || r.memo.text) ? `<div class="memo">${memoLine(r.memo)}</div>` : `<div class="add">＋メモ</div>`) + `</span>`;
     const hasInfo = r.memo && (r.memo.shop || r.memo.tel || r.memo.text || r.memo.when);
     row.onclick = () => hasInfo ? openDetail(r) : openMemo(r);
     row.onkeydown = e => { if (e.key === "Enter") row.onclick(); };
@@ -516,8 +526,22 @@ function openMemo(rec) {
   $("mSave").hidden = !mine; $("mSkip").textContent = mine ? "あとで" : "閉じる";
   checkClash();
   $("scrim").hidden = $("msheet").hidden = false;
+  memoSnap = sheetSnap("msheet") + selCloser; delete $("msheet").dataset.armClose;
   if (mine) setTimeout(() => $(timed ? "mShop" : "mText").focus(), 50);
 }
+/* 入力の途中で、暗いところを押したり Esc を押したりして閉じても消えないように：
+   開いた時から中身が変わっていたら、1回目は知らせるだけ（保存ボタンを揺らす）、もう一度で閉じる */
+let memoSnap = "", taskSnap = "";
+const sheetSnap = id => [...$(id).querySelectorAll("input, textarea, select")].map(e => e.type === "checkbox" ? e.checked : e.value).join("\u0001");
+function guardClose(id, changed, close, saveId) {
+  const sheet = $(id);
+  if (!changed || sheet.dataset.armClose) { delete sheet.dataset.armClose; close(); return; }
+  sheet.dataset.armClose = "1"; setTimeout(() => { delete sheet.dataset.armClose; }, 3000);
+  const s = $(saveId); s.classList.remove("shake"); void s.offsetWidth; s.classList.add("shake");
+  toast("入力した内容が消えます。閉じるときは、もう一度押してください");
+}
+const memoChanged = () => !$("msheet").hidden && sheetSnap("msheet") + selCloser !== memoSnap;
+const taskChanged = () => !$("taskSheet").hidden && sheetSnap("taskSheet") + tKind !== taskSnap;
 /* ---------- リストからの貼り付け：「店名[タブ/改行]（住所）[タブ/改行]電話番号」を店名と電話に分ける ---------- */
 const toHalf = s => String(s || "").normalize("NFKC").replace(/[ー‐―−–—]/g, "-");
 function asPhone(s) {
@@ -608,10 +632,13 @@ function openTask(t, pre) {
   $("tDelete").hidden = !t; delete $("tDelete").dataset.arm; $("tDelete").textContent = "削除";
   drawTaskKinds(); setTaskQuick();
   $("tScrim").hidden = $("taskSheet").hidden = false;
+  taskSnap = sheetSnap("taskSheet") + tKind; delete $("taskSheet").dataset.armClose;
   setTimeout(() => $(t ? "tTitle" : "tWhen").focus(), 50);
 }
 function closeTask() { $("tScrim").hidden = $("taskSheet").hidden = true; editingTask = null; }
-$("tCancel").onclick = closeTask; $("tScrim").onclick = closeTask;
+$("tCancel").onclick = closeTask;   // 「やめる」は押した人が決めているので、そのまま閉じる
+const tryCloseTask = () => guardClose("taskSheet", taskChanged(), closeTask, "tSave");
+$("tScrim").onclick = tryCloseTask;
 document.addEventListener("click", e => { if (e.target.closest("[data-newtask]")) openTask(null); });
 ["tShop", "tTel"].forEach(id => $(id).addEventListener("paste", e => {
   const t = (e.clipboardData || window.clipboardData).getData("text");
@@ -642,15 +669,16 @@ $("tDelete").onclick = () => {
   if (!b.dataset.arm) { b.dataset.arm = "1"; b.textContent = "本当に削除"; setTimeout(() => { if (b.isConnected) { delete b.dataset.arm; b.textContent = "削除"; } }, 2500); return; }
   deleteDoc(doc(db, "tasks", t.id)).then(() => { closeTask(); toast("予定を削除しました"); }).catch(e => toast(errMsg(e)));
 };
-document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("taskSheet").hidden) closeTask(); });
+document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("taskSheet").hidden) tryCloseTask(); });
 
 function closeMemo() { refreshHistSoon(); $("scrim").hidden = $("msheet").hidden = true; editing = null; }
 $("mSkip").onclick = () => {
   const r = editing; closeMemo();
   if (r && r.uid === U && !r.draft && r.src !== "old" && r.r === "アポ" && !(r.memo && r.memo.when)) toast("日時未定のアポとして残しました");
 };
-$("scrim").onclick = closeMemo;
-document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("msheet").hidden) closeMemo(); });
+const tryCloseMemo = () => guardClose("msheet", memoChanged(), closeMemo, "mSave");
+$("scrim").onclick = tryCloseMemo;
+document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("msheet").hidden) tryCloseMemo(); });
 $("mWhen").addEventListener("input", checkClash);
 
 /* クローザーの選択（"auto"＝空いている人におまかせ） */
@@ -857,7 +885,8 @@ function renderCal() {
     const off = Math.round((dayStart(day) - T) / 864e5);
     $("wkLbl").textContent = md(day);
     $("calFilter").hidden = true;
-    $("legend").innerHTML = `<span><i style="background:transparent;outline:2px solid #FFD54F;outline-offset:-2px"></i>自分が取ったアポ</span><span>列＝クローザー（1人1枠）</span>`;
+    $("legend").innerHTML = `<span><i style="background:transparent;outline:2px solid #FFD54F;outline-offset:-2px"></i>自分が取ったアポ</span><span>列＝クローザー（1人1枠）</span>` +
+      `<span><i class="lg-dot"></i>点線＝ここから始めると、ほかの商談と重なる</span><span><i class="lg-hatch"></i>斜線＝過ぎた時間・ほかの予定</span><span><em class="gc ok">G</em>＝Googleカレンダー連携中（<em class="gc ng">G</em>＝まだ共有されていない）</span>`;
     cal.style.gridTemplateColumns = `50px repeat(${cls.length}, minmax(92px, 1fr))`;
     cal.insertAdjacentHTML("beforeend", `<div class="hd corner"></div>` + cls.map(c => {
       let f = 0;
@@ -905,7 +934,7 @@ function renderCal() {
     $("calFilter").innerHTML = [{id: "all", name: "クローザー全員"}, ...cls].map(c =>
       `<button class="chip-btn" data-c="${esc(c.id)}" aria-pressed="${calCloser === c.id}">${c.id !== "all" ? `<i class="dot-c" style="background:${c.color}"></i>` : ""}${esc(c.name)}</button>`).join("");
     $("legend").innerHTML = `<span>色＝クローザー</span>` + cls.map(c => `<span><i style="background:${c.color}"></i>${esc(c.name)}</span>`).join("") +
-      `<span><i style="background:transparent;outline:2px solid #FFD54F;outline-offset:-2px"></i>自分が取ったアポ</span>`;
+      `<span><i style="background:transparent;outline:2px solid #FFD54F;outline-offset:-2px"></i>自分が取ったアポ</span><span><i class="lg-hatch"></i>斜線＝過ぎた時間</span>`;
     cal.style.gridTemplateColumns = "";
     cal.insertAdjacentHTML("beforeend", `<div class="hd corner"></div>` + days.map(d =>
       `<div class="hd${+d === +T ? " today" : ""}${d.getDay() === 6 ? " sat" : ""}">${WD[d.getDay()]}<small>${d.getMonth() + 1}/${d.getDate()}</small></div>`).join(""));
@@ -1093,6 +1122,7 @@ function renderRemind() {
       const row = document.createElement("div"); row.className = "rm" + (late ? " late" : "") + (r.isTask ? " task" : "");
       const head = r.isTask
         ? `${resChip(r.r)} ${esc(r.title || "")}${r.memo.shop ? ` <span class="t-shop">${esc(r.memo.shop)}</span>` : ""}`
+        : r.r === "再架電" ? `${resChip(r.r)} ${esc(r.memo.shop || "（店名なし）")}`
         : `${esc(r.memo.shop || "（店名なし）")}${r.r === "アポ" ? `<span class="badge apo">商談</span>` : ""}`;
       const meta = r.isTask
         ? `担当 ${esc(nameOf(r.uid))}${r.by && r.by !== r.uid ? " ・ 作成 " + esc(nameOf(r.by)) : ""}`

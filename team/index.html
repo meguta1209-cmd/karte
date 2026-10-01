@@ -18,7 +18,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=BIZ+UDPGothic:wght@400;700&family=Roboto+Mono:wght@500;700&display=swap">
-<link rel="stylesheet" href="./style.css?v=22">
+<link rel="stylesheet" href="./style.css?v=23">
 <script>
 /* LINEの中のブラウザではGoogleログインが通らない（途中の情報を覚えておけない）。
    LINEは ?openExternalBrowser=1 を付けると Safari / Chrome で開き直してくれるので、自動で付け直す */
@@ -72,6 +72,7 @@
     <div class="logo">正</div>
     <h2>承認待ちです</h2>
     <p><b id="pendName"></b> さんの登録を受け付けました。<br>管理者が承認すると、この画面が自動で切り替わります。</p>
+    <p class="pend-ask">竹内さんに「登録したので承認をお願いします」と伝えてください。</p>
     <button class="link" id="pendLogout">ログアウト</button>
   </div>
 </div>
@@ -100,7 +101,7 @@
       <div class="side" id="cSide"></div>
     </div>
     <div class="team-strip">
-      <span>チーム今日<small class="upd">30秒ごと更新</small></span>
+      <span>チーム今日</span>
       <span>架電 <b id="tTotal">–</b></span>
       <span>アポ <b id="tApo">–</b></span>
       <button class="go" data-go="kpi">KPIを見る →</button>
@@ -111,6 +112,7 @@
     <div class="move-nag" id="moveNag" hidden><button class="mv-open" id="moveOpen"></button><button class="mv-x" id="moveX" aria-label="引っ越しの案内を消す">×</button></div>
     <div class="grid" id="grid"></div>
     <button class="link-add-task" data-newtask="1">＋ 予定を入れる（再架電・前確など）</button>
+    <p class="keyhelp" id="keyHelp"></p>
     <div class="acts">
       <button id="undo">↶ ひとつ戻す</button>
       <button id="memoLast">✎ 直前の記録にメモ</button>
@@ -199,7 +201,7 @@
     <div class="card chart" id="chart"></div>
     <h2>結果の内訳</h2>
     <div class="card brk" id="brk"></div>
-    <p class="defs">対応数（電話に出てもらった数）＝架電から「留守」「繋がらない」「使われてない」を引いた数。対応率＝対応数÷架電。アポ率＝アポ÷架電。接続率（オーナーと話せた率）＝（アポ＋オーナー断り＋NG）÷架電。1時間あたり＝架電÷稼働時間。稼働時間＝電話をかけた10分の枠の合計（休憩など、かけていない時間は入らない。10分の枠の情報が無い古い記録は、かけた時間帯を1時間として数える）。前期比＝同じ日数だけさかのぼった期間との差。</p>
+    <details class="defs-box"><summary>数字の意味</summary><p class="defs">対応数（電話に出てもらった数）＝架電から「留守」「繋がらない」「使われてない」を引いた数。対応率＝対応数÷架電。アポ率＝アポ÷架電。接続率（オーナーと話せた率）＝（アポ＋オーナー断り＋NG）÷架電。1時間あたり＝架電÷稼働時間。稼働時間＝電話をかけた10分の枠の合計（休憩など、かけていない時間は入らない。10分の枠の情報が無い古い記録は、かけた時間帯を1時間として数える）。前期比＝同じ日数だけさかのぼった期間との差。</p></details>
   </section>
 
   <!-- リマインド -->
@@ -234,7 +236,7 @@
 
     <h2>自分のアカウント</h2>
     <div class="card set">
-      <div class="row"><div class="t">名前<small id="myMail"></small></div><input type="text" id="myName" maxlength="12" aria-label="名前"><button class="chip-btn" id="saveName">保存</button></div>
+      <div class="row wrap-sm"><div class="t">名前<small id="myMail"></small></div><input type="text" id="myName" maxlength="12" aria-label="名前"><button class="chip-btn" id="saveName">保存</button></div>
       <div class="row"><div class="t">役職<small id="myJobNote">変えるときは管理者（竹内さん）に伝えてください</small></div><span class="val" id="myJob"></span></div>
       <div class="row"><div class="t">クローザーもやる<small>オンにするとカレンダーの担当に出ます</small></div>
         <label class="sw"><input type="checkbox" id="myCloser" aria-label="クローザーもやる"><span></span></label></div>
@@ -245,7 +247,7 @@
       <h2>Googleカレンダー連携（クローザー）</h2>
       <div class="card set">
         <div class="row"><div class="t">状態<small id="gcalStatus"></small></div><span class="pill" id="gcalPill"></span></div>
-        <div class="row"><div class="t">使うGoogleカレンダー<small>ふだんの予定を入れているGoogleアカウントのアドレス</small></div><input type="text" id="gcalEmail" inputmode="email" aria-label="Googleカレンダーのアドレス"><button class="chip-btn" id="saveGcal">保存</button></div>
+        <div class="row wrap-sm"><div class="t">使うGoogleカレンダー<small>ふだんの予定を入れているGoogleアカウントのアドレス</small></div><input type="text" id="gcalEmail" inputmode="email" aria-label="Googleカレンダーのアドレス"><button class="chip-btn" id="saveGcal">保存</button></div>
       </div>
       <button class="btn-plain" id="openGuide" style="margin-top:8px">連携の手順を開く</button>
       <div class="howto" id="gcalHow">
@@ -464,6 +466,6 @@
 <div class="offline" id="offline" hidden>オフライン中：つながったら送ります</div>
 <div class="toast" id="toast"></div>
 
-<script type="module" src="./app.js?v=22"></script>
+<script type="module" src="./app.js?v=23"></script>
 </body>
 </html>
