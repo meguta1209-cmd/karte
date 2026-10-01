@@ -49,7 +49,7 @@ const PALETTE = [
 const PEOPLE_COLORS = ["#1E4E86","#11734B","#8A4B08","#6B3FA0","#A33A5B","#0B6E7A","#5B6B1A","#9C3D10","#3D4F8F","#7A2E6E"];
 const CLOSER_COLORS = ["#2F6DB5","#1F7A55","#B0572A","#7B4DB8","#B83B6B","#0E7F8C"];
 const KEYS = "1234567890qwertyuiop";
-const SLOT_H0 = 10, SLOT_H1 = 19;          // アポ枠 10:00〜19:00・30分ごと・日曜休み
+const SLOT_H0 = 10, SLOT_H1 = 22;          // アポ枠 10:00〜22:00・30分ごと・日曜休み
 
 /* ---------- 小道具 ---------- */
 const $ = id => document.getElementById(id);
@@ -676,7 +676,7 @@ function checkClash() {
   if (!editing || editing.r !== "アポ" || !$("mWhen").value) { box.hidden = true; return; }
   const d = new Date($("mWhen").value);
   box.hidden = false;
-  if (!isSlotTime(d)) { box.className = "clash"; box.textContent = "アポの枠の外です（10:00〜19:00・30分ごと・日曜休み）"; return; }
+  if (!isSlotTime(d)) { box.className = "clash"; box.textContent = "アポの枠の外です（10:00〜22:00・30分ごと・日曜休み）"; return; }
   const free = freeClosers(d, editing);
   const span = md(d) + " " + hm(d) + "〜" + hm(new Date(d.getTime() + APO_MIN * 6e4));
   const others = free.length ? "。この時間から入れられるのは " + free.map(c => c.name).join("・") : "";
@@ -700,7 +700,7 @@ $("mSave").onclick = async () => {
   $("mSave").disabled = true;
   try {
     if (rec.r === "アポ" && w) {
-      if (!isSlotTime(w)) { toast("アポの枠の外です（10:00〜19:00・30分ごと・日曜休み）"); return; }
+      if (!isSlotTime(w)) { toast("アポの枠の外です（10:00〜22:00・30分ごと・日曜休み）"); return; }
       const cl = await bookSlot(rec, m, w, remind);
       /* サーバーからの通知を待たずに、自分のカレンダーへすぐ出す */
       const sid = slotIdOf(w, cl);
@@ -832,7 +832,7 @@ function timeCell(h, mi) {
   return mi ? `<div class="tm half"><span>${h}:30</span></div>` : `<div class="tm"><span>${h}:00</span></div>`;
 }
 /* 商談は1時間半の帯で見せる：始まりの枠に置いて、下の枠へ重ねて伸ばす（行の高さは固定）。
-   何枠ぶんか（19:00で切る）と、同じ列で時間が重なる商談を横に並べるための「レーン」 */
+   何枠ぶんか（カレンダーの終わり 22:00 で切る）と、同じ列で時間が重なる商談を横に並べるための「レーン」 */
 const spanOf = s => Math.max(1, Math.min(Math.ceil((s.dur || APO_MIN) / 30), (SLOT_H1 * 60 - s.when.getHours() * 60 - s.when.getMinutes()) / 30));
 function laneLayout(list) {
   const ends = [], lane = {};
