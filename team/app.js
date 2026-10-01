@@ -956,6 +956,7 @@ function visiblePending(list) {
    ============================================================ */
 const TASK_KINDS = [
   {k: "前確",       bg: "#D7CCF0", fg: "#4A2F8A"},
+  {k: "再架電",     bg: "#BFE1F6", fg: "#0A53A8"},
   {k: "折り返し待ち", bg: "#FCE3B5", fg: "#7A4A00"},
   {k: "資料送付",   bg: "#CDE8F6", fg: "#0B5C80"},
   {k: "その他",     bg: "#E3E6EA", fg: "#3C4043"}
@@ -1018,7 +1019,7 @@ function renderRemind() {
       const meta = r.isTask
         ? `担当 ${esc(nameOf(r.uid))}${r.by && r.by !== r.uid ? " ・ 作成 " + esc(nameOf(r.by)) : ""}`
         : `担当 ${esc(nameOf(r.uid))}${r.r === "アポ" && r.memo.closer ? " ・ クローザー " + esc(CNAME(r.memo.closer)) : ""} ・ ${md(r.t)} に${r.r === "アポ" ? "獲得" : "架電"}`;
-      const btns = r.isTask && canEditTask(r) ? `<button class="done">完了</button><button class="later">明日へ</button>`
+      const btns = r.isTask && canEditTask(r) ? `<button class="done">${r.r === "再架電" ? "かけた" : "完了"}</button><button class="later">明日へ</button>`
         : r.r === "再架電" && mine ? `<button class="done">かけた</button><button class="later">明日へ</button>` : `<button class="edit">詳細</button>`;
       row.innerHTML = `<div class="time">${hm(r.memo.when)}<small>${md(r.memo.when)}</small></div>
         <div class="info"><div class="shop">${head}${late ? `<span class="badge late">期限切れ</span>` : ""}</div>
@@ -1039,9 +1040,10 @@ function renderRemind() {
   });
 }
 function markDone(r) {
-  if (r.isTask) {   // 予定は架電ではないので、完了にするだけ
+  if (r.isTask) {   // 予定は架電ではないので、終わりにするだけ（再架電の予定は、このあと結果ボタンで数える）
     updateDoc(doc(db, "tasks", r.id), {done: true, doneAt: serverTimestamp()}).catch(e => toast(errMsg(e)));
-    toast("「" + itemLabel(r) + "」を完了にしました");
+    if (r.r === "再架電") { showTab("count"); toast("今回の結果のボタンを押してください"); }
+    else toast("「" + itemLabel(r) + "」を完了にしました");
     return;
   }
   histLoadedAt = 0;
@@ -1081,7 +1083,7 @@ function openDetail(r) {
     : `<div class="rd-notel">電話番号は入っていません${mine ? "（「" + (r.isTask ? "編集" : "メモを編集") + "」から入れられます）" : ""}</div>`;
   $("rdBody").innerHTML = rows.map(([k, v]) => `<div class="rd-row"><span class="k">${k}</span><span class="v">${v}</span></div>`).join("");
   const acts = [];
-  if (r.isTask && mine && !r.done) acts.push(`<button class="primary" data-a="done">完了にする</button>`, `<button data-a="later">明日へ延期</button>`);
+  if (r.isTask && mine && !r.done) acts.push(`<button class="primary" data-a="done">${r.r === "再架電" ? "かけた（結果を押す）" : "完了にする"}</button>`, `<button data-a="later">明日へ延期</button>`);
   if (!r.isTask && mine && r.r === "再架電" && !r.done && w) acts.push(`<button class="primary" data-a="done">かけた（結果を押す）</button>`, `<button data-a="later">明日へ延期</button>`);
   /* アポからは、前確の予定をそのまま作れる */
   if (!r.isTask && r.r === "アポ") acts.push(`<button data-a="prec">＋ 前確の予定を作る</button>`);
@@ -1143,7 +1145,7 @@ function showAlert(rec, mode, force) {
   $("alShop").textContent = rec.isTask ? ([rec.title, rec.memo.shop].filter(Boolean).join(" ") || rec.r) : (rec.memo.shop || "（店名なし）");
   $("alMemo").textContent = rec.memo.text || ""; $("alMemo").hidden = !rec.memo.text;
   $("alDone").hidden = !now || !canDone; $("alSnooze").hidden = !now;
-  $("alDone").textContent = rec.isTask ? "完了" : "かけた";
+  $("alDone").textContent = rec.isTask && rec.r !== "再架電" ? "完了" : "かけた";
   $("alOpen").classList.toggle("primary", !now || !canDone);
   $("alertBar").hidden = false;
   beep(now ? 3 : 2);

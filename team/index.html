@@ -104,7 +104,7 @@
     </div>
     <button class="nextup" id="nextUp" hidden></button>
     <button class="undated" id="undatedMine" hidden></button>
-    <button class="link-add-task" data-newtask="1">＋ テレアポ以外の予定を入れる（前確など）</button>
+    <button class="link-add-task" data-newtask="1">＋ 予定を入れる（再架電・前確など）</button>
     <div class="grid" id="grid"></div>
     <div class="acts">
       <button id="undo">↶ ひとつ戻す</button>
@@ -200,7 +200,7 @@
   <!-- リマインド -->
   <section id="v-remind" hidden>
     <h1 class="screen">リマインド</h1>
-    <button class="btn-add-task" data-newtask="1">＋ 予定を追加（前確・折り返し待ちなど）</button>
+    <button class="btn-add-task" data-newtask="1">＋ 予定を追加（再架電・前確・折り返し待ちなど）</button>
     <div class="chips" id="rmFilter">
       <button class="chip-btn" data-f="me" aria-pressed="true">自分の分</button>
       <button class="chip-btn" data-f="all" aria-pressed="false">チーム全員</button>
@@ -325,7 +325,7 @@
 <div class="msheet" id="taskSheet" role="dialog" aria-modal="true" aria-labelledby="tTitleH" hidden>
   <div class="in">
     <h3 id="tTitleH">予定を追加</h3>
-    <p class="hint">テレアポ以外の予定です。架電数には数えません。時間の15分前とちょうどの時間に通知します。</p>
+    <p class="hint">架電数には数えません（再架電の予定は、かけたときに結果のボタンを押すと数えられます）。時間の15分前とちょうどの時間に通知します。</p>
     <div class="fld"><label>種類</label><div class="quick" id="tKinds"></div></div>
     <div class="fld"><label for="tTitle">内容</label><input id="tTitle" maxlength="40" placeholder="例）前確の電話、資料をLINEで送る"></div>
     <div class="fld">
