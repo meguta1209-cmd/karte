@@ -18,7 +18,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=BIZ+UDPGothic:wght@400;700&family=Roboto+Mono:wght@500;700&display=swap">
-<link rel="stylesheet" href="./style.css?v=14">
+<link rel="stylesheet" href="./style.css?v=15">
 <script>
 /* LINEの中のブラウザではGoogleログインが通らない（途中の情報を覚えておけない）。
    LINEは ?openExternalBrowser=1 を付けると Safari / Chrome で開き直してくれるので、自動で付け直す */
@@ -57,7 +57,7 @@
     <h2>はじめまして</h2>
     <p id="regMail"></p>
     <div class="fld"><label for="regName">名前（チームで表示されます）</label><input id="regName" maxlength="12" placeholder="例）竹内" autocomplete="name"></div>
-    <label class="check"><input type="checkbox" id="regCloser"><span>クローザーもやる<small>Zoom面談の担当としてカレンダーに出ます</small></span></label>
+    <label class="check"><input type="checkbox" id="regCloser"><span>クローザーもやる<small>商談の担当としてカレンダーに出ます</small></span></label>
     <button class="primary" id="btnRegister">登録して承認を待つ</button>
     <p class="err" id="regErr" hidden></p>
     <button class="link" id="regLogout">別のアカウントでログインする</button>
@@ -250,7 +250,7 @@
           <li>「特定のユーザーまたはグループと共有する」→「ユーザーやグループを追加」</li>
           <li><b>meguta1209@gmail.com</b> を入れて、権限を「<b>予定の表示（時間枠のみ、詳細は非表示）</b>」にして送信</li>
         </ol>
-        <p>チームに見えるのは「予定あり」と時間だけです。予定の名前や中身は見えません。共有から15分以内に反映されます。アプリで取ったアポは、このカレンダーに【Zoom面談】の招待として届きます。</p>
+        <p>チームに見えるのは「予定あり」と時間だけです。予定の名前や中身は見えません。共有から15分以内に反映されます。アプリで取ったアポは、このカレンダーに【商談】店名の招待として届きます（1時間半）。</p>
       </div>
     </div>
 
@@ -321,11 +321,13 @@
       <div class="quick" id="mQuick"></div>
       <button type="button" class="btn-cal" id="mPick" hidden>カレンダーで空きを見て選ぶ</button>
       <div class="fld" id="mCloserBox" hidden>
-        <label>クローザー（Zoom面談の担当）</label>
+        <label>クローザー（商談の担当）</label>
         <div class="quick" id="mClosers"></div>
       </div>
     </div>
     <div class="fld"><label for="mText">メモ</label><textarea id="mText" placeholder="話した相手、温度感、次に言うことなど"></textarea></div>
+    <div class="fld" id="mInfoBox"><label for="mInfo">カレンダーの説明（アポ獲得・前確の情報を貼り付け）</label>
+      <textarea id="mInfo" class="m-info" placeholder="案件情報シートで作った文章などを、そのまま貼り付け。クローザーのGoogleカレンダーの「説明」に入ります。前確のあとで書き足してもOK"></textarea></div>
     <label class="inline-sw" id="mRemindBox"><span class="sw"><input type="checkbox" id="mRemind" checked><span></span></span>15分前とちょうどの時間にアプリで通知</label>
     <div class="foot">
       <button id="mSkip">あとで</button>
@@ -401,7 +403,7 @@
 <div class="scrim" id="ggScrim" hidden></div>
 <div class="daysum ggd" id="gcalGuide" role="dialog" aria-modal="true" aria-labelledby="ggTitle" hidden>
   <div class="ds-head"><h3 id="ggTitle">📅 Googleカレンダーと連携しましょう</h3></div>
-  <p class="ds-note">クローザーになると、あなたの予定の時間がチームのカレンダーに「予定あり」で出て、その時間にはアポが入らなくなります。アポは【Zoom面談】の招待で届きます。チームに見えるのは時間だけで、予定の名前は見えません。</p>
+  <p class="ds-note">クローザーになると、あなたの予定の時間がチームのカレンダーに「予定あり」で出て、その時間にはアポが入らなくなります。アポは【商談】店名（1時間半）の招待で届きます。チームに見えるのは時間だけで、予定の名前は見えません。</p>
   <div class="gg-status" id="ggStatus"></div>
   <ol class="gg-steps" id="ggSteps">
     <li><b>パソコンで</b> <a href="https://calendar.google.com/calendar/u/0/r/settings" target="_blank" rel="noopener">Googleカレンダーの設定</a> を開く<small>スマホのカレンダーアプリには共有の設定がありません</small></li>
@@ -444,6 +446,6 @@
 <div class="offline" id="offline" hidden>オフライン中：つながったら送ります</div>
 <div class="toast" id="toast"></div>
 
-<script type="module" src="./app.js?v=14"></script>
+<script type="module" src="./app.js?v=15"></script>
 </body>
 </html>

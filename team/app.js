@@ -485,15 +485,16 @@ function openMemo(rec) {
   $("mHint").textContent = !mine ? nameOf(rec.uid) + "さんの記録です（見るだけ）" :
     rec.draft ? "カレンダーから登録します。保存するとアポが1件増えます" : hm(rec.t) + " の記録" + (timed ? "。日時を入れるとリマインドに出ます" : "");
   $("mShop").value = m.shop || ""; $("mTel").value = m.tel || ""; $("mText").value = m.text || "";
+  $("mInfo").value = m.info || ""; $("mInfoBox").hidden = kind !== "アポ";
   $("mWhenBox").hidden = !timed; $("mRemindBox").hidden = !timed;
   $("mPick").hidden = kind !== "アポ" || !mine;
   $("mCloserBox").hidden = kind !== "アポ";
   if (timed) {
     selCloser = m.closer || "auto";
-    $("mWhenLbl").textContent = kind === "アポ" ? "面談日時（Zoom）" : "かけ直す日時";
+    $("mWhenLbl").textContent = kind === "アポ" ? "商談日時（1時間半）" : "かけ直す日時";
     $("mWhen").value = m.when ? toLocal(m.when) : ""; $("mRemind").checked = m.remind !== false; setQuick(kind);
   }
-  ["mShop", "mTel", "mText", "mWhen"].forEach(id => $(id).readOnly = !mine);
+  ["mShop", "mTel", "mText", "mWhen", "mInfo"].forEach(id => $(id).readOnly = !mine);
   $("mPaste").hidden = !mine;
   $("mSave").hidden = !mine; $("mSkip").textContent = mine ? "あとで" : "閉じる";
   checkClash();
@@ -660,21 +661,24 @@ function checkClash() {
   box.hidden = false;
   if (!isSlotTime(d)) { box.className = "clash"; box.textContent = "アポの枠の外です（10:00〜19:00・30分ごと・日曜休み）"; return; }
   const free = freeClosers(d, editing);
+  const span = md(d) + " " + hm(d) + "〜" + hm(new Date(d.getTime() + APO_MIN * 6e4));
+  const others = free.length ? "。この時間から入れられるのは " + free.map(c => c.name).join("・") : "";
   if (selCloser === "auto") {
-    if (!free.length) { box.className = "clash"; box.textContent = "この時間はクローザー全員が埋まっています"; return; }
-    box.className = "clash ok"; box.textContent = md(d) + " " + hm(d) + " 空いているクローザー：" + free.map(c => c.name).join("・"); return;
+    if (!free.length) { box.className = "clash"; box.textContent = "この時間からの1時間半は、クローザー全員が埋まっています"; return; }
+    box.className = "clash ok"; box.textContent = span + " 空いているクローザー：" + free.map(c => c.name).join("・"); return;
   }
-  const gb = gBusyAt(d, selCloser);
-  if (gb && !slotsAt(d, editing).some(s => s.closer === selCloser)) { box.className = "clash"; box.textContent = CNAME(selCloser) + "さんはこの時間、ほかの予定があります（" + hm(gb.s) + "〜" + hm(gb.e) + "）" + (free.length ? "。空いているのは " + free.map(c => c.name).join("・") : ""); return; }
-  const hit = slotsAt(d, editing).find(s => s.closer === selCloser);
-  if (hit) { box.className = "clash"; box.textContent = CNAME(selCloser) + "さんはこの時間埋まっています（" + nameOf(hit.uid) + "さんのアポ：" + (hit.shop || "店名なし") + "）" + (free.length ? "。空いているのは " + free.map(c => c.name).join("・") : ""); return; }
-  box.className = "clash ok"; box.textContent = md(d) + " " + hm(d) + " " + CNAME(selCloser) + "さん 空いています";
+  const hit = apoOverlap(d, selCloser, editing);
+  if (hit) { box.className = "clash"; box.textContent = CNAME(selCloser) + "さんは " + hm(hit.when) + "〜" + hm(apoEnd(hit)) + " に商談があります（" + nameOf(hit.uid) + "さんのアポ：" + (hit.shop || "店名なし") + "）。1時間半とれません" + others; return; }
+  const gb = gBusyRange(d, selCloser);
+  if (gb) { box.className = "clash"; box.textContent = CNAME(selCloser) + "さんは " + hm(gb.s) + "〜" + hm(gb.e) + " にほかの予定があります。1時間半とれません" + others; return; }
+  box.className = "clash ok"; box.textContent = span + " " + CNAME(selCloser) + "さん 空いています";
 }
 
 $("mSave").onclick = async () => {
   const rec = editing; if (!rec || rec.uid !== U) return;
   const w = $("mWhen").value ? new Date($("mWhen").value) : null;
   const m = {shop: $("mShop").value.trim(), tel: $("mTel").value.trim(), text: $("mText").value.trim()};
+  if (rec.r === "アポ") m.info = $("mInfo").value.trim();   // クローザーのカレンダーの説明に入る
   const remind = $("mRemind").checked;
   $("mSave").disabled = true;
   try {
@@ -683,7 +687,7 @@ $("mSave").onclick = async () => {
       const cl = await bookSlot(rec, m, w, remind);
       /* サーバーからの通知を待たずに、自分のカレンダーへすぐ出す */
       const sid = slotIdOf(w, cl);
-      slots = slots.filter(s => s.recId !== rec.id && s.id !== sid).concat([{id: sid, day: dk(w), time: hm(w), when: w, closer: cl, uid: U, recId: rec.id, shop: m.shop, tel: m.tel, text: m.text}]);
+      slots = slots.filter(s => s.recId !== rec.id && s.id !== sid).concat([{id: sid, day: dk(w), time: hm(w), when: w, dur: APO_MIN, closer: cl, uid: U, recId: rec.id, shop: m.shop, tel: m.tel, text: m.text, info: m.info || ""}]);
       if (curTab === "cal") renderCal();
       closeMemo();
       toast((rec.draft ? "アポを登録しました（アポ+1）" : "保存しました。" + md(w) + " " + hm(w)) + "（クローザー " + CNAME(cl) + "）");
@@ -704,7 +708,10 @@ $("mSave").onclick = async () => {
   finally { $("mSave").disabled = false; }
 };
 
-/* アポの枠を取る。枠の文書は「日_時刻_クローザー」で1つだけなので、同時に保存しても片方しか入らない */
+/* アポの枠を取る。枠の文書は「日_開始時刻_クローザー」。
+   商談は1時間半なので、同じクローザーの「1時間前・30分前・同時刻・30分後・1時間後」に始まる枠が
+   ひとつも無いことをトランザクションの中で確かめる（同時に保存しても、重なる片方は必ず失敗する） */
+const OVERLAP_STEPS = [-60, -30, 0, 30, 60];   // 30分刻みで、1時間半の商談と重なる開始時刻
 async function bookSlot(rec, m, when, remind) {
   const cands = selCloser === "auto" ? freeClosers(when, rec).map(c => c.id).concat(closerList().map(c => c.id)) : [selCloser];
   const recRef = doc(db, "records", rec.id);
@@ -712,13 +719,17 @@ async function bookSlot(rec, m, when, remind) {
   await runTransaction(db, async tx => {
     let chosen = null;
     for (const c of [...new Set(cands)]) {
-      const sref = doc(db, "slots", slotIdOf(when, c));
-      const s = await tx.get(sref);
-      if (!s.exists() || s.data().recId === rec.id) { chosen = {c, sref}; break; }
+      let clash = false;
+      for (const off of OVERLAP_STEPS) {
+        const s = await tx.get(doc(db, "slots", slotIdOf(new Date(when.getTime() + off * 6e4), c)));
+        if (s.exists() && s.data().recId !== rec.id) { clash = true; break; }
+      }
+      if (!clash) { chosen = {c, sref: doc(db, "slots", slotIdOf(when, c))}; break; }
     }
     if (!chosen) throw new Error("FULL");
     const memo = {...m, when: Timestamp.fromDate(when), remind, closer: chosen.c};
-    const sdata = {day: dk(when), time: hm(when), when: Timestamp.fromDate(when), closer: chosen.c, uid: U, recId: rec.id, shop: m.shop, tel: m.tel, text: m.text};
+    const sdata = {day: dk(when), time: hm(when), when: Timestamp.fromDate(when), dur: APO_MIN, closer: chosen.c, uid: U, recId: rec.id,
+      shop: m.shop, tel: m.tel, text: m.text, info: m.info || ""};
     if (rec.slotId && rec.slotId !== chosen.sref.id) tx.delete(doc(db, "slots", rec.slotId));
     tx.set(chosen.sref, sdata);
     if (rec.draft) {
@@ -744,7 +755,18 @@ function slotsAt(d, except) { const k = dk(d) + " " + hm(d); return allSlots().f
 /* Googleカレンダーの「予定あり」（時間だけ）。busy/{uid}.blocks = [{s, e}] */
 let busyMap = {};
 const gBusyAt = (d, cid) => { const b = busyMap[cid]; if (!b) return null; const e = new Date(d.getTime() + 18e5); return (b.blocks || []).find(x => x.s < e && x.e > d) || null; };
-const closerBusy = (d, cid, except) => slotsAt(d, except).some(s => s.closer === cid) || !!gBusyAt(d, cid);
+/* 商談は1時間半。13:00の商談があると、そのクローザーは13:00〜14:30が埋まる */
+const APO_MIN = 90;
+const apoEnd = s => new Date(s.when.getTime() + (s.dur || APO_MIN) * 6e4);
+const notMe = (s, except) => !(except && s.recId === except.id);
+/* その30分の枠に、クローザー cid の商談がかかっているか（始まりの枠以外も） */
+const apoCovering = (d, cid, except) => allSlots().find(s => s.closer === cid && s.when && notMe(s, except) && s.when <= d && d < apoEnd(s)) || null;
+/* d から1時間半の商談を入れたら重なる商談 */
+const apoOverlap = (d, cid, except) => { const e = new Date(d.getTime() + APO_MIN * 6e4); return allSlots().find(s => s.closer === cid && s.when && notMe(s, except) && s.when < e && apoEnd(s) > d) || null; };
+/* d から1時間半のあいだに、Googleカレンダーの予定があるか */
+const gBusyRange = (d, cid) => { const b = busyMap[cid]; if (!b) return null; const e = new Date(d.getTime() + APO_MIN * 6e4); return (b.blocks || []).find(x => x.s < e && x.e > d) || null; };
+/* d から始める商談を、そのクローザーに入れられないか */
+const closerBusy = (d, cid, except) => !!apoOverlap(d, cid, except) || !!gBusyRange(d, cid);
 const freeClosers = (d, except) => closerList().filter(c => !closerBusy(d, c.id, except));
 const slotOpen = (d, except, cid) => (!cid || cid === "auto" || cid === "all") ? freeClosers(d, except).length > 0 : !closerBusy(d, cid, except);
 function freeSlots(from, n) {
@@ -819,25 +841,29 @@ function renderCal() {
       const d = new Date(day); d.setHours(h, mi, 0, 0);
       const at = slotsAt(d, null);
       cls.forEach(c => {
-        const list = at.filter(s => s.closer === c.id), past = d < now;
-        const gb = list.length ? null : gBusyAt(d, c.id), full = list.length > 0 || !!gb;
-        if (!past && !full) free++;
+        const past = d < now;
+        const list = at.filter(s => s.closer === c.id);                       // ここから始まる商談
+        const cover = list.length ? null : apoCovering(d, c.id, null);         // 前の枠から続いている商談
+        const gb = list.length || cover ? null : gBusyAt(d, c.id);
+        const canStart = !closerBusy(d, c.id, null);                           // ここから1時間半とれるか
+        if (!past && canStart) free++;
         count += list.length;
         const b = document.createElement("button");
-        b.className = "sl" + (mi ? " half" : "") + (past ? " past" : full ? " full" : " free");
-        b.setAttribute("aria-label", c.name + " " + hm(d) + (list.length ? " アポあり" : gb ? " ほかの予定あり" : past ? " 過ぎた枠" : " 空き"));
+        b.className = "sl" + (mi ? " half" : "") + (past ? " past" : canStart ? " free" : " full") + (!past && !canStart && !list.length && !cover && !gb ? " nostart" : "");
+        b.setAttribute("aria-label", c.name + " " + hm(d) + (list.length ? " 商談あり" : cover ? " 商談中" : gb ? " ほかの予定あり" : past ? " 過ぎた枠" : canStart ? " 空き" : " ここからは1時間半とれない"));
         /* ほかの予定は、始まりの枠にだけ時間を書く */
         const gStart = gb && (gb.s >= d || +d === +new Date(new Date(day).setHours(SLOT_H0, 0, 0, 0)));
-        b.innerHTML = list.map(s => `<span class="apd${s.uid === U ? " mine" : ""}" style="--cc:${c.color}"><b>${esc(s.shop || "（店名なし）")}</b><small>獲得 ${esc(nameOf(s.uid))}</small></span>`).join("") +
+        b.innerHTML = list.map(s => `<span class="apd${s.uid === U ? " mine" : ""}" style="--cc:${c.color}"><b>${esc(s.shop || "（店名なし）")}</b><small class="num">${hm(s.when)}〜${hm(apoEnd(s))} ・ 獲得 ${esc(nameOf(s.uid))}</small></span>`).join("") +
+          (cover ? `<span class="apd cont${cover.uid === U ? " mine" : ""}" style="--cc:${c.color}"><small>商談中（〜${hm(apoEnd(cover))}）</small></span>` : "") +
           (gb ? `<span class="gbusy">${gStart ? `予定あり<small>${hm(gb.s)}〜${hm(gb.e)}</small>` : ""}</span>` : "") +
-          (!past && !full ? `<span class="free-mark">${hm(d)}</span>` : "") + (+dayStart(d) === +T ? nowLine(d, now) : "");
-        b.onclick = () => slotTap(d, list, past, full, c.id);
+          (!past && canStart ? `<span class="free-mark">${hm(d)}</span>` : "") + (+dayStart(d) === +T ? nowLine(d, now) : "");
+        b.onclick = () => slotTap(d, list.length ? list : cover ? [cover] : [], past, !canStart, c.id);
         cal.appendChild(b);
       });
     }
     $("wkSub").textContent = (off === 0 ? "今日" : off === 1 ? "明日" : off === -1 ? "昨日" : "") + "　アポ " + count + "件 ・ 空き " + free + "枠";
     $("calToday").hidden = off === 0;
-    $("calDefs").textContent = "空いている枠を押すと、そのクローザーでアポを登録できます。アポを押すと詳細が出ます。1枠30分。";
+    $("calDefs").textContent = "空いている枠を押すと、そのクローザーで、その時間から1時間半の商談を登録できます。商談を押すと詳細が出ます。";
   } else {
     /* ---- 週表示：月〜土 ---- */
     const days = [0, 1, 2, 3, 4, 5].map(i => addDays(wkStart, i));
@@ -863,18 +889,21 @@ function renderCal() {
         const b = document.createElement("button");
         b.className = "sl" + (mi ? " half" : "") + (past ? " past" : full ? " full" : " free") + (+day === +T ? " today" : "");
         b.setAttribute("aria-label", md(d) + " " + hm(d) + (list.length ? " アポ" + list.length + "件" : past ? " 過ぎた枠" : " 空き"));
-        const gbw = calCloser !== "all" && !list.length ? gBusyAt(d, calCloser) : null;
+        /* クローザーを1人に絞っているときは、続きの枠（商談中）とGoogleの予定も出す */
+        const cover = calCloser !== "all" && !list.length ? apoCovering(d, calCloser, null) : null;
+        const gbw = calCloser !== "all" && !list.length && !cover ? gBusyAt(d, calCloser) : null;
         b.innerHTML = list.map(s => `<span class="ap${s.uid === U ? " mine" : ""}" style="background:${CCOL(s.closer)}"><b>${esc(CNAME(s.closer)[0])}</b><span>${esc(s.shop || "")}</span></span>`).join("") +
+          (cover ? `<span class="ap cont" style="background:${CCOL(cover.closer)}"><span>〜${hm(apoEnd(cover))}</span></span>` : "") +
           (gbw ? `<span class="gbusy wk">予定あり</span>` : "") +
           (+day === +T ? nowLine(d, now) : "");
-        b.onclick = () => slotTap(d, list, past, full);
+        b.onclick = () => slotTap(d, list.length ? list : cover ? [cover] : [], past, full, calCloser !== "all" ? calCloser : undefined);
         cal.appendChild(b);
       });
     }
     $("wkSub").textContent = (wOff === 0 ? "今週" : wOff === 1 ? "来週" : wOff === -1 ? "先週" : "") + "　アポ " + count + "件 ・ 空き " + free + "枠";
     $("calToday").hidden = wOff === 0;
-    $("calDefs").textContent = "枠を押すと、アポの詳細を見るか、空いていればその枠でアポを登録できます。1枠30分。クローザー1人につき同じ時間は1件まで" +
-      (calCloser === "all" ? "で、全員埋まった時間だけ「埋まり」になります。" : "。今は" + CNAME(calCloser) + "さんの予定だけ表示しています。");
+    $("calDefs").textContent = "枠を押すと、商談の詳細を見るか、空いていればその時間から1時間半の商談を登録できます。クローザー1人につき同じ時間は1件まで" +
+      (calCloser === "all" ? "で、全員が埋まっている時間だけ「埋まり」になります。" : "。今は" + CNAME(calCloser) + "さんの予定だけ表示しています。");
   }
   document.body.classList.toggle("picking", pickMode);
   $("pickBar").hidden = !pickMode;
@@ -882,15 +911,27 @@ function renderCal() {
   if (pickMode) $("undatedTeam").hidden = true;
 }
 /* closerId：日表示の列から押したときだけ入る（その人で決まる） */
+/* ここから1時間半とれない理由 */
+function whyNot(d, cid, except) {
+  if (!cid || cid === "all" || cid === "auto") return "この時間からの1時間半は、クローザー全員が埋まっています";
+  const hit = apoOverlap(d, cid, except);
+  if (hit) return CNAME(cid) + "さんは " + hm(hit.when) + "〜" + hm(apoEnd(hit)) + " に商談があるので、ここからは1時間半とれません";
+  const gb = gBusyRange(d, cid);
+  if (gb) return CNAME(cid) + "さんは " + hm(gb.s) + "〜" + hm(gb.e) + " にほかの予定があるので、ここからは1時間半とれません";
+  return "この枠は埋まっています";
+}
 function slotTap(d, list, past, full, closerId) {
   if (pickMode) {
     if (past) { toast("過ぎた時間は選べません"); return; }
-    if (full) { toast("この枠は埋まっています"); return; }
-    if (closerId) selCloser = closerId; else if (calCloser !== "all") selCloser = calCloser;
+    /* 日時を選び直しているアポ自身とは重なってもよい */
+    const cid = closerId || (calCloser !== "all" ? calCloser : null);
+    const blocked = cid ? closerBusy(d, cid, editing) : !slotOpen(d, editing, "all");
+    if (blocked) { toast(whyNot(d, cid, editing)); return; }
+    if (cid) selCloser = cid;
     $("mWhen").value = toLocal(d); finishPick(); setQuick("アポ"); checkClash(); return;
   }
   if (list.length) { showApoDetail(d, list, past); return; }
-  if (full && !past) { toast("この時間はクローザーにほかの予定があります"); return; }
+  if (full && !past) { toast(whyNot(d, closerId || calCloser, null)); return; }
   if (past) return;
   newApoAt(d, closerId);
 }
@@ -902,13 +943,15 @@ function newApoAt(d, closerId) {
 let adSlot = null;
 function showApoDetail(d, list, past) {
   adSlot = d;
-  $("adTitle").textContent = md(d) + " " + hm(d) + " のアポ";
+  $("adTitle").textContent = md(d) + " " + hm(d) + " の商談";
   const free = freeClosers(d, null);
   $("adBody").innerHTML = list.map(s => `<div class="ad-row"><b>${esc(s.shop || "（店名なし）")}</b>
+    <small class="num">${md(s.when)} ${hm(s.when)}〜${hm(apoEnd(s))}</small>
     <small><i class="dot-c" style="background:${CCOL(s.closer)}"></i>クローザー ${esc(CNAME(s.closer))} ・ 獲得 ${esc(nameOf(s.uid))}</small>
     ${s.tel ? `<a class="ad-tel num" href="${telHref(s.tel)}">☎ ${esc(s.tel)}</a>` : ""}
-    ${s.text ? `<div>${esc(s.text)}</div>` : ""}</div>`).join("") +
-    (!past ? `<div class="ad-row"><small>この時間に空いているクローザー：${free.length ? free.map(c => esc(c.name)).join("・") : "なし"}</small></div>` : "");
+    ${s.text ? `<div>${esc(s.text)}</div>` : ""}
+    ${s.info ? `<div class="ad-info">${esc(s.info)}</div>` : ""}</div>`).join("") +
+    (!past ? `<div class="ad-row"><small>この時間から1時間半とれるクローザー：${free.length ? free.map(c => esc(c.name)).join("・") : "なし"}</small></div>` : "");
   $("adNew").hidden = past || !slotOpen(d, null, calCloser);
   $("adScrim").hidden = $("apoDetail").hidden = false;
 }
@@ -1018,7 +1061,7 @@ function renderRemind() {
       const row = document.createElement("div"); row.className = "rm" + (late ? " late" : "") + (r.isTask ? " task" : "");
       const head = r.isTask
         ? `${resChip(r.r)} ${esc(r.title || "")}${r.memo.shop ? ` <span class="t-shop">${esc(r.memo.shop)}</span>` : ""}`
-        : `${esc(r.memo.shop || "（店名なし）")}${r.r === "アポ" ? `<span class="badge apo">アポ・Zoom</span>` : ""}`;
+        : `${esc(r.memo.shop || "（店名なし）")}${r.r === "アポ" ? `<span class="badge apo">商談</span>` : ""}`;
       const meta = r.isTask
         ? `担当 ${esc(nameOf(r.uid))}${r.by && r.by !== r.uid ? " ・ 作成 " + esc(nameOf(r.by)) : ""}`
         : `担当 ${esc(nameOf(r.uid))}${r.r === "アポ" && r.memo.closer ? " ・ クローザー " + esc(CNAME(r.memo.closer)) : ""} ・ ${md(r.t)} に${r.r === "アポ" ? "獲得" : "架電"}`;
@@ -1074,13 +1117,14 @@ function openDetail(r) {
   if (w) {
     const mins = Math.round((w - now) / 6e4);
     const left = mins > 0 && mins < 24 * 60 ? `<span class="rd-left">あと${mins >= 60 ? Math.floor(mins / 60) + "時間" + (mins % 60 ? mins % 60 + "分" : "") : mins + "分"}</span>` : mins <= 0 && keepsLate(r) && !r.done ? `<span class="badge late">過ぎています</span>` : "";
-    rows.push([r.isTask ? "日時" : r.r === "アポ" ? "面談日時" : "かけ直す日時", `<b class="num">${dayWord(w)} ${md(w)} ${hm(w)}</b>${left}`]);
+    rows.push([r.isTask ? "日時" : r.r === "アポ" ? "商談日時" : "かけ直す日時", `<b class="num">${dayWord(w)} ${md(w)} ${hm(w)}${r.r === "アポ" && !r.isTask ? "〜" + hm(new Date(w.getTime() + APO_MIN * 6e4)) : ""}</b>${left}`]);
   } else if (r.r === "アポ") rows.push(["面談日時", `<span class="badge late">日時未定</span>`]);
   if (r.isTask && m.shop && r.title) rows.push(["店名", esc(m.shop)]);
   if (r.r === "アポ" && m.closer) rows.push(["クローザー", `<i class="dot-c" style="background:${CCOL(m.closer)}"></i>${esc(CNAME(m.closer))}`]);
   if (r.isTask) rows.push(["担当", esc(nameOf(r.uid)) + (r.by && r.by !== r.uid ? `<small>作成 ${esc(nameOf(r.by))}</small>` : "")]);
   else rows.push([r.r === "アポ" ? "獲得" : "担当", esc(nameOf(r.uid)) + `<small>${md(r.t)} ${hm(r.t)}</small>`]);
   rows.push(["メモ", m.text ? `<span class="rd-memo">${esc(m.text)}</span>` : `<span class="rd-none">なし</span>`]);
+  if (!r.isTask && r.r === "アポ") rows.push(["カレンダーの説明", m.info ? `<span class="rd-memo">${esc(m.info)}</span>` : `<span class="rd-none">なし（「メモを編集」から貼り付けると、クローザーのカレンダーに入ります）</span>`]);
   $("rdTel").innerHTML = m.tel
     ? `<a class="rd-call" href="${telHref(m.tel)}"><span>☎</span><b class="num">${esc(m.tel)}</b><small>押すと電話をかける</small></a><button class="rd-copy" id="rdCopy">コピー</button>`
     : `<div class="rd-notel">電話番号は入っていません${mine ? "（「" + (r.isTask ? "編集" : "メモを編集") + "」から入れられます）" : ""}</div>`;
@@ -1140,7 +1184,7 @@ function showAlert(rec, mode, force) {
   const now = mode === "now";
   if (!force && !$(now ? "swOnTime" : "swBefore").checked) return;
   alertRec = rec;
-  const kind = rec.isTask ? rec.r : rec.r === "アポ" ? "アポ（Zoom）" : "再架電";
+  const kind = rec.isTask ? rec.r : rec.r === "アポ" ? "商談" : "再架電";
   const canDone = rec.r === "再架電" || rec.isTask;
   $("alertBar").classList.toggle("now", now);
   $("alTag").textContent = now ? kind + "の時間です" : kind + "まで あと15分";
