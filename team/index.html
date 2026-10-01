@@ -102,7 +102,7 @@
       <span>アポ <b id="tApo">–</b></span>
       <button class="go" data-go="kpi">KPIを見る →</button>
     </div>
-    <button class="nextup" id="nextUp" data-go="remind" hidden></button>
+    <button class="nextup" id="nextUp" hidden></button>
     <button class="undated" id="undatedMine" hidden></button>
     <div class="grid" id="grid"></div>
     <div class="acts">
@@ -321,6 +321,16 @@
   <div class="ds-foot"><button id="adNew">この時間にアポを追加</button><button id="adClose" class="primary">閉じる</button></div>
 </div>
 
+<!-- 記録の詳細（電話番号など） -->
+<div class="scrim" id="rdScrim" hidden></div>
+<div class="daysum rdetail" id="recDetail" role="dialog" aria-modal="true" aria-labelledby="rdTitle" hidden>
+  <div class="ds-head"><h3 id="rdTitle"></h3></div>
+  <div class="rd-tel" id="rdTel"></div>
+  <div id="rdBody"></div>
+  <div class="rd-acts" id="rdActs" hidden></div>
+  <div class="ds-foot"><button id="rdEdit">メモを編集</button><button id="rdClose" class="primary">閉じる</button></div>
+</div>
+
 <!-- アプリ内リマインド -->
 <div class="alert" id="alertBar" role="alert" hidden>
   <div class="in">
@@ -329,7 +339,7 @@
     <div class="al-memo" id="alMemo"></div>
     <div class="al-btns">
       <button id="alDone" class="primary">かけた</button>
-      <button id="alOpen" class="primary">メモを見る</button>
+      <button id="alOpen" class="primary">詳細を見る</button>
       <button id="alSnooze">5分後</button>
       <button id="alClose">閉じる</button>
     </div>

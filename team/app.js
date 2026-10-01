@@ -351,8 +351,9 @@ function fillRecs(box, list, withDelete) {
     const when = w ? `<span class="when">${r.r === "アポ" ? "面談" : "再架電"} ${md(w)} ${hm(w)}</span>` : (r.r === "アポ" ? `<span class="badge late">日時未定</span>` : "");
     row.innerHTML = `<span class="tm">${hm(r.t)}</span><span class="body">${resChip(r.r)}${when}` +
       (r.memo && (r.memo.shop || r.memo.text) ? `<div class="memo">${memoLine(r.memo)}</div>` : `<div class="add">＋ メモを付ける</div>`) + `</span>`;
-    row.onclick = () => openMemo(r);
-    row.onkeydown = e => { if (e.key === "Enter") openMemo(r); };
+    const hasInfo = r.memo && (r.memo.shop || r.memo.tel || r.memo.text || r.memo.when);
+    row.onclick = () => hasInfo ? openDetail(r) : openMemo(r);
+    row.onkeydown = e => { if (e.key === "Enter") row.onclick(); };
     if (withDelete) {
       const del = document.createElement("button"); del.className = "ib rm"; del.textContent = "×"; del.setAttribute("aria-label", "この記録を消す");
       del.style.marginLeft = "auto"; del.style.height = "32px";
@@ -687,7 +688,8 @@ function showApoDetail(d, list, past) {
   $("adTitle").textContent = md(d) + " " + hm(d) + " のアポ";
   const free = freeClosers(d, null);
   $("adBody").innerHTML = list.map(s => `<div class="ad-row"><b>${esc(s.shop || "（店名なし）")}</b>
-    <small><i class="dot-c" style="background:${CCOL(s.closer)}"></i>クローザー ${esc(CNAME(s.closer))} ・ 獲得 ${esc(nameOf(s.uid))}${s.tel ? " ・ " + esc(s.tel) : ""}</small>
+    <small><i class="dot-c" style="background:${CCOL(s.closer)}"></i>クローザー ${esc(CNAME(s.closer))} ・ 獲得 ${esc(nameOf(s.uid))}</small>
+    ${s.tel ? `<a class="ad-tel num" href="${telHref(s.tel)}">☎ ${esc(s.tel)}</a>` : ""}
     ${s.text ? `<div>${esc(s.text)}</div>` : ""}</div>`).join("") +
     (!past ? `<div class="ad-row"><small>この時間に空いているクローザー：${free.length ? free.map(c => esc(c.name)).join("・") : "なし"}</small></div>` : "");
   $("adNew").hidden = past || !slotOpen(d, null, calCloser);
@@ -749,6 +751,8 @@ function renderNext() {
     box.innerHTML = `<span class="nu-lbl">次の予定</span><span class="num nu-t">${hm(r.memo.when)}</span><span class="nu-b">${resChip(r.r)} ${esc(r.memo.shop || "")}</span><span class="nu-left">あと${left}</span>`;
   } else box.innerHTML = `<span class="nu-lbl">次の予定</span><span class="nu-b">今日のこのあとの予定はありません</span>`;
   if (late) box.innerHTML += `<span class="badge late">過ぎた再架電 ${late}件</span>`;
+  if (r) box.innerHTML += `<span class="nu-go">詳細 ›</span>`;
+  box.onclick = () => r ? openDetail(r) : showTab("remind");
 }
 setInterval(() => { if (started) renderNext(); }, 60000);
 
@@ -769,16 +773,16 @@ function renderRemind() {
       row.innerHTML = `<div class="time">${hm(r.memo.when)}<small>${md(r.memo.when)}</small></div>
         <div class="info"><div class="shop">${esc(r.memo.shop || "（店名なし）")}${r.r === "アポ" ? `<span class="badge apo">アポ・Zoom</span>` : ""}${late ? `<span class="badge late">期限切れ</span>` : ""}</div>
         <div class="meta">担当 ${esc(nameOf(r.uid))}${r.r === "アポ" && r.memo.closer ? " ・ クローザー " + esc(CNAME(r.memo.closer)) : ""} ・ ${md(r.t)} に${r.r === "アポ" ? "獲得" : "架電"}</div>
+        ${r.memo.tel ? `<div class="tel-line num">☎ ${esc(r.memo.tel)}</div>` : ""}
         ${r.memo.text ? `<div class="memo">${esc(r.memo.text)}</div>` : ""}</div>
         <div class="btns">${r.r === "再架電" && mine ? `<button class="done">かけた</button><button class="later">明日へ</button>` : `<button class="edit">詳細</button>`}</div>`;
       const d = row.querySelector(".done"), l = row.querySelector(".later"), ed = row.querySelector(".edit");
-      if (d) d.onclick = () => markDone(r);
-      if (l) l.onclick = () => {
-        const w = addDays(dayStart(r.memo.when < now ? now : r.memo.when), 1); w.setHours(r.memo.when.getHours(), r.memo.when.getMinutes());
-        updateDoc(doc(db, "records", r.id), {"memo.when": Timestamp.fromDate(w)}).catch(e => toast(errMsg(e)));
-        toast(md(w) + " " + hm(w) + " に延期しました");
-      };
-      if (ed) ed.onclick = () => openMemo(r);
+      if (d) d.onclick = e => { e.stopPropagation(); markDone(r); };
+      if (l) l.onclick = e => { e.stopPropagation(); postpone(r); };
+      if (ed) ed.onclick = e => { e.stopPropagation(); openDetail(r); };
+      row.classList.add("tap"); row.tabIndex = 0;
+      row.onclick = () => openDetail(r);
+      row.onkeydown = e => { if (e.key === "Enter") openDetail(r); };
       c.appendChild(row);
     });
     body.appendChild(c);
@@ -788,6 +792,54 @@ function markDone(r) {
   updateDoc(doc(db, "records", r.id), {done: true, pending: false}).catch(e => toast(errMsg(e)));
   showTab("count"); toast("今回の結果のボタンを押してください");
 }
+function postpone(r) {
+  const now = new Date();
+  const w = addDays(dayStart(r.memo.when < now ? now : r.memo.when), 1); w.setHours(r.memo.when.getHours(), r.memo.when.getMinutes());
+  updateDoc(doc(db, "records", r.id), {"memo.when": Timestamp.fromDate(w)}).catch(e => toast(errMsg(e)));
+  toast(md(w) + " " + hm(w) + " に延期しました");
+}
+
+/* ---------- 記録の詳細（電話番号・日時・クローザー・メモ） ---------- */
+const telHref = t => "tel:" + String(t || "").replace(/[^\d+]/g, "");
+let detailRec = null;
+function openDetail(r) {
+  if (!r) return;
+  detailRec = r;
+  const m = r.memo || {}, mine = r.uid === U, w = m.when, now = new Date();
+  $("rdTitle").innerHTML = resChip(r.r) + " " + esc(m.shop || "（店名なし）");
+  const rows = [];
+  if (w) {
+    const mins = Math.round((w - now) / 6e4);
+    const left = mins > 0 && mins < 24 * 60 ? `<span class="rd-left">あと${mins >= 60 ? Math.floor(mins / 60) + "時間" + (mins % 60 ? mins % 60 + "分" : "") : mins + "分"}</span>` : mins <= 0 && r.r === "再架電" && !r.done ? `<span class="badge late">過ぎています</span>` : "";
+    rows.push([r.r === "アポ" ? "面談日時" : "かけ直す日時", `<b class="num">${dayWord(w)} ${md(w)} ${hm(w)}</b>${left}`]);
+  } else if (r.r === "アポ") rows.push(["面談日時", `<span class="badge late">日時未定</span>`]);
+  if (r.r === "アポ" && m.closer) rows.push(["クローザー", `<i class="dot-c" style="background:${CCOL(m.closer)}"></i>${esc(CNAME(m.closer))}`]);
+  rows.push([r.r === "アポ" ? "獲得" : "担当", esc(nameOf(r.uid)) + `<small>${md(r.t)} ${hm(r.t)}</small>`]);
+  rows.push(["メモ", m.text ? `<span class="rd-memo">${esc(m.text)}</span>` : `<span class="rd-none">なし</span>`]);
+  $("rdTel").innerHTML = m.tel
+    ? `<a class="rd-call" href="${telHref(m.tel)}"><span>☎</span><b class="num">${esc(m.tel)}</b><small>押すと電話をかける</small></a><button class="rd-copy" id="rdCopy">コピー</button>`
+    : `<div class="rd-notel">電話番号は入っていません${mine ? "（「メモを編集」から入れられます）" : ""}</div>`;
+  $("rdBody").innerHTML = rows.map(([k, v]) => `<div class="rd-row"><span class="k">${k}</span><span class="v">${v}</span></div>`).join("");
+  const acts = [];
+  if (mine && r.r === "再架電" && !r.done && w) acts.push(`<button class="primary" data-a="done">かけた（結果を押す）</button>`, `<button data-a="later">明日へ延期</button>`);
+  $("rdActs").innerHTML = acts.join(""); $("rdActs").hidden = !acts.length;
+  $("rdEdit").hidden = !mine;
+  $("rdScrim").hidden = $("recDetail").hidden = false;
+  if ($("rdCopy")) $("rdCopy").onclick = async () => {
+    try { await navigator.clipboard.writeText(m.tel); toast("電話番号をコピーしました"); }
+    catch (_) { const s = getSelection(), rg = document.createRange(); rg.selectNodeContents($("rdTel").querySelector("b")); s.removeAllRanges(); s.addRange(rg); toast("選択しました。コピーしてください"); }
+  };
+}
+function closeDetail() { $("rdScrim").hidden = $("recDetail").hidden = true; detailRec = null; }
+$("rdClose").onclick = closeDetail; $("rdScrim").onclick = closeDetail;
+$("rdEdit").onclick = () => { const r = detailRec; closeDetail(); if (r) openMemo(r); };
+$("rdActs").onclick = e => {
+  const b = e.target.closest("button"); if (!b || !detailRec) return;
+  const r = detailRec; closeDetail();
+  if (b.dataset.a === "done") markDone(r);
+  if (b.dataset.a === "later") postpone(r);
+};
+document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("recDetail").hidden) closeDetail(); });
 /* 3日以上前に終わった自分のアポは、リマインドの対象から外しておく */
 function cleanupOldApos() {
   const limit = addDays(today(), -3);
@@ -831,7 +883,9 @@ function showAlert(rec, mode, force) {
   if ($("swVib").checked && navigator.vibrate) navigator.vibrate(now ? [300, 100, 300, 100, 300] : [200, 100, 200]);
 }
 function hideAlert() { $("alertBar").hidden = true; alertRec = null; }
-$("alOpen").onclick = () => { const r = alertRec; hideAlert(); if (r) openMemo(r); };
+$("alOpen").onclick = () => { const r = alertRec; hideAlert(); if (r) openDetail(r); };
+/* 通知の店名やメモの部分を押しても詳細を出す */
+["alShop", "alMemo", "alTag", "alTime"].forEach(id => $(id).onclick = () => { const r = alertRec; hideAlert(); if (r) openDetail(r); });
 $("alDone").onclick = () => { const r = alertRec; hideAlert(); if (r) markDone(r); };
 $("alSnooze").onclick = () => { const r = alertRec; hideAlert(); if (r) { snoozed[r.id] = Date.now() + 5 * 6e4; } toast("5分後にもう一度出します"); };
 $("alClose").onclick = hideAlert;
@@ -867,9 +921,10 @@ function showDaySum() {
   $("dsCount").textContent = list.length + "件";
   $("dsList").innerHTML = list.length ? list.map(r => {
     const past = r.memo.when < now;
-    return `<div class="ds-row${past ? " past" : ""}"><span class="num ds-t">${hm(r.memo.when)}</span><span class="ds-b">${resChip(r.r)} <b>${esc(r.memo.shop || "（店名なし）")}</b>${past ? `<span class="badge late">過ぎています</span>` : ""}${r.memo.text ? `<small>${esc(r.memo.text)}</small>` : ""}</span></div>`;
+    return `<div class="ds-row tap${past ? " past" : ""}" data-id="${r.id}" tabindex="0"><span class="num ds-t">${hm(r.memo.when)}</span><span class="ds-b">${resChip(r.r)} <b>${esc(r.memo.shop || "（店名なし）")}</b>${past ? `<span class="badge late">過ぎています</span>` : ""}${r.memo.text ? `<small>${esc(r.memo.text)}</small>` : ""}</span></div>`;
   }).join("") : `<div class="empty">今日の再架電・アポはありません</div>`;
   $("dsScrim").hidden = $("daySum").hidden = false;
+  $("dsList").querySelectorAll(".ds-row").forEach(el => { const r = list.find(x => x.id === el.dataset.id); const go = () => { closeDaySum(); openDetail(r); }; el.onclick = go; el.onkeydown = e => { if (e.key === "Enter") go(); }; });
   if (list.length) beep(1);
 }
 function closeDaySum() { $("dsScrim").hidden = $("daySum").hidden = true; }
