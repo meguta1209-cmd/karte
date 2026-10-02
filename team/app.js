@@ -403,7 +403,8 @@ async function pollTeam() {
 
 /* キーボード：1〜0・Q…で +1、Backspace / Ctrl+Z でひとつ戻す */
 document.addEventListener("keydown", e => {
-  if (!started || curTab !== "count" || !$("msheet").hidden || !$("itemSheet").hidden || !$("moveDlg").hidden || !$("helpDlg").hidden || e.isComposing || e.altKey || e.metaKey) return;
+  if (!started || curTab !== "count" || !$("itemSheet").hidden || e.isComposing || e.altKey || e.metaKey) return;
+  if (document.querySelector('[role="dialog"]:not([hidden])')) return;   // 手順・今日の予定・詳細などの画面が出ている間は、後ろで +1 や「戻す」をしない
   if (e.target.closest && e.target.closest("input, textarea, select")) return;
   if ((e.ctrlKey && e.key.toLowerCase() === "z") || (!e.ctrlKey && e.key === "Backspace")) { e.preventDefault(); $("undo").click(); return; }
   if (e.ctrlKey || e.repeat) return;
