@@ -773,3 +773,6 @@ img{max-width:100%;}
 .cx-opt.del b{color:var(--red);}
 .cx-opt.del:hover{background:var(--red-soft);}
 .cx-note{font-size:12px; color:var(--ink2); margin:10px 0 0;}
+
+/* ログイン画面：一度ログインすれば次から自動で入れることの説明（2026-10-02 石川さんのフィードバック） */
+.login-keep{font-size:12px; line-height:1.6; color:var(--ink2); background:var(--card2); border:1px solid var(--rule); border-radius:8px; padding:8px 10px; text-align:left; margin:10px 0 0;}

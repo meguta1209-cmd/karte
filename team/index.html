@@ -18,7 +18,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=BIZ+UDPGothic:wght@400;700&family=Roboto+Mono:wght@500;700&display=swap">
-<link rel="stylesheet" href="./style.css?v=39">
+<link rel="stylesheet" href="./style.css?v=40">
 <script>
 /* LINEの中のブラウザではGoogleログインが通らない（途中の情報を覚えておけない）。
    LINEは ?openExternalBrowser=1 を付けると Safari / Chrome で開き直してくれるので、自動で付け直す */
@@ -48,6 +48,8 @@
     <button class="g" id="btnLogin"><span class="gg">G</span>Googleアカウントでログイン</button>
     <p class="err" id="loginErr" hidden></p>
     <p style="font-size:12px;color:var(--ink3)">初めての人は、ログインのあとに名前を登録して、管理者の承認を待ちます。</p>
+    <!-- 石川さんのフィードバック「ログインは自動ログインにしといて」(2026-10-02)：アプリは前から一度ログインすれば同じブラウザでは自動で入る。毎回出る人向けの説明 -->
+    <p class="login-keep">一度ログインすると、このブラウザでは次から自動で入れます（ログアウトを押すまで）。毎回この画面が出るときは、シークレット（プライベート）ウィンドウで開いていないか、ブラウザを閉じるときに履歴やCookieを消す設定になっていないか、いつもと違うブラウザやPCで開いていないかを確かめてください。</p>
   </div>
 </div>
 
@@ -499,6 +501,6 @@
 <div class="offline" id="offline" hidden>オフライン中：つながったら送ります</div>
 <div class="toast" id="toast"></div>
 
-<script type="module" src="./app.js?v=39"></script>
+<script type="module" src="./app.js?v=40"></script>
 </body>
 </html>
