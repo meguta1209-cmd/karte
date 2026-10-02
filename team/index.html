@@ -18,7 +18,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=BIZ+UDPGothic:wght@400;700&family=Roboto+Mono:wght@500;700&display=swap">
-<link rel="stylesheet" href="./style.css?v=31">
+<link rel="stylesheet" href="./style.css?v=32">
 <script>
 /* LINEの中のブラウザではGoogleログインが通らない（途中の情報を覚えておけない）。
    LINEは ?openExternalBrowser=1 を付けると Safari / Chrome で開き直してくれるので、自動で付け直す */
@@ -138,7 +138,7 @@
         <button class="chip-btn" data-f="apo" aria-pressed="false">アポ・再架電</button>
       </div>
       <div class="card" id="logList"></div>
-      <p class="defs">記録を押すと詳細やメモが出ます。右の × は、その記録を消します（数からも引かれます）。</p>
+      <p class="defs">記録を押すと詳細やメモが出ます。右の × は、その記録を消します（数からも引かれます）。前の日のアポ・再架電（前のカウンターから引っ越した分も）は「再架電・アポの履歴」から日時を入れられます。</p>
     </div>
 
     <div id="logHist" hidden>
@@ -480,6 +480,6 @@
 <div class="offline" id="offline" hidden>オフライン中：つながったら送ります</div>
 <div class="toast" id="toast"></div>
 
-<script type="module" src="./app.js?v=31"></script>
+<script type="module" src="./app.js?v=32"></script>
 </body>
 </html>

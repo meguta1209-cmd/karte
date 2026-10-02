@@ -143,6 +143,10 @@ function closerList() {
 const CNAME = id => (closerList().find(c => c.id === id) || {name: id === "none" ? "担当未定" : nameOf(id)}).name;
 const CCOL = id => (closerList().find(c => c.id === id) || {color: "#5F6368"}).color;
 const OLD_BADGE = `<span class="badge old">前のカウンター</span>`;   // 前のカウンターから引っ越した記録の印
+/* 日時の無い記録の印：アポは「日時未定」、引っ越した再架電は「日時を入れる」（あとから入れられると分かるように） */
+const noDateBadge = r => r.r === "アポ" ? `<span class="badge late">日時未定</span>` : r.src === "old" && r.r === "再架電" ? `<span class="badge pend">日時を入れる</span>` : "";
+/* 自分の記録で、店名・電話・メモ・日時が何も無い → 押したら詳細ではなく入力画面を開く */
+const needsInput = r => r.uid === U && !(r.memo && (r.memo.shop || r.memo.tel || r.memo.text || r.memo.when));
 const resChip = k => { const c = COL[k] || (typeof TASK_COL !== "undefined" && TASK_COL[k]) || {bg:"#E8EAED", fg:"#3C4043"}; return `<span class="res${c.strike ? " strike" : ""}" style="background:${c.bg};color:${c.fg}">${esc(k)}</span>`; };
 
 /* Firestore の記録 → 画面で使う形 */
@@ -480,15 +484,15 @@ function renderHist(loading) {
     list.forEach(r => {
       const m = r.memo || {}, w = m.when;
       let st = "";
-      if (r.src === "old" && !w) st = OLD_BADGE;
+      if (r.src === "old" && !w) st = noDateBadge(r) + OLD_BADGE;
       else if (r.r === "アポ") st = !w ? `<span class="badge late">日時未定</span>` : w < now ? `<span class="badge done">面談済み</span>` : "";
       else st = r.done ? `<span class="badge done">かけた</span>` : w && w < now ? `<span class="badge late">期限切れ</span>` : !w ? `<span class="badge pend">日時なし</span>` : "";
       const row = document.createElement("div"); row.className = "rec hrow tap"; row.tabIndex = 0;
       row.innerHTML = `<span class="tm">${hm(r.t)}</span><span class="body">${resChip(r.r)}${w ? `<span class="when">${r.r === "アポ" ? "面談" : "再架電"} ${md(w)} ${hm(w)}</span>` : ""}${st}
         <div class="memo"><b>${esc(m.shop || "（店名なし）")}</b>${m.tel ? `　<span class="tel-line num">☎ ${esc(m.tel)}</span>` : ""}</div>
         ${m.text ? `<div class="memo">${esc(m.text)}</div>` : ""}</span>`;
-      row.onclick = () => openDetail(r);
-      row.onkeydown = e => { if (e.key === "Enter") openDetail(r); };
+      row.onclick = () => needsInput(r) ? openMemo(r) : openDetail(r);   // 何も入っていない（引っ越した記録など）は入力画面へ
+      row.onkeydown = e => { if (e.key === "Enter") row.onclick(); };
       card.appendChild(row);
     });
     body.appendChild(card);
@@ -504,7 +508,7 @@ function fillRecs(box, list, withDelete) {
   list.forEach(r => {
     const row = document.createElement("div"); row.className = "rec"; row.setAttribute("role", "button"); row.tabIndex = 0;
     const w = r.memo && r.memo.when;
-    const when = w ? `<span class="when">${r.r === "アポ" ? "面談" : "再架電"} ${md(w)} ${hm(w)}</span>` : r.src === "old" ? OLD_BADGE : (r.r === "アポ" ? `<span class="badge late">日時未定</span>` : "");
+    const when = w ? `<span class="when">${r.r === "アポ" ? "面談" : "再架電"} ${md(w)} ${hm(w)}</span>` : noDateBadge(r) + (r.src === "old" ? OLD_BADGE : "");
     row.innerHTML = `<span class="tm">${hm(r.t)}</span><span class="body">${resChip(r.r)}${when}` +
       (r.memo && (r.memo.shop || r.memo.text) ? `<div class="memo">${memoLine(r.memo)}</div>` : `<div class="add">＋メモ</div>`) + `</span>`;
     const hasInfo = r.memo && (r.memo.shop || r.memo.tel || r.memo.text || r.memo.when);
@@ -723,7 +727,7 @@ function skipMemo() {
   const shop = $("mShop").value.trim(), tel = $("mTel").value.trim(), text = $("mText").value.trim(), info = $("mInfo").value.trim();
   closeMemo();
   if (!r || r.uid !== U || r.draft) return;
-  const undatedApo = r.r === "アポ" && !(r.memo && r.memo.when) && r.src !== "old";
+  const undatedApo = r.r === "アポ" && !(r.memo && r.memo.when);
   if (!changed) { if (undatedApo) toast("日時未定のアポとして残しました"); return; }
   const m = {...(r.memo || {}), shop, tel, text};
   if (r.r === "アポ") m.info = info;
@@ -802,10 +806,10 @@ $("mSave").onclick = async () => {
       toast((rec.draft ? "アポを登録しました（アポ+1）" : "保存しました。" + md(w) + " " + hm(w)) + "（クローザー " + CNAME(cl) + "）");
     } else if (rec.r === "アポ") {
       const b = writeBatch(db);
-      b.update(doc(db, "records", rec.id), {memo: m, undated: rec.src !== "old", pending: false, slotId: null});   // 前のカウンターから来たアポは「日時未定」に出さない
+      b.update(doc(db, "records", rec.id), {memo: m, undated: true, pending: false, slotId: null});   // 日時が無いアポは「日時未定のアポ」に出す（前のカウンターから来たアポも同じ）
       if (rec.slotId) b.delete(doc(db, "slots", rec.slotId));
       b.commit().catch(e => toast(errMsg(e)));
-      closeMemo(); toast(rec.src === "old" ? "メモを保存しました" : "日時未定のアポとして保存しました");
+      closeMemo(); toast("日時未定のアポとして保存しました");
     } else if (rec.r === "再架電") {
       updateDoc(doc(db, "records", rec.id), {memo: {...m, when: w ? Timestamp.fromDate(w) : null, remind}, pending: !!w && !rec.done}).catch(e => toast(errMsg(e)));
       closeMemo(); toast(w ? "保存しました。" + md(w) + " " + hm(w) + " にリマインドします" : "メモを保存しました");
@@ -1250,7 +1254,7 @@ function openDetail(r) {
     const mins = Math.round((w - now) / 6e4);
     const left = mins > 0 && mins < 24 * 60 ? `<span class="rd-left">あと${mins >= 60 ? Math.floor(mins / 60) + "時間" + (mins % 60 ? mins % 60 + "分" : "") : mins + "分"}</span>` : mins <= 0 && keepsLate(r) && !r.done ? `<span class="badge late">過ぎています</span>` : "";
     rows.push([r.isTask ? "日時" : r.r === "アポ" ? "商談日時" : "かけ直す日時", `<b class="num">${dayWord(w)} ${md(w)} ${hm(w)}${r.r === "アポ" && !r.isTask ? "〜" + hm(new Date(w.getTime() + APO_MIN * 6e4)) : ""}</b>${left}`]);
-  } else if (r.r === "アポ") rows.push(["面談日時", r.src === "old" ? OLD_BADGE + `<small>日時は残っていません</small>` : `<span class="badge late">日時未定</span>`]);
+  } else if (r.r === "アポ") rows.push(["面談日時", `<span class="badge late">日時未定</span>` + (r.src === "old" ? OLD_BADGE : "")]);
   if (r.isTask && m.shop && r.title) rows.push(["店名", esc(m.shop)]);
   if (r.r === "アポ" && m.closer) rows.push(["クローザー", `<i class="dot-c" style="background:${CCOL(m.closer)}"></i>${esc(CNAME(m.closer))}`]);
   if (r.isTask) rows.push(["担当", esc(nameOf(r.uid)) + (r.by && r.by !== r.uid ? `<small>作成 ${esc(nameOf(r.by))}</small>` : "")]);
@@ -1652,7 +1656,7 @@ $("myCloser").onchange = () => {
    前のカウンターは同じサイトなので、この端末のブラウザに残っている記録
    （localStorage "kekka-counter-v1" = [{t: 押した時刻(ミリ秒), r: 結果}]）をそのまま読める。
    ・1件ずつ records（src:"old"）にして stats/{日} に足す → KPI・1時間あたり・稼働・履歴に、その日の分として出る
-   ・アポでも日時・クローザーの記録が無いので、カレンダーや「日時未定のアポ」には出さない
+   ・アポには日時・クローザーの記録が無いので、カレンダーには入らず「日時未定のアポ」に出る（あとで日時を入れる。2026-10-02 社長の指示で変更）
    ・チーム版でも数えている日は、チーム版で数えていた時間（その日の最初〜最後の記録）の外の分だけを足す候補にして、
      足すかどうかを日ごとに選べる（両方で押した分を二重にしない）
    ・二重に足さない：imports/{uid}.days[日] = {n: 足した件数, last: 最後に足した時刻, done, skip}。
@@ -1806,7 +1810,7 @@ async function runMove() {
           const c = Object.create(null), h = Object.create(null), m = Object.create(null);   // 項目名をそのままキーにするので素の入れ物で
           part.forEach(e => {
             const t = new Date(e.t), hour = t.getHours(), mb = mbOf(t);
-            tx.set(doc(collection(db, "records")), {uid: who, r: e.r, t: Timestamp.fromDate(t), day: row.day, hour, mb, memo: null, undated: false, pending: false, done: false, slotId: null, src: "old"});
+            tx.set(doc(collection(db, "records")), {uid: who, r: e.r, t: Timestamp.fromDate(t), day: row.day, hour, mb, memo: null, undated: e.r === "アポ", pending: false, done: false, slotId: null, src: "old"});   // 引っ越したアポも日時未定として出す（あとで日時を入れられるように）
             c[e.r] = (c[e.r] || 0) + 1; h[hour] = (h[hour] || 0) + 1; m[mb] = (m[mb] || 0) + 1;
           });
           tx.set(doc(db, "stats", row.day), {c: {[who]: inc(c)}, h: {[who]: inc(h)}, m: {[who]: inc(m)}}, {merge: true});
