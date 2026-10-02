@@ -711,3 +711,20 @@ img{max-width:100%;}
 .toast button:hover{background:rgba(156,195,240,.15);}
 /* 押し間違いの取り消し（押した直後のシートだけ） */
 .m-undo{align-self:flex-end; margin-top:-6px; border:0; background:none; color:var(--red); font-size:12.5px; font-weight:700; text-decoration:underline; padding:2px 0;}
+/* アポの入力シート：狭い画面は今まで通り1列（入れ物は無いのと同じ）。PC（幅1000px以上）は2列にして縦を詰める
+   左＝貼り付け・店名/電話・日時・クローザー、右＝メモ・カレンダーの説明・通知 */
+.m-cols, .m-col{display:contents;}
+@media (min-width:1000px){
+  #msheet .in{max-width:1040px;}
+  #msheet .m-cols{display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:0 24px; align-items:start;}
+  #msheet .m-col{display:flex; flex-direction:column; gap:10px; min-width:0;}
+  #msheet #mText{min-height:84px;}
+  #msheet .m-info{min-height:170px !important;}   /* .m-info の 110px !important より強く */
+  /* PCは上の画面を見せる必要があまりないので、シートを画面いっぱい近くまで高くする（テスターの指摘） */
+  #msheet{max-height:calc(100vh - 16px);}
+  /* 「押し間違い」は右上に置いて、縦を1行ぶん詰める */
+  #msheet .in{position:relative;}
+  #msheet .m-undo{position:absolute; top:4px; right:0; margin:0;}
+  /* 左の列は幅が狭いので、空いている枠のボタンは4つまで（1段に収める） */
+  #msheet #mQuick button:nth-child(n+5){display:none;}
+}
