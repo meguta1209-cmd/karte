@@ -1487,7 +1487,10 @@ async function renderKpi() {
   const [a, b] = range(), days = Math.round((b - a) / 864e5), pa = addDays(a, -days);
   const ids = Object.keys(members).filter(id => members[id].status === "active" || members[id].status === "removed");
   const sel = $("member"), cur = sel.value || member;
-  sel.innerHTML = `<option value="all">メンバー：全員</option>` + ids.filter(id => members[id].status === "active").map(id => `<option value="${esc(id)}">メンバー：${esc(members[id].name)}${id === U ? "（自分）" : ""}</option>`).join("");
+  /* 表の行を押して絞れるのも、選択肢に出る人（有効なプレイヤー）だけ。ほかの人の行は押せない（テスターの指摘） */
+  const pickable = id => !!members[id] && members[id].status === "active" && isPlayer(members[id]);
+  /* 選べるメンバーは「プレイヤー」の人だけ（社長のフィードバック 2026-10-02。役職がまだ無い人はプレイヤー扱い） */
+  sel.innerHTML = `<option value="all">メンバー：全員</option>` + ids.filter(pickable).map(id => `<option value="${esc(id)}">メンバー：${esc(members[id].name)}${id === U ? "（自分）" : ""}</option>`).join("");
   sel.value = [...sel.options].some(o => o.value === cur) ? cur : "all"; member = sel.value;
   let data, pdata;
   try { [data, pdata] = await Promise.all([loadStats(a, b), loadStats(pa, a)]); }
@@ -1510,7 +1513,7 @@ async function renderKpi() {
   const maxN = Math.max(1, ...rows.map(r => r.s.n)), tot = sumStats(data, "all");
   const ph = s => s.mins ? s.perHour.toFixed(1) : "–";
   $("mtable").innerHTML = `<tr><th>メンバー</th><th>架電</th><th>対応</th><th>1時間あたり</th><th>アポ</th><th>アポ率</th><th>対応率</th><th>接続率</th><th>稼働</th><th>1日平均</th></tr>` +
-    rows.map(({u, s}) => `<tr class="pick${u === U ? " me" : ""}" data-u="${esc(u)}" style="${member !== "all" && member !== u ? "opacity:.45" : ""}">
+    rows.map(({u, s}) => `<tr class="${pickable(u) ? "pick" : "nopick"}${u === U ? " me" : ""}" data-u="${esc(u)}" style="${member !== "all" && member !== u ? "opacity:.45" : ""}">
       <td class="name">${esc(nameOf(u))}</td><td><span class="meter">${s.n}<i style="width:${Math.round(s.n / maxN * 56)}px"></i></span></td><td>${s.ans}</td>
       <td><b>${ph(s)}</b></td><td>${s.apo}</td><td>${s.apoRate.toFixed(1)}%</td><td>${s.ansRate.toFixed(1)}%</td><td>${s.connRate.toFixed(1)}%</td><td>${fmtMins(s.mins)}</td><td>${(s.n / wd).toFixed(0)}</td></tr>`).join("") +
     `<tr><td class="name">チーム合計</td><td>${tot.n}</td><td>${tot.ans}</td><td><b>${ph(tot)}</b></td><td>${tot.apo}</td><td>${tot.apoRate.toFixed(1)}%</td><td>${tot.ansRate.toFixed(1)}%</td><td>${tot.connRate.toFixed(1)}%</td><td>${fmtMins(tot.mins)}</td><td>${(tot.n / wd).toFixed(0)}</td></tr>`;
