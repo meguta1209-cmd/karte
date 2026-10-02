@@ -1008,7 +1008,7 @@ function renderCal() {
     $("calFilter").innerHTML = [{id: "all", name: "クローザー全員"}, ...cls].map(c =>
       `<button class="chip-btn" data-c="${esc(c.id)}" aria-pressed="${calCloser === c.id}">${c.id !== "all" ? `<i class="dot-c" style="background:${c.color}"></i>` : ""}${esc(c.name)}</button>`).join("");
     $("legend").innerHTML = `<span>色＝クローザー</span>` + cls.map(c => `<span><i style="background:${c.color}"></i>${esc(c.name)}</span>`).join("") +
-      `<span><i style="background:transparent;outline:2px solid #FFD54F;outline-offset:-2px"></i>自分が取ったアポ</span><span><i class="lg-hatch"></i>斜線＝過ぎた時間</span>`;
+      `<span><i style="background:transparent;outline:2px solid #FFD54F;outline-offset:-2px"></i>自分が取ったアポ</span><span><i class="lg-hatch"></i>斜線＝過ぎた時間・クローザーのほかの予定（Googleカレンダー）</span>`;
     cal.style.gridTemplateColumns = "";
     cal.insertAdjacentHTML("beforeend", `<div class="hd corner"></div>` + days.map(d =>
       `<div class="hd${+d === +T ? " today" : ""}${d.getDay() === 6 ? " sat" : ""}">${WD[d.getDay()]}<small>${d.getMonth() + 1}/${d.getDate()}</small></div>`).join(""));
@@ -1025,11 +1025,15 @@ function renderCal() {
         const b = document.createElement("button");
         b.className = "sl" + (mi ? " half" : "") + (past ? " past" : full ? " full" : " free") + (+day === +T ? " today" : "");
         b.setAttribute("aria-label", md(d) + " " + hm(d) + (list.length ? " アポ" + list.length + "件" : past ? " 過ぎた枠" : " 空き"));
-        /* クローザーを1人に絞っているときは、Googleの予定も出す。続きの枠（商談中）は帯の下になる（押すとその商談） */
+        /* Googleの予定も出す。クローザーを1人に絞っているときはその人の分、「全員」のときは予定がある人の名字の1文字目を添える
+           （社長「カレンダーに石川さんの予定って反映されてなくない？」2026-10-02。前は絞ったときだけ出していた）。
+           続きの枠（商談中）は帯の下になる（押すとその商談） */
         const cover = calCloser !== "all" && !list.length ? apoCovering(d, calCloser, null) : null;
         const gbw = calCloser !== "all" && !list.length && !cover ? gBusyAt(d, calCloser) : null;
+        const gAll = calCloser === "all" && !list.length ? cls.filter(c => !apoCovering(d, c.id, null) && gBusyAt(d, c.id)) : [];
         b.innerHTML = list.map(s => `<span class="ap blk${s.uid === U ? " mine" : ""}" style="background:${CCOL(s.closer)};${blkStyle(s, lanesD[dk(day)])}"><b>${esc(CNAME(s.closer)[0])}</b><span class="nm">${esc(s.shop || "")}</span><small>${hm(s.when)}〜${hm(apoEnd(s))}</small></span>`).join("") +
           (gbw ? `<span class="gbusy wk">予定あり</span>` : "") +
+          (gAll.length ? `<span class="gbusy wk">予定あり ${gAll.map(c => esc(c.name[0])).join("・")}</span>` : "") +
           (+day === +T ? nowLine(d, now) : "");
         b.onclick = () => slotTap(d, list.length ? list : cover ? [cover] : [], past, full, calCloser !== "all" ? calCloser : undefined);
         cal.appendChild(b);
