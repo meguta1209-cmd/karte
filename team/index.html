@@ -18,7 +18,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=BIZ+UDPGothic:wght@400;700&family=Roboto+Mono:wght@500;700&display=swap">
-<link rel="stylesheet" href="./style.css?v=33">
+<link rel="stylesheet" href="./style.css?v=35">
 <script>
 /* LINEの中のブラウザではGoogleログインが通らない（途中の情報を覚えておけない）。
    LINEは ?openExternalBrowser=1 を付けると Safari / Chrome で開き直してくれるので、自動で付け直す */
@@ -108,7 +108,7 @@
     </div>
     <button class="nextup" id="nextUp" hidden></button>
     <button class="undated" id="undatedMine" hidden></button>
-    <button class="gcal-nag" id="gcalNag" hidden>📅 Googleカレンダーの連携がまだです（クローザー）<span>手順を見る ›</span></button>
+    <button class="gcal-nag" id="gcalNag" hidden>📅 Googleカレンダーの共有がまだです<span>共有の手順 ›</span></button>
     <div class="move-nag" id="moveNag" hidden><button class="mv-open" id="moveOpen"></button><button class="mv-x" id="moveX" aria-label="引っ越しの案内を消す">×</button></div>
     <div class="grid" id="grid"></div>
     <button class="link-add-task" data-newtask="1">＋ 予定を入れる（再架電・前確など）</button>
@@ -416,6 +416,7 @@
 <div class="scrim" id="ggScrim" hidden></div>
 <div class="daysum ggd" id="gcalGuide" role="dialog" aria-modal="true" aria-labelledby="ggTitle" hidden>
   <div class="ds-head"><h3 id="ggTitle">📅 Googleカレンダーと連携しましょう</h3></div>
+  <p class="gg-nag" id="ggNag">Googleカレンダーの共有がまだです。<br>共有が済むまで、アプリを開くたびにこのお知らせが出ます。</p>
   <p class="ds-note">クローザーになると、あなたの予定の時間がチームのカレンダーに「予定あり」で出て、その時間にはアポが入らなくなります。アポは【商談】店名（1時間半）の招待で届きます。チームに見えるのは時間だけで、予定の名前は見えません。</p>
   <div class="gg-status" id="ggStatus"></div>
   <ol class="gg-steps" id="ggSteps">
@@ -427,7 +428,7 @@
   <div class="fld gg-email"><label for="ggEmail">ふだん予定を入れているGoogleアカウント</label>
     <div class="gg-row"><input id="ggEmail" inputmode="email" autocomplete="email"><button type="button" id="ggSave">保存</button></div>
     <small>アプリにログインしているアドレスと違うときだけ変えてください</small></div>
-  <div class="ds-foot"><button id="ggLater">あとで</button><button id="ggClose" class="primary">閉じる</button></div>
+  <div class="ds-foot"><button id="ggLater">あとで</button><button id="ggOpenCal" class="primary">Googleカレンダーの設定を開く ↗</button><button id="ggClose" class="primary" hidden>完了</button></div>
 </div>
 
 <!-- 結果ボタンの意味 -->
@@ -480,6 +481,6 @@
 <div class="offline" id="offline" hidden>オフライン中：つながったら送ります</div>
 <div class="toast" id="toast"></div>
 
-<script type="module" src="./app.js?v=33"></script>
+<script type="module" src="./app.js?v=35"></script>
 </body>
 </html>

@@ -462,6 +462,7 @@ img{max-width:100%;}
 .cal .hd.today{background:var(--blue); color:var(--on-blue);}
 .cal .hd.today small{color:inherit; opacity:.9;}
 .cal .hd.sat{color:#2F6DB5;}
+.cal .hd.today.sat{color:var(--on-blue);}   /* 土曜が今日の日も、青地に白で読めるように */
 .cal .hd.corner{left:0; z-index:4;}
 .cal .hd.cl span{display:inline-flex; align-items:center; gap:2px;}
 .cal .hd.cl small{font-family:var(--form);}
@@ -590,6 +591,7 @@ img{max-width:100%;}
   border:1.5px solid #E0B43A; background:var(--warn-soft); color:var(--warn); font-size:13px; font-weight:700;}
 .gcal-nag span{margin-left:auto; white-space:nowrap; font-size:12.5px;}
 .ggd{z-index:57;}
+.gg-nag{margin:2px 0 8px; padding:10px 12px; border-radius:8px; border:1.5px solid #E0B43A; background:var(--warn-soft); color:var(--warn); font-size:14px; font-weight:700; line-height:1.55; text-wrap:pretty;}   /* 共有が済むまで毎回出る催促 */
 .gg-status{border-radius:8px; padding:9px 12px; font-size:13px; margin:4px 0 10px;}
 .gg-status.wait{background:var(--card2); color:var(--ink2);}
 .gg-status.ng{background:var(--warn-soft); color:var(--warn);}
@@ -734,3 +736,17 @@ img{max-width:100%;}
 .kpi-refresh{border:1px solid var(--blue); background:var(--card); color:var(--blue); border-radius:999px; padding:5px 14px; font-size:13px; font-weight:700; white-space:nowrap;}
 .kpi-refresh:hover{background:var(--blue-soft);}
 .kpi-refresh:disabled{opacity:.5;}
+/* カレンダーの日付と曜日を大きく・濃く（社長「日と曜日がちょっと小さくて見にくい」＝PCの話。2026-10-02）
+   スマホは今のままで問題が出ていないので、PC（幅1000px以上）だけ変える */
+@media (min-width:1000px){
+  .wk-lbl b{font-size:22px;}                                   /* 上の「9/28(月) 〜 10/3(土)」「10/2(金)」 16→22px */
+  .wk-lbl small{font-size:13px;}
+  .cal .hd{font-size:19px; padding:8px 2px;}                    /* 週表示の曜日 13→19px */
+  .cal .hd small{font-size:16px; font-weight:700; color:var(--ink);}   /* 週表示の日付 11.5→16px、太く・濃く */
+  .cal .hd.sat small{color:#2F6DB5;}                           /* 土曜は日付も青で、今まで通り見分けられるように */
+  .cal .hd.today small{color:inherit; opacity:1;}              /* 今日は青い背景に白（今まで通り） */
+  .cal.day .hd{font-size:16px;}                                /* 日表示の列の見出し（クローザー名） 13→16px */
+  .cal.day .hd.cl small{font-size:13px; font-weight:400; color:var(--ink2);}
+  .cal .tm span{font-size:14px;}                               /* 左の時刻も少し大きく 12.5→14px */
+  .cal .tm.half span{font-size:12px;}
+}

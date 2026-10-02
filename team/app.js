@@ -1616,8 +1616,8 @@ function renderGuideStatus() {
   $("ggStatus").className = "gg-status " + (linked ? "ok" : st.cls === "ng" ? "ng" : "wait");
   $("ggStatus").innerHTML = linked ? "✓ 連携できました！ あなたの予定の時間が、チームのカレンダーに出ています" : `<b>今の状態：${esc(st.pill)}</b>　${esc(st.text)}`;
   $("ggSteps").hidden = linked;
-  $("ggLater").hidden = linked;
-  $("ggClose").textContent = linked ? "完了" : "閉じる";
+  $("ggNag").hidden = $("ggLater").hidden = $("ggOpenCal").hidden = linked;
+  $("ggClose").hidden = !linked;   // 共有がまだのうちは「あとで」と「設定を開く」だけ。済んだら「完了」
 }
 function openGcalGuide() {
   if (!me) return;
@@ -1626,18 +1626,25 @@ function openGcalGuide() {
   renderGuideStatus();
 }
 function closeGcalGuide() { $("ggScrim").hidden = $("gcalGuide").hidden = true; }
-/* まだ連携していないクローザーには、その日はじめて開いたときに1回だけ手順を出す（機械ごと） */
+/* まだ共有していないクローザーには、共有が済むまでアプリを開くたびに手順を出す
+   （社長の指示 2026-10-02「共有が済むまで毎回催促」。前は1日1回だった）。
+   「あとで」で閉じても、読み込み直したとき・30分以上ほかの画面にいて戻ってきたときにまた出す */
+let ggShown = false, ggWait = null, hiddenAt = 0;
 function maybeGcalGuide() {
-  if (!me || !me.closer || !busyLoaded || gcalLinked()) return;
-  if (!$("daySum").hidden || !$("msheet").hidden || !$("moveDlg").hidden) { setTimeout(maybeGcalGuide, 4000); return; }   // 今日の予定などが開いていたら後で
-  const k = "team-gcal-guide";
-  if (lsGet(k, "") === dk(today())) return;
-  lsSet(k, dk(today()));
+  if (!me || !me.closer || !busyLoaded || gcalLinked() || ggShown) return;
+  if (!$("daySum").hidden || !$("msheet").hidden || !$("moveDlg").hidden || !$("alertBar").hidden) { clearTimeout(ggWait); ggWait = setTimeout(maybeGcalGuide, 4000); return; }   // 今日の予定・電話のリマインドなどが出ていたら後で
+  ggShown = true;
   openGcalGuide();
 }
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden") { hiddenAt = Date.now(); return; }
+  if (hiddenAt && Date.now() - hiddenAt >= 30 * 60000) { ggShown = false; maybeGcalGuide(); }
+  hiddenAt = 0;
+});
 $("gcalNag").onclick = openGcalGuide;
 $("openGuide").onclick = openGcalGuide;
-$("ggLater").onclick = () => { lsSet("team-gcal-guide", dk(today())); closeGcalGuide(); toast("設定画面の「連携の手順を開く」から、いつでも見られます"); };
+$("ggLater").onclick = () => { closeGcalGuide(); toast("共有が済むまで、開くたびにこのお知らせが出ます"); };
+$("ggOpenCal").onclick = () => window.open("https://calendar.google.com/calendar/u/0/r/settings", "_blank", "noopener");
 $("ggClose").onclick = closeGcalGuide; $("ggScrim").onclick = closeGcalGuide;
 $("ggCopy").onclick = async () => {
   try { await navigator.clipboard.writeText(ADMIN_EMAIL); toast("コピーしました：" + ADMIN_EMAIL); }
@@ -1655,7 +1662,7 @@ $("myCloser").onchange = () => {
   const v = $("myCloser").checked;   // 押した瞬間の状態で決める（保存中に表示が戻ることがあるため）
   updateDoc(doc(db, "members", U), {closer: v}).then(() => {
     toast(v ? "クローザーに入りました" : "クローザーから外れました");
-    if (v && !gcalLinked()) { lsSet("team-gcal-guide", dk(today())); openGcalGuide(); }   // オンにしたら、そのまま連携の手順へ
+    if (v && !gcalLinked()) { ggShown = true; openGcalGuide(); }   // オンにしたら、そのまま連携の手順へ
   }).catch(e => toast(errMsg(e)));
 };
 /* ============================================================
