@@ -150,11 +150,11 @@ const PRE_DAY = "2026-09-30";
 const PRE_BADGE = `<span class="badge pre">10月より前</span>`;
 const CX_BADGE = `<span class="badge cx">キャンセル</span>`;
 const isAdminMe = () => !!(me && me.role === "admin");
-/* 予定を取り消せる人：アポを取った本人・管理者・そのアポのクローザー本人（クローザーは「キャンセル」だけ。
-   記録ごと消すとほかの人のKPIが減るので、記録ごと消すのは本人と管理者だけ） */
+/* 予定を取り消せる人：アポを取った本人・管理者・そのアポのクローザー本人。
+   「キャンセル」も「記録ごと消す」も3人とも使える（クローザーも記録ごと消せる＝社長の決定 2026-10-02「②でお願い」） */
 const isCloserOf = r => r.r === "アポ" && !!(r.memo && r.memo.closer === U);
 const canCancel = r => !r.isTask && (r.r === "アポ" || r.r === "再架電") && !r.canceled && (r.uid === U || isAdminMe() || isCloserOf(r));
-const canErase = r => r.uid === U || isAdminMe();
+const canErase = r => r.uid === U || isAdminMe() || isCloserOf(r);
 /* 日時の無い記録の印：アポは「日時未定」、引っ越した再架電は「日時を入れる」（あとから入れられると分かるように） */
 const noDateBadge = r => r.r === "アポ" ? `<span class="badge late">日時未定</span>` : r.src === "old" && r.r === "再架電" ? `<span class="badge pend">日時を入れる</span>` : "";
 /* 自分の記録で、店名・電話・メモ・日時が何も無い → 押したら詳細ではなく入力画面を開く */
