@@ -1366,7 +1366,7 @@ function maybeDaySum() {
 /* 予定が0件の日に出す、前向きになる一言（日ごとに替わる。同じ日は同じ言葉） */
 const CHEERS = [
   "今日の1本目が、未来のアポ。いってらっしゃい！",
-  "予定ゼロは伸びしろ！ 今日つくりにいきましょう",
+  "今日の予定は、今日つくれる。いきましょう！",
   "まずは1本。声があったまったら、流れは来ます",
   "断られても大丈夫。アポはその先で待ってます",
   "今日のヒーローは、あなたかも。いきましょう！",
@@ -1374,15 +1374,17 @@ const CHEERS = [
   "1本ずつ、ていねいに。それがいちばんの近道です",
   "昨日の自分を1本こえたら、今日は勝ち！"
 ];
-const cheerOf = d => CHEERS[Math.floor(d.getTime() / 864e5) % CHEERS.length];
+/* 毎朝の一言は、予定があってもなくても出す。言葉は開くたびにランダム（社長のフィードバック 2026-10-02） */
+const cheerOf = () => CHEERS[Math.floor(Math.random() * CHEERS.length)];
 function showDaySum() {
   const list = todayMine(), now = new Date();
   $("dsDate").textContent = md(today());
+  $("dsCheer").textContent = cheerOf();
   $("dsCount").textContent = list.length + "件";
   $("dsList").innerHTML = list.length ? list.map(r => {
     const past = r.memo.when < now;
     return `<div class="ds-row tap${past ? " past" : ""}" data-id="${esc(r.id)}" tabindex="0"><span class="num ds-t">${hm(r.memo.when)}</span><span class="ds-b">${resChip(r.r)} <b>${esc(r.isTask ? [r.title, r.memo.shop].filter(Boolean).join(" ") || r.r : (r.memo.shop || "（店名なし）"))}</b>${past ? `<span class="badge late">過ぎています</span>` : ""}${r.memo.text ? `<small>${esc(r.memo.text)}</small>` : ""}</span></div>`;
-  }).join("") : `<div class="ds-cheer"><b>${esc(cheerOf(today()))}</b><small>今日の予定はまだありません。取れたアポや再架電は、ここに並びます</small></div>`;
+  }).join("") : `<div class="ds-empty">今日の予定はまだありません。取れたアポや再架電は、ここに並びます</div>`;
   $("dsGo").hidden = !list.length;
   $("dsOk").textContent = list.length ? "確認した" : "いってきます！";
   $("dsScrim").hidden = $("daySum").hidden = false;
