@@ -666,7 +666,9 @@ function openTask(t, pre) {
   $("tTel").value = t ? t.memo.tel : (pre.tel || "");
   $("tText").value = t ? t.memo.text : "";
   $("tRemind").checked = t ? t.memo.remind !== false : true;
-  const act = Object.entries(members).filter(([, m]) => m.status === "active").sort((a, b) => (a[0] === U ? -1 : b[0] === U ? 1 : (a[1].name || "").localeCompare(b[1].name || "", "ja")));
+  /* 担当に選べるのは、有効なメンバー。管理者は選択肢に出さない（自分が管理者のとき・もう管理者が担当の予定を直すときは出す）
+     フィードバック 2026-10-02 渡邉さん「前確の担当の割り振りで管理者を選べないように」 */
+  const act = Object.entries(members).filter(([id, m]) => m.status === "active" && (m.role !== "admin" || id === U || (t && t.uid === id))).sort((a, b) => (a[0] === U ? -1 : b[0] === U ? 1 : (a[1].name || "").localeCompare(b[1].name || "", "ja")));
   $("tWho").innerHTML = act.map(([id, m]) => `<option value="${esc(id)}">${esc(m.name)}${id === U ? "（自分）" : ""}</option>`).join("");
   $("tWho").value = t ? t.uid : U;
   $("tDelete").hidden = !t; delete $("tDelete").dataset.arm; $("tDelete").textContent = "削除";
