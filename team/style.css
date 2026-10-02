@@ -750,3 +750,26 @@ img{max-width:100%;}
   .cal .tm span{font-size:14px;}                               /* 左の時刻も少し大きく 12.5→14px */
   .cal .tm.half span{font-size:12px;}
 }
+
+/* 10月より前に取った案件（KPIに数えない）と、予定の取り消し（2026-10-02 社長の指示） */
+.pre-box{margin:0 0 10px; padding:8px 12px; border:1px dashed var(--rule2); border-radius:8px; background:var(--card2);}
+.pre-box .pre-by{margin:8px 0 0;}
+.pre-box select{width:100%; min-height:40px; border:1px solid var(--rule); border-radius:6px; background:var(--card); color:var(--ink); padding:0 8px; font-size:14px;}
+.badge.pre{background:var(--card2); color:var(--ink2); border:1px dashed var(--rule2);}
+.badge.cx{background:var(--ink3); color:var(--card);}
+.cal .blk .pre-tag{font-style:normal; font-size:9.5px; font-weight:700; padding:0 3px; border-radius:3px; background:rgba(255,255,255,.85); color:#14304E; margin-left:3px;}
+.cal .blk.pre{background-image:repeating-linear-gradient(135deg, transparent 0 7px, rgba(255,255,255,.18) 7px 9px);}
+.ad-cx{margin-top:6px; border:1px solid var(--rule); background:var(--card); color:var(--red); border-radius:6px; padding:5px 12px; font-size:12.5px; font-weight:700;}
+.rd-acts .cx-btn{color:var(--red);}
+.cxd{z-index:58;}
+.cx-target{padding:10px 12px; border-radius:8px; background:var(--card2); font-size:14px; margin:4px 0 12px;}
+.cx-target small{display:block; color:var(--ink2); font-size:12.5px; margin-top:3px;}
+.cx-opts{display:flex; flex-direction:column; gap:8px;}
+.cx-opt{display:flex; flex-direction:column; gap:3px; text-align:left; padding:11px 14px; border-radius:8px; border:1.5px solid var(--rule2); background:var(--card); color:var(--ink);}
+.cx-opt b{font-size:14.5px;}
+.cx-opt small{font-size:12.5px; color:var(--ink2); line-height:1.5;}
+.cx-opt:hover{border-color:var(--blue);}
+.cx-opt.del{border-color:var(--red);}
+.cx-opt.del b{color:var(--red);}
+.cx-opt.del:hover{background:var(--red-soft);}
+.cx-note{font-size:12px; color:var(--ink2); margin:10px 0 0;}

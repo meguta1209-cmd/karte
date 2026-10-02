@@ -97,13 +97,14 @@ document.addEventListener("click", e => {
 document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("helpDlg").hidden) closeHelp(); });
 /* toast(文, ボタン名, 押したとき, ボタン名2, 押したとき2 …)。ボタンはいくつでも */
 function toast(msg, ...acts) {
+  const ms = typeof acts[acts.length - 1] === "number" ? acts.pop() : 0;   // 最後に数を渡すと、その間（ミリ秒）出しておく
   const el = $("toast"); el.textContent = msg;
   for (let i = 0; i + 1 < acts.length; i += 2) {
     if (!acts[i]) continue;
     const b = document.createElement("button"), f = acts[i + 1]; b.textContent = acts[i];
     b.onclick = () => { el.classList.remove("on"); f(); }; el.appendChild(b);
   }
-  el.classList.add("on"); clearTimeout(tt); tt = setTimeout(() => el.classList.remove("on"), acts.length > 2 ? 4500 : acts.length ? 3500 : 2200);
+  el.classList.add("on"); clearTimeout(tt); tt = setTimeout(() => el.classList.remove("on"), ms || (acts.length > 2 ? 4500 : acts.length ? 3500 : 2200));
 }
 const errMsg = e => (e && e.code === "permission-denied") ? "権限がありません" : (e && e.message === "FULL") ? "その時間は埋まっています" : (e && e.code === "unavailable") ? "オフラインのため保存できません" : "保存できませんでした";
 
@@ -143,6 +144,17 @@ function closerList() {
 const CNAME = id => (closerList().find(c => c.id === id) || {name: id === "none" ? "担当未定" : nameOf(id)}).name;
 const CCOL = id => (closerList().find(c => c.id === id) || {color: "#5F6368"}).color;
 const OLD_BADGE = `<span class="badge old">前のカウンター</span>`;   // 前のカウンターから引っ越した記録の印
+/* 10月より前（アプリを使う前）に取った案件。カレンダーには普通の商談と同じに入れるが、KPIに数えないので
+   日ごとの集計（stats）には足さない。取った日は 9/30 として持つ（社長の指示 2026-10-02） */
+const PRE_DAY = "2026-09-30";
+const PRE_BADGE = `<span class="badge pre">10月より前</span>`;
+const CX_BADGE = `<span class="badge cx">キャンセル</span>`;
+const isAdminMe = () => !!(me && me.role === "admin");
+/* 予定を取り消せる人：アポを取った本人・管理者・そのアポのクローザー本人（クローザーは「キャンセル」だけ。
+   記録ごと消すとほかの人のKPIが減るので、記録ごと消すのは本人と管理者だけ） */
+const isCloserOf = r => r.r === "アポ" && !!(r.memo && r.memo.closer === U);
+const canCancel = r => !r.isTask && (r.r === "アポ" || r.r === "再架電") && !r.canceled && (r.uid === U || isAdminMe() || isCloserOf(r));
+const canErase = r => r.uid === U || isAdminMe();
 /* 日時の無い記録の印：アポは「日時未定」、引っ越した再架電は「日時を入れる」（あとから入れられると分かるように） */
 const noDateBadge = r => r.r === "アポ" ? `<span class="badge late">日時未定</span>` : r.src === "old" && r.r === "再架電" ? `<span class="badge pend">日時を入れる</span>` : "";
 /* 自分の記録で、店名・電話・メモ・日時が何も無い → 押したら詳細ではなく入力画面を開く */
@@ -371,7 +383,7 @@ function deleteRec(rec) {
   deletedIds.add(rec.id);
   const b = writeBatch(db);
   b.delete(doc(db, "records", rec.id));
-  b.set(doc(db, "stats", rec.day), statInc(rec.uid, rec.r, rec.hour, -1, rec.mb), {merge: true});
+  if (!rec.pre) b.set(doc(db, "stats", rec.day), statInc(rec.uid, rec.r, rec.hour, -1, rec.mb), {merge: true});   // 10月より前の案件は元から数えていない
   if (rec.slotId) b.delete(doc(db, "slots", rec.slotId));
   return b.commit().catch(e => { deletedIds.delete(rec.id); throw e; });   // 失敗したら、もう一度消せるように
 }
@@ -448,9 +460,13 @@ async function loadHist(more) {
   if (!more) histPast = [];
   try {
     if (!more || !histFrom) renderHist(true);
-    const s = await getDocs(query(collection(db, "records"), where("uid", "==", U), where("r", "in", ["アポ", "再架電"]),
-      where("day", ">=", dk(from)), where("day", "<", dk(to)), orderBy("day", "desc")));
+    const [s, sp] = await Promise.all([
+      getDocs(query(collection(db, "records"), where("uid", "==", U), where("r", "in", ["アポ", "再架電"]),
+        where("day", ">=", dk(from)), where("day", "<", dk(to)), orderBy("day", "desc"))),
+      /* 10月より前に取った案件は取った日を 9/30 として持つので、期間に関係なく最初にまとめて読む */
+      more ? null : getDocs(query(collection(db, "records"), where("uid", "==", U), where("pre", "==", true))).catch(() => null)]);
     const got = s.docs.map(recOf);
+    if (sp) sp.docs.map(recOf).forEach(r => { if (!got.some(g => g.id === r.id)) got.push(r); });
     histPast = histPast.filter(r => !got.some(g => g.id === r.id)).concat(got);
     histFrom = from; histLoadedAt = Date.now();
   } catch (e) {
@@ -465,8 +481,8 @@ function renderHist(loading) {
   let all = todayList.concat(histPast.filter(r => !todayList.some(t => t.id === r.id)));
   if (histF !== "all") all = all.filter(r => r.r === histF);
   const byDay = {};
-  all.forEach(r => (byDay[r.day] = byDay[r.day] || []).push(r));
-  const days = Object.keys(byDay).sort().reverse();
+  all.forEach(r => { const k = r.pre ? "pre" : r.day; (byDay[k] = byDay[k] || []).push(r); });   // 10月より前の案件は、取った日が分からないので一番下にまとめる
+  const days = Object.keys(byDay).filter(k => k !== "pre").sort().reverse().concat(byDay.pre ? ["pre"] : []);
   const apoN = all.filter(r => r.r === "アポ").length, cbN = all.filter(r => r.r === "再架電").length;
   $("histSum").innerHTML = histFrom ? `${md(histFrom)} 〜 今日　<b>アポ ${apoN}件</b>・<b>再架電 ${cbN}件</b>` : "";
   const body = $("histBody");
@@ -477,19 +493,20 @@ function renderHist(loading) {
   days.forEach(k => {
     const list = byDay[k].sort((a, b) => b.t - a.t);
     const a = list.filter(r => r.r === "アポ").length, c = list.filter(r => r.r === "再架電").length;
-    const d = new Date(k + "T00:00");
     const h = document.createElement("h2");
-    h.innerHTML = `${md(d)}${k === dk(today()) ? "（今日）" : ""} <span class="aside">${a ? "アポ" + a : ""}${a && c ? "・" : ""}${c ? "再架電" + c : ""}</span>`;
+    h.innerHTML = `${k === "pre" ? "10月より前に取った案件" : md(new Date(k + "T00:00")) + (k === dk(today()) ? "（今日）" : "")} <span class="aside">${a ? "アポ" + a : ""}${a && c ? "・" : ""}${c ? "再架電" + c : ""}${k === "pre" ? "（KPIに数えない）" : ""}</span>`;
     body.appendChild(h);
     const card = document.createElement("div"); card.className = "card";
     list.forEach(r => {
       const m = r.memo || {}, w = m.when;
       let st = "";
-      if (r.src === "old" && !w) st = noDateBadge(r) + OLD_BADGE;
+      if (r.canceled) st = CX_BADGE;
+      else if (r.src === "old" && !w) st = noDateBadge(r) + OLD_BADGE;
       else if (r.r === "アポ") st = !w ? `<span class="badge late">日時未定</span>` : w < now ? `<span class="badge done">面談済み</span>` : "";
       else st = r.done ? `<span class="badge done">かけた</span>` : w && w < now ? `<span class="badge late">期限切れ</span>` : !w ? `<span class="badge pend">日時なし</span>` : "";
+      if (r.pre) st += PRE_BADGE;
       const row = document.createElement("div"); row.className = "rec hrow tap"; row.tabIndex = 0;
-      row.innerHTML = `<span class="tm">${hm(r.t)}</span><span class="body">${resChip(r.r)}${w ? `<span class="when">${r.r === "アポ" ? "面談" : "再架電"} ${md(w)} ${hm(w)}</span>` : ""}${st}
+      row.innerHTML = `<span class="tm">${r.pre ? "—" : hm(r.t)}</span><span class="body">${resChip(r.r)}${w ? `<span class="when">${r.r === "アポ" ? "面談" : "再架電"} ${md(w)} ${hm(w)}</span>` : ""}${st}
         <div class="memo"><b>${esc(m.shop || "（店名なし）")}</b>${m.tel ? `　<span class="tel-line num">☎ ${esc(m.tel)}</span>` : ""}</div>
         ${m.text ? `<div class="memo">${esc(m.text)}</div>` : ""}</span>`;
       row.onclick = () => needsInput(r) ? openMemo(r) : openDetail(r);   // 何も入っていない（引っ越した記録など）は入力画面へ
@@ -509,7 +526,7 @@ function fillRecs(box, list, withDelete) {
   list.forEach(r => {
     const row = document.createElement("div"); row.className = "rec"; row.setAttribute("role", "button"); row.tabIndex = 0;
     const w = r.memo && r.memo.when;
-    const when = w ? `<span class="when">${r.r === "アポ" ? "面談" : "再架電"} ${md(w)} ${hm(w)}</span>` : noDateBadge(r) + (r.src === "old" ? OLD_BADGE : "");
+    const when = (w ? `<span class="when">${r.r === "アポ" ? "面談" : "再架電"} ${md(w)} ${hm(w)}</span>` : r.canceled ? "" : noDateBadge(r) + (r.src === "old" ? OLD_BADGE : "")) + (r.canceled ? CX_BADGE : "");
     row.innerHTML = `<span class="tm">${hm(r.t)}</span><span class="body">${resChip(r.r)}${when}` +
       (r.memo && (r.memo.shop || r.memo.text) ? `<div class="memo">${memoLine(r.memo)}</div>` : `<div class="add">＋メモ</div>`) + `</span>`;
     const hasInfo = r.memo && (r.memo.shop || r.memo.tel || r.memo.text || r.memo.when);
@@ -554,7 +571,9 @@ function openMemo(rec) {
   const kind = rec.r, timed = kind === "アポ" || kind === "再架電", mine = rec.uid === U;
   $("mTitle").innerHTML = resChip(kind) + (kind === "アポ" ? " アポの詳細" : kind === "再架電" ? " 再架電の予定" : " メモ");
   $("mHint").textContent = !mine ? nameOf(rec.uid) + "さんの記録です（見るだけ）" :
-    rec.draft ? "カレンダーから登録します。保存するとアポが1件増えます" : hm(rec.t) + " の記録" + (timed ? "。日時を入れるとリマインドに出ます" : "");
+    rec.draft ? "カレンダーから登録します。保存するとアポが1件増えます" :
+    rec.canceled ? "キャンセルした記録です" + (m.when ? "（元の日時 " + md(m.when) + " " + hm(m.when) + "）" : "") + "。日時を入れずに保存するとメモだけ保存（キャンセルのまま）。新しい日時を入れて保存すると、もう一度" + (kind === "アポ" ? "アポ" : "予定") + "として入ります" :
+    hm(rec.t) + " の記録" + (timed ? "。日時を入れるとリマインドに出ます" : "");
   $("mShop").value = m.shop || ""; $("mTel").value = m.tel || ""; $("mText").value = m.text || "";
   $("mInfo").value = m.info || ""; $("mInfoBox").hidden = kind !== "アポ";
   $("mWhenBox").hidden = !timed; $("mRemindBox").hidden = !timed;
@@ -563,17 +582,30 @@ function openMemo(rec) {
   if (timed) {
     selCloser = m.closer || "auto";
     $("mWhenLbl").textContent = kind === "アポ" ? "商談日時（1時間半）" : "かけ直す日時";
-    $("mWhen").value = m.when ? toLocal(m.when) : ""; $("mRemind").checked = m.remind !== false; setQuick(kind);
+    $("mWhen").value = m.when && !rec.canceled ? toLocal(m.when) : ""; $("mRemind").checked = m.remind !== false; setQuick(kind);   // キャンセルした記録は日時を空で開く（メモを足して保存しただけで復活しないように）
   }
   ["mShop", "mTel", "mText", "mWhen", "mInfo"].forEach(id => $(id).readOnly = !mine);
   $("mPaste").hidden = !mine;
   $("mSave").hidden = !mine; $("mSkip").textContent = mine ? "あとで" : "閉じる";
   $("mUndo").hidden = !(rec.fresh && mine && !rec.draft && rec.src !== "old");
+  /* カレンダーから新しく入れるアポだけ：10月より前に取った案件として（KPIに数えずに）入れられる。管理者は取った人を選べる */
+  const preOk = !!rec.draft && kind === "アポ";
+  $("mPreBox").hidden = !preOk; $("mPre").checked = false; $("mByBox").hidden = true;
+  if (preOk && isAdminMe()) fillBy();
   checkClash();
   $("scrim").hidden = $("msheet").hidden = false;
   memoSnap = sheetSnap("msheet") + selCloser; delete $("msheet").dataset.armClose;
   if (mine) setTimeout(() => $(timed ? "mShop" : "mText").focus(), 50);
 }
+function fillBy() {
+  const list = Object.entries(members).filter(([, m]) => m.status === "active").sort((a, b) => (a[1].name || "").localeCompare(b[1].name || "", "ja"));
+  $("mBy").innerHTML = list.map(([id, m]) => `<option value="${esc(id)}"${id === U ? " selected" : ""}>${esc(m.name)}${id === U ? "（自分）" : ""}</option>`).join("");
+}
+$("mPre").onchange = () => {
+  const on = $("mPre").checked;
+  $("mByBox").hidden = !(on && isAdminMe());
+  $("mHint").textContent = on ? "10月より前に取った案件として、カレンダーに入れます。KPI（架電数・アポ数）には数えません" : "カレンダーから登録します。保存するとアポが1件増えます";
+};
 /* 入力の途中で、暗いところを押したり Esc を押したりして閉じても消えないように：
    開いた時から中身が変わっていたら、1回目は知らせるだけ（保存ボタンを揺らす）、もう一度で閉じる */
 let memoSnap = "", taskSnap = "";
@@ -728,7 +760,7 @@ function skipMemo() {
   const shop = $("mShop").value.trim(), tel = $("mTel").value.trim(), text = $("mText").value.trim(), info = $("mInfo").value.trim();
   closeMemo();
   if (!r || r.uid !== U || r.draft) return;
-  const undatedApo = r.r === "アポ" && !(r.memo && r.memo.when);
+  const undatedApo = r.r === "アポ" && !(r.memo && r.memo.when) && !r.canceled;   // キャンセルした記録は「日時未定のアポ」に戻さない
   if (!changed) { if (undatedApo) toast("日時未定のアポとして残しました"); return; }
   const m = {...(r.memo || {}), shop, tel, text};
   if (r.r === "アポ") m.info = info;
@@ -795,16 +827,27 @@ $("mSave").onclick = async () => {
   if (rec.r === "アポ") m.info = $("mInfo").value.trim();   // クローザーのカレンダーの説明に入る
   const remind = $("mRemind").checked;
   $("mSave").disabled = true;
+  if (rec.draft) {   // カレンダーから新しく入れるアポ：10月より前の案件か、だれの分か
+    rec.pre = !$("mPreBox").hidden && $("mPre").checked;
+    rec.owner = rec.pre && isAdminMe() && $("mBy").value ? $("mBy").value : U;
+  }
   try {
-    if (rec.r === "アポ" && w) {
+    if (rec.canceled && !w) {
+      /* キャンセルした記録に日時を入れずに保存：メモだけ書いて、キャンセルのまま（元の日時・クローザーは残す） */
+      const keep = {...(rec.memo || {}), ...m};
+      if (keep.when instanceof Date) keep.when = Timestamp.fromDate(keep.when);
+      Object.keys(keep).forEach(k => { if (keep[k] === undefined) delete keep[k]; });
+      updateDoc(doc(db, "records", rec.id), {memo: keep}).catch(e => toast(errMsg(e)));
+      closeMemo(); toast("メモを保存しました（キャンセルのまま）");
+    } else if (rec.r === "アポ" && w) {
       if (!isSlotTime(w)) { toast("アポの枠の外です（10:00〜22:00・30分ごと・日曜休み）"); return; }
       const cl = await bookSlot(rec, m, w, remind);
       /* サーバーからの通知を待たずに、自分のカレンダーへすぐ出す */
       const sid = slotIdOf(w, cl);
-      slots = slots.filter(s => s.recId !== rec.id && s.id !== sid).concat([{id: sid, day: dk(w), time: hm(w), when: w, dur: APO_MIN, closer: cl, uid: U, recId: rec.id, shop: m.shop, tel: m.tel, text: m.text, info: m.info || ""}]);
+      slots = slots.filter(s => s.recId !== rec.id && s.id !== sid).concat([{id: sid, day: dk(w), time: hm(w), when: w, dur: APO_MIN, closer: cl, uid: rec.owner || U, recId: rec.id, shop: m.shop, tel: m.tel, text: m.text, info: m.info || "", ...(rec.pre ? {pre: true} : {})}]);
       if (curTab === "cal") renderCal();
       closeMemo();
-      toast((rec.draft ? "アポを登録しました（アポ+1）" : "保存しました。" + md(w) + " " + hm(w)) + "（クローザー " + CNAME(cl) + "）");
+      toast((rec.draft ? (rec.pre ? "10月より前の案件として登録しました（KPIには数えません）" : "アポを登録しました（アポ+1）") : "保存しました。" + md(w) + " " + hm(w)) + "（クローザー " + CNAME(cl) + (rec.pre && rec.owner !== U ? "・獲得 " + nameOf(rec.owner) : "") + "）");
     } else if (rec.r === "アポ") {
       const b = writeBatch(db);
       b.update(doc(db, "records", rec.id), {memo: m, undated: true, pending: false, slotId: null});   // 日時が無いアポは「日時未定のアポ」に出す（前のカウンターから来たアポも同じ）
@@ -812,7 +855,7 @@ $("mSave").onclick = async () => {
       b.commit().catch(e => toast(errMsg(e)));
       closeMemo(); toast("日時未定のアポとして保存しました");
     } else if (rec.r === "再架電") {
-      updateDoc(doc(db, "records", rec.id), {memo: {...m, when: w ? Timestamp.fromDate(w) : null, remind}, pending: !!w && !rec.done}).catch(e => toast(errMsg(e)));
+      updateDoc(doc(db, "records", rec.id), {memo: {...m, when: w ? Timestamp.fromDate(w) : null, remind}, pending: !!w && !rec.done, ...(rec.canceled && w ? {canceled: false} : {})}).catch(e => toast(errMsg(e)));
       closeMemo(); toast(w ? "保存しました。" + md(w) + " " + hm(w) + " にリマインドします" : "メモを保存しました");
     } else {
       updateDoc(doc(db, "records", rec.id), {memo: (m.shop || m.tel || m.text) ? m : null}).catch(e => toast(errMsg(e)));
@@ -842,16 +885,22 @@ async function bookSlot(rec, m, when, remind) {
     }
     if (!chosen) throw new Error("FULL");
     const memo = {...m, when: Timestamp.fromDate(when), remind, closer: chosen.c};
-    const sdata = {day: dk(when), time: hm(when), when: Timestamp.fromDate(when), dur: APO_MIN, closer: chosen.c, uid: U, recId: rec.id,
+    const owner = rec.draft ? (rec.owner || U) : rec.uid;   // 枠の持ち主＝アポを取った人（10月より前の案件は管理者が代わりに入れることがある）
+    const sdata = {day: dk(when), time: hm(when), when: Timestamp.fromDate(when), dur: APO_MIN, closer: chosen.c, uid: owner, recId: rec.id,
       shop: m.shop, tel: m.tel, text: m.text, info: m.info || ""};
+    if (rec.pre) sdata.pre = true;
     if (rec.slotId && rec.slotId !== chosen.sref.id) tx.delete(doc(db, "slots", rec.slotId));
     tx.set(chosen.sref, sdata);
-    if (rec.draft) {
+    if (rec.draft && rec.pre) {
+      /* 10月より前に取った案件：記録は作るが、集計（stats）には足さない＝架電数にもアポ数にも入らない */
+      tx.set(recRef, {uid: owner, r: "アポ", pre: true, enteredBy: U, t: Timestamp.fromDate(new Date(PRE_DAY + "T12:00:00")), day: PRE_DAY, hour: 12, mb: null,
+        memo, undated: false, pending: true, done: false, slotId: chosen.sref.id});
+    } else if (rec.draft) {
       const t = new Date();
       tx.set(recRef, {uid: U, r: "アポ", t: Timestamp.fromDate(t), day: dk(t), hour: t.getHours(), mb: mbOf(t), memo, undated: false, pending: true, done: false, slotId: chosen.sref.id});
       tx.set(doc(db, "stats", dk(t)), statInc(U, "アポ", t.getHours(), 1, mbOf(t)), {merge: true});
     } else {
-      tx.update(recRef, {memo, undated: false, pending: true, slotId: chosen.sref.id});
+      tx.update(recRef, {memo, undated: false, pending: true, slotId: chosen.sref.id, ...(rec.canceled ? {canceled: false} : {})});   // キャンセルしたアポに日時を入れ直したら、もう一度アポとして入る
     }
     chosenId = chosen.c;
   });
@@ -987,7 +1036,7 @@ function renderCal() {
         /* ほかの予定は、始まりの枠にだけ時間を書く */
         const gStart = gb && (gb.s >= d || +d === +new Date(new Date(day).setHours(SLOT_H0, 0, 0, 0)));
         /* 商談は始まりの枠から1時間半の帯。続きの枠（cover）は帯の下になるので何も書かない */
-        b.innerHTML = list.map(s => `<span class="apd blk${s.uid === U ? " mine" : ""}" style="--cc:${c.color};${blkStyle(s, lanesC[c.id])}"><b>${esc(s.shop || "（店名なし）")}</b><small class="num">${hm(s.when)}〜${hm(apoEnd(s))}</small><small>獲得 ${esc(nameOf(s.uid))}</small></span>`).join("") +
+        b.innerHTML = list.map(s => `<span class="apd blk${s.uid === U ? " mine" : ""}${s.pre ? " pre" : ""}" style="--cc:${c.color};${blkStyle(s, lanesC[c.id])}"><b>${esc(s.shop || "（店名なし）")}${s.pre ? `<em class="pre-tag">以前</em>` : ""}</b><small class="num">${hm(s.when)}〜${hm(apoEnd(s))}</small><small>獲得 ${esc(nameOf(s.uid))}</small></span>`).join("") +
           (gb ? `<span class="gbusy">${gStart ? `予定あり<small>${hm(gb.s)}〜${hm(gb.e)}</small>` : ""}</span>` : "") +
           (!past && canStart ? `<span class="free-mark">${hm(d)}</span>` : "") + (+dayStart(d) === +T ? nowLine(d, now) : "");
         b.onclick = () => slotTap(d, list.length ? list : cover ? [cover] : [], past, !canStart, c.id);
@@ -1031,7 +1080,7 @@ function renderCal() {
         const cover = calCloser !== "all" && !list.length ? apoCovering(d, calCloser, null) : null;
         const gbw = calCloser !== "all" && !list.length && !cover ? gBusyAt(d, calCloser) : null;
         const gAll = calCloser === "all" && !list.length ? cls.filter(c => !apoCovering(d, c.id, null) && gBusyAt(d, c.id)) : [];
-        b.innerHTML = list.map(s => `<span class="ap blk${s.uid === U ? " mine" : ""}" style="background:${CCOL(s.closer)};${blkStyle(s, lanesD[dk(day)])}"><b>${esc(CNAME(s.closer)[0])}</b><span class="nm">${esc(s.shop || "")}</span><small>${hm(s.when)}〜${hm(apoEnd(s))}</small></span>`).join("") +
+        b.innerHTML = list.map(s => `<span class="ap blk${s.uid === U ? " mine" : ""}${s.pre ? " pre" : ""}" style="background:${CCOL(s.closer)};${blkStyle(s, lanesD[dk(day)])}"><b>${esc(CNAME(s.closer)[0])}</b>${s.pre ? `<em class="pre-tag">以前</em>` : ""}<span class="nm">${esc(s.shop || "")}</span><small>${hm(s.when)}〜${hm(apoEnd(s))}</small></span>`).join("") +
           (gbw ? `<span class="gbusy wk">予定あり</span>` : "") +
           (gAll.length ? `<span class="gbusy wk">予定あり ${gAll.map(c => esc(c.name[0])).join("・")}</span>` : "") +
           (+day === +T ? nowLine(d, now) : "");
@@ -1084,18 +1133,20 @@ function showApoDetail(d, list, past) {
   adSlot = d;
   $("adTitle").textContent = md(d) + " " + hm(d) + " の商談";
   const free = freeClosers(d, null);
-  $("adBody").innerHTML = list.map(s => `<div class="ad-row"><b>${esc(s.shop || "（店名なし）")}</b>
+  $("adBody").innerHTML = list.map(s => `<div class="ad-row"><b>${esc(s.shop || "（店名なし）")}</b>${s.pre ? PRE_BADGE : ""}
     <small class="num">${md(s.when)} ${hm(s.when)}〜${hm(apoEnd(s))}</small>
-    <small><i class="dot-c" style="background:${CCOL(s.closer)}"></i>クローザー ${esc(CNAME(s.closer))} ・ 獲得 ${esc(nameOf(s.uid))}</small>
+    <small><i class="dot-c" style="background:${CCOL(s.closer)}"></i>クローザー ${esc(CNAME(s.closer))} ・ 獲得 ${esc(nameOf(s.uid))}${s.pre ? "（10月より前・KPIに数えない）" : ""}</small>
     ${s.tel ? `<a class="ad-tel num" href="${telHref(s.tel)}">☎ ${esc(s.tel)}</a>` : ""}
     ${s.text ? `<div>${esc(s.text)}</div>` : ""}
-    ${s.info ? `<div class="ad-info">${esc(s.info)}</div>` : ""}</div>`).join("") +
+    ${s.info ? `<div class="ad-info">${esc(s.info)}</div>` : ""}
+    ${s.recId && (s.uid === U || isAdminMe() || s.closer === U) ? `<button type="button" class="ad-cx" data-rec="${esc(s.recId)}">予定を取り消す</button>` : ""}</div>`).join("") +
     (!past ? `<div class="ad-row"><small>この時間から1時間半とれるクローザー：${free.length ? free.map(c => esc(c.name)).join("・") : "なし"}</small></div>` : "");
   $("adNew").hidden = past || !slotOpen(d, null, calCloser);
   $("adScrim").hidden = $("apoDetail").hidden = false;
 }
 $("adNew").onclick = () => { $("adScrim").hidden = $("apoDetail").hidden = true; if (adSlot) newApoAt(adSlot); };
 $("adClose").onclick = $("adScrim").onclick = () => { $("adScrim").hidden = $("apoDetail").hidden = true; };
+$("adBody").addEventListener("click", e => { const b = e.target.closest(".ad-cx"); if (b) openCancelById(b.dataset.rec); });
 
 /* 日切り：メモの画面 → カレンダーで空きを選ぶ → メモの画面に戻る */
 $("mPick").onclick = () => {
@@ -1255,6 +1306,7 @@ function openDetail(r) {
   const m = r.memo || {}, mine = r.isTask ? canEditTask(r) : r.uid === U, w = m.when, now = new Date();
   $("rdTitle").innerHTML = resChip(r.r) + " " + esc(r.isTask ? ([r.title, m.shop].filter(Boolean).join(" ") || r.r) : (m.shop || "（店名なし）"));
   const rows = [];
+  if (r.canceled) rows.push(["状態", CX_BADGE + (r.canceledAt ? ` <small>${md(tsd(r.canceledAt))} ${hm(tsd(r.canceledAt))} に取り消し${r.canceledBy && r.canceledBy !== r.uid ? "（" + esc(nameOf(r.canceledBy)) + "）" : ""}</small>` : "")]);
   if (w) {
     const mins = Math.round((w - now) / 6e4);
     const left = mins > 0 && mins < 24 * 60 ? `<span class="rd-left">あと${mins >= 60 ? Math.floor(mins / 60) + "時間" + (mins % 60 ? mins % 60 + "分" : "") : mins + "分"}</span>` : mins <= 0 && keepsLate(r) && !r.done ? `<span class="badge late">過ぎています</span>` : "";
@@ -1263,7 +1315,7 @@ function openDetail(r) {
   if (r.isTask && m.shop && r.title) rows.push(["店名", esc(m.shop)]);
   if (r.r === "アポ" && m.closer) rows.push(["クローザー", `<i class="dot-c" style="background:${CCOL(m.closer)}"></i>${esc(CNAME(m.closer))}`]);
   if (r.isTask) rows.push(["担当", esc(nameOf(r.uid)) + (r.by && r.by !== r.uid ? `<small>作成 ${esc(nameOf(r.by))}</small>` : "")]);
-  else rows.push([r.r === "アポ" ? "獲得" : "担当", esc(nameOf(r.uid)) + `<small>${md(r.t)} ${hm(r.t)}</small>`]);
+  else rows.push([r.r === "アポ" ? "獲得" : "担当", esc(nameOf(r.uid)) + (r.pre ? " " + PRE_BADGE + `<small>KPIに数えない${r.enteredBy && r.enteredBy !== r.uid ? "・入力 " + esc(nameOf(r.enteredBy)) : ""}</small>` : `<small>${md(r.t)} ${hm(r.t)}</small>`)]);
   rows.push(["メモ", m.text ? `<span class="rd-memo">${esc(m.text)}</span>` : `<span class="rd-none">なし</span>`]);
   if (!r.isTask && r.r === "アポ") rows.push(["カレンダーの説明", m.info ? `<span class="rd-memo">${esc(m.info)}</span>` : `<span class="rd-none">なし（「メモを編集」から貼り付けると、クローザーのカレンダーに入ります）</span>`]);
   $("rdTel").innerHTML = m.tel
@@ -1272,9 +1324,11 @@ function openDetail(r) {
   $("rdBody").innerHTML = rows.map(([k, v]) => `<div class="rd-row"><span class="k">${k}</span><span class="v">${v}</span></div>`).join("");
   const acts = [];
   if (r.isTask && mine && !r.done) acts.push(`<button class="primary" data-a="done">${r.r === "再架電" ? "かけた（結果を押す）" : "完了にする"}</button>`, `<button data-a="later">明日へ延期</button>`);
-  if (!r.isTask && mine && r.r === "再架電" && !r.done && w) acts.push(`<button class="primary" data-a="done">かけた（結果を押す）</button>`, `<button data-a="later">明日へ延期</button>`);
+  if (!r.isTask && mine && r.r === "再架電" && !r.done && !r.canceled && w) acts.push(`<button class="primary" data-a="done">かけた（結果を押す）</button>`, `<button data-a="later">明日へ延期</button>`);
   /* アポからは、前確の予定をそのまま作れる */
-  if (!r.isTask && r.r === "アポ") acts.push(`<button data-a="prec">＋ 前確の予定を作る</button>`);
+  if (!r.isTask && r.r === "アポ" && !r.canceled) acts.push(`<button data-a="prec">＋ 前確の予定を作る</button>`);
+  /* 予定を取り消す（キャンセル／入れ間違いで消す）：取った本人・管理者・そのアポのクローザー */
+  if (canCancel(r)) acts.push(`<button class="cx-btn" data-a="cx">予定を取り消す</button>`);
   $("rdActs").innerHTML = acts.join(""); $("rdActs").hidden = !acts.length;
   $("rdEdit").hidden = !mine;
   $("rdEdit").textContent = r.isTask ? "編集" : "メモを編集";
@@ -1293,7 +1347,91 @@ $("rdActs").onclick = e => {
   if (b.dataset.a === "done") markDone(r);
   if (b.dataset.a === "later") postpone(r);
   if (b.dataset.a === "prec") openTask(null, {kind: "前確", shop: (r.memo || {}).shop, tel: (r.memo || {}).tel, apoWhen: (r.memo || {}).when});
+  if (b.dataset.a === "cx") openCancel(r);
 };
+
+/* ============================================================
+   予定を取り消す（社長の指示 2026-10-02「既に入ってる予定を削除する機能」）
+   ・キャンセル（記録は残す）：記録に「キャンセル」の印。KPIの数はそのまま。カレンダーの枠を空ける
+   ・入れ間違い（記録ごと消す）：記録を消し、KPIの数も1件減らす（10月より前の案件は元から数えていない）
+   どちらもクローザーのGoogleカレンダーの招待は、カレンダー連携の係（5分おき）が枠の無くなったアポを見て消す。
+   消したあと10秒は［元に戻す］で、記録・枠・数を元どおりにする（その間に枠が別の商談で埋まったら戻せない）
+   ============================================================ */
+let cxRec = null;
+async function openCancelById(id) {
+  let r = pendTeam.concat(pendMine).find(x => x.id === id && !x.isTask);
+  if (!r) r = await getDoc(doc(db, "records", id)).then(s => s.exists() ? recOf(s) : null).catch(() => null);
+  if (!r) { toast("記録が見つかりませんでした"); return; }
+  openCancel(r);
+}
+function openCancel(r) {
+  if (!canCancel(r)) { toast("取り消せるのは、アポを取った本人・管理者・そのアポのクローザーだけです"); return; }
+  cxRec = r;
+  const m = r.memo || {}, w = m.when, apo = r.r === "アポ", erase = canErase(r);
+  $("adScrim").hidden = $("apoDetail").hidden = true;
+  $("cxTitle").textContent = apo ? "このアポを取り消しますか？" : "この再架電の予定を取り消しますか？";
+  $("cxTarget").innerHTML = `${resChip(r.r)} <b>${esc(m.shop || "（店名なし）")}</b>${r.pre ? PRE_BADGE : ""}` +
+    `<small>${w ? (apo ? "商談 " : "かけ直し ") + md(w) + " " + hm(w) : "日時なし"}${apo && m.closer ? " ・ クローザー " + esc(CNAME(m.closer)) : ""} ・ ${apo ? "獲得" : "担当"} ${esc(nameOf(r.uid))}</small>`;
+  const slot = apo && r.slotId ? "カレンダーの枠が空き、クローザーのGoogleカレンダーからも5分以内に消えます。" : "";
+  $("cxCancelT").textContent = apo ? "キャンセルになった（記録は残す）" : "予定から外す（記録は残す）";
+  $("cxCancelD").textContent = slot + (apo ? (r.pre ? "KPIには元から数えていません。" : "KPIのアポ数はそのまま（取った実績は残ります）。") : "リマインドから外れます。KPIの架電数はそのまま。") + "記録に「キャンセル」の印が付きます";
+  $("cxDelete").hidden = !erase;
+  $("cxNote").textContent = (erase ? "どちらも、" : "") + "消したあと10秒間は画面の下の［元に戻す］で戻せます" + (erase ? "" : "（記録ごと消せるのは、アポを取った本人と管理者だけです）");
+  $("cxDeleteD").textContent = (r.pre ? "記録ごと消えます（KPIには元から数えていません）。" : "記録ごと消えて、KPIの" + (apo ? "アポ数と" : "") + "架電数も1件減ります（" + md(new Date(r.day + "T00:00")) + " の分）。") + slot;
+  closeDetail();
+  $("cxScrim").hidden = $("cxDlg").hidden = false;
+}
+function closeCancel() { $("cxScrim").hidden = $("cxDlg").hidden = true; cxRec = null; }
+$("cxClose").onclick = closeCancel; $("cxScrim").onclick = closeCancel;
+document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("cxDlg").hidden) closeCancel(); });
+$("cxCancel").onclick = () => runCancel("cx");
+$("cxDelete").onclick = () => runCancel("del");
+async function runCancel(kind) {
+  const r = cxRec; if (!r) return;
+  closeCancel();
+  try {
+    const rs = await getDoc(doc(db, "records", r.id));
+    if (!rs.exists()) { toast("もう消えています"); return; }
+    const raw = rs.data();   // 元に戻すために、消す前の中身をそのまま取っておく
+    let sraw = null;
+    if (raw.slotId) { const ss = await getDoc(doc(db, "slots", raw.slotId)); if (ss.exists()) sraw = ss.data(); }
+    if (kind === "cx") {
+      const b = writeBatch(db);
+      b.update(doc(db, "records", r.id), {pending: false, canceled: true, canceledAt: Timestamp.now(), canceledBy: U, slotId: null, undated: false});
+      if (sraw) b.delete(doc(db, "slots", raw.slotId));
+      await b.commit();
+    } else {
+      if (!canErase(r)) return;
+      await deleteRec({...raw, id: r.id, slotId: sraw ? raw.slotId : null});
+    }
+    if (raw.slotId) { slots = slots.filter(s => s.id !== raw.slotId); if (curTab === "cal") renderCal(); }
+    refreshHistSoon();
+    toast(kind === "cx" ? "取り消しました（記録は「キャンセル」として残っています）" : "記録ごと消しました", "元に戻す", () => restoreCancel(kind, r.id, raw, sraw), 10000);
+  } catch (e) { toast(errMsg(e)); }
+}
+async function restoreCancel(kind, id, raw, sraw) {
+  try {
+    await runTransaction(db, async tx => {
+      if (sraw) {   // その間に同じクローザーの重なる時間へ別の商談が入っていたら戻さない
+        const when = tsd(sraw.when);
+        for (const off of OVERLAP_STEPS) {
+          const s = await tx.get(doc(db, "slots", slotIdOf(new Date(when.getTime() + off * 6e4), sraw.closer)));
+          if (s.exists() && s.data().recId !== id) throw new Error("TAKEN");
+        }
+      }
+      if (kind === "del") {
+        tx.set(doc(db, "records", id), raw);
+        if (!raw.pre) tx.set(doc(db, "stats", raw.day), statInc(raw.uid, raw.r, raw.hour, 1, raw.mb), {merge: true});
+      } else {
+        tx.update(doc(db, "records", id), {pending: !!raw.pending, canceled: false, canceledAt: null, canceledBy: null, slotId: raw.slotId || null, undated: !!raw.undated});
+      }
+      if (sraw) tx.set(doc(db, "slots", raw.slotId), sraw);
+    });
+    deletedIds.delete(id);
+    refreshHistSoon();
+    toast("元に戻しました");
+  } catch (e) { toast(e && e.message === "TAKEN" ? "その時間に別の商談が入ったため、戻せませんでした" : errMsg(e)); }
+}
 document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("recDetail").hidden) closeDetail(); });
 /* 3日以上前に終わった自分のアポは、リマインドの対象から外しておく */
 function cleanupOldApos() {
@@ -1637,7 +1775,7 @@ function closeGcalGuide() { $("ggScrim").hidden = $("gcalGuide").hidden = true; 
 let ggShown = false, ggWait = null, hiddenAt = 0;
 function maybeGcalGuide() {
   if (!me || !me.closer || !busyLoaded || gcalLinked() || ggShown) return;
-  if (!$("daySum").hidden || !$("msheet").hidden || !$("moveDlg").hidden || !$("alertBar").hidden) { clearTimeout(ggWait); ggWait = setTimeout(maybeGcalGuide, 4000); return; }   // 今日の予定・電話のリマインドなどが出ていたら後で
+  if (document.querySelector('[role="dialog"]:not([hidden]):not(#gcalGuide)') || !$("alertBar").hidden) { clearTimeout(ggWait); ggWait = setTimeout(maybeGcalGuide, 4000); return; }   // 今日の予定・入力・取り消しなどの画面や、電話のリマインドが出ていたら後で
   ggShown = true;
   openGcalGuide();
 }
