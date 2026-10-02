@@ -735,7 +735,7 @@ function skipMemo() {
   Object.keys(m).forEach(k => { if (m[k] === undefined) delete m[k]; });
   const empty = !shop && !tel && !text && !m.info && !m.when && r.r !== "アポ" && r.r !== "再架電";
   const b = writeBatch(db);
-  b.update(doc(db, "records", r.id), {memo: empty ? null : m});
+  b.update(doc(db, "records", r.id), undatedApo ? {memo: m, undated: true} : {memo: empty ? null : m});   // 日時の無いアポは必ず「日時未定のアポ」に出す（古いデータでも）
   if (r.slotId) b.update(doc(db, "slots", r.slotId), {shop, tel, text, info});   // カレンダーの予定の中身も合わせる（日時はそのまま）
   b.commit().catch(e => toast(errMsg(e)));
   toast(r.r === "アポ" ? (undatedApo ? "店名などを保存しました。日時は未定のままです" : "店名などを保存しました（日時はそのまま）")
@@ -1427,6 +1427,12 @@ function range() {
   return f < t ? [f, t] : [addDays(t, -1), addDays(f, 1)];
 }
 const statCache = {};
+/* 「↻ 最新にする」：とっておいた数字を捨てて読み直す（KPIは開いたとき・期間を変えたときにしか読まないため。社長の指示） */
+$("kpiRefresh").onclick = async () => {
+  const b = $("kpiRefresh"); b.disabled = true;
+  Object.keys(statCache).forEach(k => delete statCache[k]);
+  try { await renderKpi(); toast("最新の数字にしました（" + hm(new Date()) + "）"); } finally { b.disabled = false; }
+};
 async function loadStats(a, b) {
   const key = dk(a) + "~" + dk(b);
   if (statCache[key] && Date.now() - statCache[key].at < 30000) return statCache[key].data;
@@ -1500,6 +1506,7 @@ async function renderKpi() {
   try { [data, pdata] = await Promise.all([loadStats(a, b), loadStats(pa, a)]); }
   catch (e) { $("tiles").innerHTML = `<div class="empty">読み込めませんでした</div>`; return; }
   if (seq !== kpiSeq) return;
+  $("kpiAt").textContent = hm(new Date()) + " 時点";
   const s = sumStats(data, member), p = sumStats(pdata, member);
   $("tiles").innerHTML = [
     ["架電", s.n, "", delta(s.n, p.n)], ["対応数", s.ans, "", delta(s.ans, p.ans)],
