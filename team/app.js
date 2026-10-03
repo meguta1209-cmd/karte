@@ -406,7 +406,9 @@ function renderCount() {
   if (!started) return;
   const c = count(myToday), n = myToday.length, apo = c["アポ"] || 0;
   $("cTotal").textContent = n;
-  $("cSide").innerHTML = `アポ <b>${apo}</b>　再架電 <b>${c["再架電"] || 0}</b><br>アポ率 <b>${n ? (apo / n * 100).toFixed(1) : "0.0"}%</b>`;
+  /* 対応＝電話に出てもらった数（KPIの「対応数」と同じ。留守・繋がらない・使われてない以外）。渡邉さんのフィードバック 2026-10-03「応答した数も」 */
+  const ans = n - NO_ANSWER.reduce((a, k) => a + (c[k] || 0), 0);
+  $("cSide").innerHTML = `アポ <b>${apo}</b>　再架電 <b>${c["再架電"] || 0}</b>　<span title="電話に出てもらった数（留守・繋がらない・使われてない以外）">対応 <b>${ans}</b></span><br>アポ率 <b>${n ? (apo / n * 100).toFixed(1) : "0.0"}%</b>　対応率 <b>${n ? (ans / n * 100).toFixed(1) : "0.0"}%</b>`;
   grid.querySelectorAll(".rb").forEach(b => b.querySelector(".n").textContent = c[b.dataset.k] || 0);
   fillRecs($("recent"), myToday.slice(-15).reverse());
   renderNext(); renderUndated();
