@@ -776,3 +776,17 @@ img{max-width:100%;}
 
 /* ログイン画面：一度ログインすれば次から自動で入れることの説明（2026-10-02 石川さんのフィードバック） */
 .login-keep{font-size:12px; line-height:1.6; color:var(--ink2); background:var(--card2); border:1px solid var(--rule); border-radius:8px; padding:8px 10px; text-align:left; margin:10px 0 0;}
+
+/* カレンダー2つ（2アカウント）とアポの招待の届け先（2026-10-03 社長の指示・石川さんの要望） */
+.gcal-addrs{display:block; margin-top:4px; line-height:1.6;}
+.gcal-addrs b{color:var(--ink);}
+.gg-multi{display:flex; flex-direction:column; gap:3px; margin:0 0 10px; padding:9px 12px; border-radius:8px; border:1px dashed var(--blue); background:var(--blue-soft); color:var(--ink); font-size:13px; line-height:1.6;}
+.gg-multi b{font-size:13.5px; color:var(--blue);}
+#invScrim{z-index:58;}
+.invd{z-index:59;}
+.inv-opts{display:flex; flex-direction:column; gap:8px; margin:6px 0 4px;}
+.inv-opt{display:flex; flex-direction:column; gap:2px; text-align:left; padding:11px 14px; border-radius:8px; border:1.5px solid var(--rule2); background:var(--card); color:var(--ink);}
+.inv-opt b{font-size:14.5px;}
+.inv-opt small{font-size:12.5px; color:var(--ink2); word-break:break-all;}
+.inv-opt:hover{border-color:var(--blue);}
+.inv-opt.on{border-color:var(--blue); background:var(--blue-soft);}

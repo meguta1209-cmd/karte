@@ -18,7 +18,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=BIZ+UDPGothic:wght@400;700&family=Roboto+Mono:wght@500;700&display=swap">
-<link rel="stylesheet" href="./style.css?v=40">
+<link rel="stylesheet" href="./style.css?v=41">
 <script>
 /* LINEの中のブラウザではGoogleログインが通らない（途中の情報を覚えておけない）。
    LINEは ?openExternalBrowser=1 を付けると Safari / Chrome で開き直してくれるので、自動で付け直す */
@@ -248,8 +248,10 @@
     <div id="gcalBox" hidden>
       <h2>Googleカレンダー連携（クローザー）</h2>
       <div class="card set">
-        <div class="row"><div class="t">状態<small id="gcalStatus"></small></div><span class="pill" id="gcalPill"></span></div>
+        <div class="row"><div class="t">状態<small id="gcalStatus"></small><small id="gcalAddrs" class="gcal-addrs"></small></div><span class="pill" id="gcalPill"></span></div>
         <div class="row wrap-sm"><div class="t">使うGoogleカレンダー<small>ふだんの予定を入れているGoogleアカウントのアドレス</small></div><input type="text" id="gcalEmail" inputmode="email" aria-label="Googleカレンダーのアドレス"><button class="chip-btn" id="saveGcal">保存</button></div>
+        <div class="row wrap-sm"><div class="t">2つ目のGoogleカレンダー（あれば）<small>2つのアカウントで予定を入れている人だけ。2つとも空き確認に使います</small></div><input type="text" id="gcalEmail2" inputmode="email" aria-label="2つ目のGoogleカレンダーのアドレス" placeholder="例）work@example.com"><button class="chip-btn" id="saveGcal2">保存</button></div>
+        <div class="row" id="invRow" hidden><div class="t">アポの招待の届け先<small id="invNow"></small></div><button class="chip-btn" id="invChange">変える</button></div>
       </div>
       <button class="btn-plain" id="openGuide" style="margin-top:8px">連携の手順を開く</button>
       <div class="howto" id="gcalHow">
@@ -445,10 +447,25 @@
     <li>「特定のユーザーまたはグループと共有する」→「ユーザーやグループを追加」</li>
     <li><span class="gg-mail">meguta1209@gmail.com</span> <button type="button" class="gg-copy" id="ggCopy">コピー</button> を入れて、権限を「<b>予定の表示（時間枠のみ、詳細は非表示）</b>」にして送信</li>
   </ol>
-  <div class="fld gg-email"><label for="ggEmail">ふだん予定を入れているGoogleアカウント</label>
+  <!-- カレンダーは2つ（2アカウント）まで登録できる（2026-10-03 社長の指示・石川さんの要望） -->
+  <div class="gg-multi" id="ggMulti"><b>📅📅 Googleカレンダーを2つ（2アカウント）使っている人へ</b>
+    <span>2つ目のカレンダーも登録できます。2つ目のアカウントでも上と同じ手順で <b>meguta1209@gmail.com</b> に共有して、下の「2つ目のカレンダー」にアドレスを入れて保存してください。2つとも空き確認に使い、アポの招待はどちらに届けるかを選べます。</span></div>
+  <div class="fld gg-email"><label for="ggEmail">ふだん予定を入れているGoogleアカウント（1つ目）</label>
     <div class="gg-row"><input id="ggEmail" inputmode="email" autocomplete="email"><button type="button" id="ggSave">保存</button></div>
     <small>アプリにログインしているアドレスと違うときだけ変えてください</small></div>
+  <div class="fld gg-email"><label for="ggEmail2">2つ目のカレンダー（あれば）</label>
+    <div class="gg-row"><input id="ggEmail2" inputmode="email" placeholder="例）work@example.com"><button type="button" id="ggSave2">保存</button></div>
+    <small id="ggSt2">使わない人は空のままでOK</small></div>
   <div class="ds-foot"><button id="ggLater">あとで</button><button id="ggOpenCal" class="primary">Googleカレンダーの設定を開く ↗</button><button id="ggClose" class="primary" hidden>完了</button></div>
+</div>
+
+<!-- 2つ目のカレンダーを登録したとき：アポの招待をどちらに届けるかを選ぶ -->
+<div class="scrim" id="invScrim" hidden></div>
+<div class="daysum invd" id="invDlg" role="dialog" aria-modal="true" aria-labelledby="invTitle" hidden>
+  <div class="ds-head"><h3 id="invTitle">アポの招待はどちらに届けますか？</h3></div>
+  <p class="ds-note">アポが入ると、Googleカレンダーに【商談】店名（1時間半）の招待が届きます。届けるアカウントを選んでください。どれを選んでも、2つのカレンダーの予定の時間はどちらも空き確認に使います。あとから設定の「アポの招待の届け先」で変えられます。</p>
+  <div class="inv-opts" id="invOpts"></div>
+  <div class="ds-foot"><button id="invLater">あとで決める（今は1つ目に届く）</button></div>
 </div>
 
 <!-- 結果ボタンの意味 -->
@@ -501,6 +518,6 @@
 <div class="offline" id="offline" hidden>オフライン中：つながったら送ります</div>
 <div class="toast" id="toast"></div>
 
-<script type="module" src="./app.js?v=40"></script>
+<script type="module" src="./app.js?v=41"></script>
 </body>
 </html>

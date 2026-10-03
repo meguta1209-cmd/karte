@@ -1013,7 +1013,7 @@ function renderCal() {
     cal.insertAdjacentHTML("beforeend", `<div class="hd corner"></div>` + cls.map(c => {
       let f = 0;
       for (let h = SLOT_H0; h < SLOT_H1; h++) for (const mi of [0, 30]) { const d = new Date(day); d.setHours(h, mi, 0, 0); if (d >= now && !closerBusy(d, c.id, null)) f++; }
-      const g = busyMap[c.id], gs = !g ? "" : g.status === "ok" ? `<em class="gc ok" title="Googleカレンダー連携中">G</em>` : `<em class="gc ng" title="Googleカレンダーが未共有">G</em>`;
+      const g = busyMap[c.id], gs = !g ? "" : linkedSt(g.status) ? `<em class="gc ok" title="Googleカレンダー連携中${g.status === "partial" ? "（2つ目は未共有）" : ""}">G</em>` : `<em class="gc ng" title="Googleカレンダーが未共有">G</em>`;
       return `<div class="hd cl"><span><i class="dot-c" style="background:${c.color}"></i>${esc(c.name)}${gs}</span><small>空き ${f}枠</small></div>`;
     }).join(""));
     const lanesC = {};
@@ -1731,12 +1731,27 @@ $("saveName").onclick = () => {
 };
 /* Googleカレンダー連携の状態（クローザーだけ）。設定画面・カウント画面のボタン・手順の画面をまとめて更新 */
 let busyLoaded = false;
-const gcalLinked = () => !!(busyMap[U] && busyMap[U].status === "ok");
+/* カレンダーは2つ（2アカウント）まで（2026-10-03 社長の指示・石川さんの要望）。
+   連携できている＝1つ目が読めている。2つ目は任意で、2つ目だけ未共有のときは status が partial */
+const linkedSt = s => s === "ok" || s === "partial";
+const gcalLinked = () => !!(busyMap[U] && linkedSt(busyMap[U].status));
+const gcalAddr1 = () => String((me && (me.gcalEmail || me.email)) || "").trim();
+const gcalAddr2 = () => String((me && me.gcalEmail2) || "").trim();
+/* アドレスごとの状態（カレンダー連携の係が15分おきに確かめた結果） */
+function addrState(a) {
+  const g = busyMap[U], k = String(a || "").toLowerCase();
+  const s = ((g && g.emails) || []).find(x => x && x.email === k);
+  if (s) return s.status === "ok" ? "連携中" : "未共有";
+  if (g && g.email === k) return linkedSt(g.status) ? "連携中" : g.status === "not_shared" ? "未共有" : "確認待ち";   // 前の版の係が書いた分
+  return "確認待ち（15分以内）";
+}
+const invLabel = (v, a1, a2) => v === "2" ? "2つ目だけ（" + a2 + "）" : v === "both" ? "両方（同じ招待が2通）" : "1つ目だけ（" + a1 + "）";
 function gcalState() {
   const g = busyMap[U];
   const at = g && g.updatedAt ? hm(g.updatedAt) + " 確認" : "";
   if (!g) return {cls: "", pill: "未共有", text: "まだ共有されていません。共有すると15分以内に「連携できました」に変わります"};
   if (g.status === "ok") return {cls: "ok", pill: "連携中", text: "予定を読み込めています（" + at + "）"};
+  if (g.status === "partial") return {cls: "ok", pill: "連携中", text: "1つ目は読み込めています。2つ目はまだ共有されていません（" + at + "）"};
   if (g.status === "no_email") return {cls: "ng", pill: "未共有", text: "アドレスが入っていません（" + at + "）"};
   return {cls: "ng", pill: "未共有", text: (g.email ? g.email + " の" : "") + "カレンダーがまだ共有されていません（" + at + "）"};
 }
@@ -1747,8 +1762,13 @@ function renderGcal() {
   $("gcalNag").hidden = !closer || linked || !busyLoaded;
   if (!closer) return;
   if (document.activeElement !== $("gcalEmail")) $("gcalEmail").value = me.gcalEmail || me.email || "";
+  if (document.activeElement !== $("gcalEmail2")) $("gcalEmail2").value = me.gcalEmail2 || "";
   $("gcalPill").className = "pill " + st.cls; $("gcalPill").textContent = st.pill;
   $("gcalStatus").textContent = st.text;
+  const a1 = gcalAddr1(), a2 = gcalAddr2();
+  $("gcalAddrs").innerHTML = a2 ? [a1, a2].map((a, i) => `${i + 1}つ目 ${esc(a)}：<b>${esc(addrState(a))}</b>`).join("<br>") : "";
+  $("invRow").hidden = !a2;
+  $("invNow").textContent = invLabel(me.gcalInvite, a1, a2);
   $("gcalHow").hidden = linked; $("openGuide").hidden = linked;
   renderGuideStatus();
 }
@@ -1761,10 +1781,13 @@ function renderGuideStatus() {
   $("ggSteps").hidden = linked;
   $("ggNag").hidden = $("ggLater").hidden = $("ggOpenCal").hidden = linked;
   $("ggClose").hidden = !linked;   // 共有がまだのうちは「あとで」と「設定を開く」だけ。済んだら「完了」
+  const a2 = gcalAddr2();
+  $("ggSt2").textContent = a2 ? "2つ目 " + a2 + "：" + addrState(a2) + "（アポの招待：" + invLabel(me.gcalInvite, gcalAddr1(), a2) + "）" : "使わない人は空のままでOK";
 }
 function openGcalGuide() {
   if (!me) return;
   if (document.activeElement !== $("ggEmail")) $("ggEmail").value = me.gcalEmail || me.email || "";
+  if (document.activeElement !== $("ggEmail2")) $("ggEmail2").value = me.gcalEmail2 || "";
   $("ggScrim").hidden = $("gcalGuide").hidden = false;
   renderGuideStatus();
 }
@@ -1800,7 +1823,41 @@ function saveGcalEmail(v) {
 }
 $("saveGcal").onclick = () => saveGcalEmail($("gcalEmail").value);
 $("ggSave").onclick = () => saveGcalEmail($("ggEmail").value);
-document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("gcalGuide").hidden) closeGcalGuide(); });
+/* 2つ目のカレンダー。新しく入れた・変えたときは、アポの招待をどちらに届けるかを選んでもらう */
+function saveGcalEmail2(v) {
+  v = String(v || "").trim();
+  if (v && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v)) { toast("アドレスの形が正しくありません"); return; }
+  if (v && v.toLowerCase() === gcalAddr1().toLowerCase()) { toast("1つ目と同じアドレスです"); return; }
+  const before = gcalAddr2();
+  const upd = {gcalEmail2: v};
+  if (!v) upd.gcalInvite = "1";   // 2つ目を消したら、招待は1つ目へ
+  updateDoc(doc(db, "members", U), upd).then(() => {
+    toast(v ? "2つ目を保存しました。15分以内に確認されます" : "2つ目を消しました（アポの招待は1つ目に届きます）");
+    if (v && v.toLowerCase() !== before.toLowerCase()) openInvite(v);
+  }).catch(e => toast(errMsg(e)));
+}
+$("saveGcal2").onclick = () => saveGcalEmail2($("gcalEmail2").value);
+$("ggSave2").onclick = () => saveGcalEmail2($("ggEmail2").value);
+/* アポの招待はどちらに届けますか？（1つ目だけ／2つ目だけ／両方。あとから設定で変えられる） */
+function openInvite(a2) {
+  a2 = a2 || gcalAddr2(); if (!a2) return;
+  const a1 = gcalAddr1(), cur = me.gcalInvite || "1";
+  $("invOpts").innerHTML = [["1", "1つ目だけに届ける", a1], ["2", "2つ目だけに届ける", a2], ["both", "両方に届ける", "同じ招待が2通届きます（" + a1 + " と " + a2 + "）"]]
+    .map(([v, t, s]) => `<button type="button" class="inv-opt${v === cur ? " on" : ""}" data-v="${v}" data-a2="${esc(a2)}" aria-pressed="${v === cur}"><b>${t}</b><small>${esc(s)}</small></button>`).join("");
+  $("invLater").textContent = "あとで決める（今は" + (cur === "2" ? "2つ目" : cur === "both" ? "両方" : "1つ目") + "に届く）";   // 今の設定のまま届く
+  $("invScrim").hidden = $("invDlg").hidden = false;
+}
+function closeInvite() { $("invScrim").hidden = $("invDlg").hidden = true; }
+$("invOpts").onclick = e => {
+  const b = e.target.closest(".inv-opt"); if (!b) return;
+  const v = b.dataset.v, a2 = b.dataset.a2;
+  closeInvite();
+  updateDoc(doc(db, "members", U), {gcalInvite: v}).then(() => toast("アポの招待の届け先：" + invLabel(v, gcalAddr1(), a2))).catch(er => toast(errMsg(er)));
+};
+$("invLater").onclick = closeInvite; $("invScrim").onclick = closeInvite;
+$("invChange").onclick = () => openInvite();
+document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("invDlg").hidden) { e.stopImmediatePropagation(); closeInvite(); } });   // 下の手順の画面までは閉じない
+document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("gcalGuide").hidden && $("invDlg").hidden) closeGcalGuide(); });
 $("myCloser").onchange = () => {
   const v = $("myCloser").checked;   // 押した瞬間の状態で決める（保存中に表示が戻ることがあるため）
   updateDoc(doc(db, "members", U), {closer: v}).then(() => {
@@ -2092,7 +2149,7 @@ function renderAdmin() {
   const act = Object.entries(members).filter(([, m]) => m.status !== "pending").sort((a, b) => (a[1].status === "removed") - (b[1].status === "removed"));
   $("memCount").textContent = act.filter(([, m]) => m.status === "active").length + "人";
   $("memList").innerHTML = act.map(([id, m]) => `<div class="row mrow"><div class="avatar" style="background:${colorOf(id)};width:28px;height:28px;font-size:12px">${esc((m.name || "?")[0])}</div>
-    <div class="t">${esc(m.name)}${m.role === "admin" ? "（管理者）" : ""}${m.status === "removed" ? ` <span class="badge pend">外した人</span>` : ""}<small>${esc(m.email)}${m.closer ? (busyMap[id] ? (busyMap[id].status === "ok" ? " ・ Googleカレンダー連携中" : " ・ Googleカレンダー未共有") : "") : ""}</small>
+    <div class="t">${esc(m.name)}${m.role === "admin" ? "（管理者）" : ""}${m.status === "removed" ? ` <span class="badge pend">外した人</span>` : ""}<small>${esc(m.email)}${m.closer ? (busyMap[id] ? (linkedSt(busyMap[id].status) ? " ・ Googleカレンダー連携中" + (busyMap[id].status === "partial" ? "（2つ目は未共有）" : "") : " ・ Googleカレンダー未共有") : "") : ""}</small>
       ${m.status === "active" ? `<select class="job-sel" data-id="${esc(id)}" aria-label="${esc(m.name)}さんの役職">${m.job ? "" : `<option value="" selected>役職を選ぶ</option>`}${JOBS.map(j => `<option${m.job === j ? " selected" : ""}>${j}</option>`).join("")}</select>` : (m.job ? `<span class="badge job">${esc(m.job)}</span>` : "")}</div>
     <div class="acts2">${m.status === "active" ? `<button data-a="closer" data-id="${esc(id)}" aria-pressed="${!!m.closer}" class="${m.closer ? "ok" : ""}">${m.closer ? "クローザー" : "クローザーにする"}</button>` : ""}
     ${m.role !== "admin" ? (m.status === "active" ? `<button class="ng" data-a="rm" data-id="${esc(id)}">外す</button>` : `<button data-a="back" data-id="${esc(id)}">戻す</button>`) : ""}</div></div>`).join("");
