@@ -17,7 +17,13 @@ import {
   doc, collection, query, where, orderBy, documentId, onSnapshot, getDoc, getDocs, setDoc, updateDoc, deleteDoc,
   writeBatch, runTransaction, increment, Timestamp, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { firebaseConfig } from "./firebase-config.js";
+/* 会社ごとの設定（2026-10-03 他社版）。置き場（/karte/team/・/karte/team2/ …）ごとに firebase-config.js だけが違う。
+   * で読むのは、古い firebase-config.js（TENANT が無い）がとっておかれていても止まらないように */
+import * as CFG from "./firebase-config.js";
+const firebaseConfig = CFG.firebaseConfig;
+const TENANT = CFG.TENANT || {};
+const LS = TENANT.ls || "";                          // この端末に覚えておく物の名前の頭（同じサイトのほかの会社の分と混ぜない）
+const PRE_LABEL = TENANT.preLabel || "10月より前";    // KPIに数えない「アプリを使う前に取った案件」の呼び方
 
 const ADMIN_EMAIL = "meguta1209@gmail.com";
 const fb = initializeApp(firebaseConfig);
@@ -81,8 +87,8 @@ const today = () => dayStart(new Date());
 const esc = s => String(s == null ? "" : s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const toLocal = d => d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()) + "T" + pad(d.getHours()) + ":" + pad(d.getMinutes());
 const tsd = v => v && typeof v.toDate === "function" ? v.toDate() : (v instanceof Date ? v : null);
-const lsGet = (k, d) => { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (_) { return d; } };
-const lsSet = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (_) {} };
+const lsGet = (k, d) => { try { const v = localStorage.getItem(LS + k); return v == null ? d : JSON.parse(v); } catch (_) { return d; } };
+const lsSet = (k, v) => { try { localStorage.setItem(LS + k, JSON.stringify(v)); } catch (_) {} };
 let tt;
 /* 結果ボタンの意味の一覧 */
 function openHelp() {
@@ -147,7 +153,8 @@ const OLD_BADGE = `<span class="badge old">前のカウンター</span>`;   // �
 /* 10月より前（アプリを使う前）に取った案件。カレンダーには普通の商談と同じに入れるが、KPIに数えないので
    日ごとの集計（stats）には足さない。取った日は 9/30 として持つ（社長の指示 2026-10-02） */
 const PRE_DAY = "2026-09-30";
-const PRE_BADGE = `<span class="badge pre">10月より前</span>`;
+const PRE_BADGE = `<span class="badge pre">${esc(PRE_LABEL)}</span>`;
+$("mPreTxt").textContent = PRE_LABEL + "に取った案件（KPIに数えない）";
 const CX_BADGE = `<span class="badge cx">キャンセル</span>`;
 const isAdminMe = () => !!(me && me.role === "admin");
 /* 予定を取り消せる人：アポを取った本人・管理者・そのアポのクローザー本人。
@@ -287,7 +294,7 @@ function startApp() {
   pollTeam(); teamTimer = setInterval(() => { if (document.visibilityState === "visible") pollTeam(); }, 30000);
   notifTimer = setInterval(checkNotifs, 15000);
   showTab(curTab);
-  setTimeout(() => { if (!lsGet(MOVE_SKIP, false)) refreshMove(); }, 1500);   // 前のカウンターの記録がこのブラウザに残っていれば、引っ越しの案内を出す
+  if (TENANT.move !== false) setTimeout(() => { if (!lsGet(MOVE_SKIP, false)) refreshMove(); }, 1500);   // 前のカウンターの記録がこのブラウザに残っていれば、引っ越しの案内を出す（自社だけ）
 }
 function subscribeToday() {
   listenDay = dk(today());
@@ -326,7 +333,7 @@ function renderMe() {
   $("myCloser").checked = !!me.closer;
   renderGcal();
   $("adminBox").hidden = me.role !== "admin";
-  $("lineBox").hidden = me.role !== "admin";   // 準備中の事情はメンバーには見せない
+  $("lineBox").hidden = me.role !== "admin" || TENANT.line === false;   // 準備中の事情はメンバーには見せない。他社版には出さない
 }
 const grid = $("grid");
 function buildGrid() {
@@ -494,7 +501,7 @@ function renderHist(loading) {
     const list = byDay[k].sort((a, b) => b.t - a.t);
     const a = list.filter(r => r.r === "アポ").length, c = list.filter(r => r.r === "再架電").length;
     const h = document.createElement("h2");
-    h.innerHTML = `${k === "pre" ? "10月より前に取った案件" : md(new Date(k + "T00:00")) + (k === dk(today()) ? "（今日）" : "")} <span class="aside">${a ? "アポ" + a : ""}${a && c ? "・" : ""}${c ? "再架電" + c : ""}${k === "pre" ? "（KPIに数えない）" : ""}</span>`;
+    h.innerHTML = `${k === "pre" ? esc(PRE_LABEL) + "に取った案件" : md(new Date(k + "T00:00")) + (k === dk(today()) ? "（今日）" : "")} <span class="aside">${a ? "アポ" + a : ""}${a && c ? "・" : ""}${c ? "再架電" + c : ""}${k === "pre" ? "（KPIに数えない）" : ""}</span>`;
     body.appendChild(h);
     const card = document.createElement("div"); card.className = "card";
     list.forEach(r => {
@@ -604,7 +611,7 @@ function fillBy() {
 $("mPre").onchange = () => {
   const on = $("mPre").checked;
   $("mByBox").hidden = !(on && isAdminMe());
-  $("mHint").textContent = on ? "10月より前に取った案件として、カレンダーに入れます。KPI（架電数・アポ数）には数えません" : "カレンダーから登録します。保存するとアポが1件増えます";
+  $("mHint").textContent = on ? PRE_LABEL + "に取った案件として、カレンダーに入れます。KPI（架電数・アポ数）には数えません" : "カレンダーから登録します。保存するとアポが1件増えます";
 };
 /* 入力の途中で、暗いところを押したり Esc を押したりして閉じても消えないように：
    開いた時から中身が変わっていたら、1回目は知らせるだけ（保存ボタンを揺らす）、もう一度で閉じる */
@@ -867,7 +874,7 @@ $("mSave").onclick = async () => {
       slots = slots.filter(s => s.recId !== rec.id && s.id !== sid).concat([{id: sid, day: dk(w), time: hm(w), when: w, dur: APO_MIN, closer: cl, uid: rec.owner || U, recId: rec.id, shop: m.shop, tel: m.tel, text: m.text, info: m.info || "", ...(rec.pre ? {pre: true} : {})}]);
       if (curTab === "cal") renderCal();
       closeMemo();
-      toast((rec.draft ? (rec.pre ? "10月より前の案件として登録しました（KPIには数えません）" : "アポを登録しました（アポ+1）") : "保存しました。" + md(w) + " " + hm(w)) + "（クローザー " + CNAME(cl) + (rec.pre && rec.owner !== U ? "・獲得 " + nameOf(rec.owner) : "") + "）");
+      toast((rec.draft ? (rec.pre ? PRE_LABEL + "の案件として登録しました（KPIには数えません）" : "アポを登録しました（アポ+1）") : "保存しました。" + md(w) + " " + hm(w)) + "（クローザー " + CNAME(cl) + (rec.pre && rec.owner !== U ? "・獲得 " + nameOf(rec.owner) : "") + "）");
     } else if (rec.r === "アポ") {
       const b = writeBatch(db);
       b.update(doc(db, "records", rec.id), {memo: m, undated: true, pending: false, slotId: null});   // 日時が無いアポは「日時未定のアポ」に出す（前のカウンターから来たアポも同じ）
@@ -1155,7 +1162,7 @@ function showApoDetail(d, list, past) {
   const free = freeClosers(d, null);
   $("adBody").innerHTML = list.map(s => `<div class="ad-row"><b>${esc(s.shop || "（店名なし）")}</b>${s.pre ? PRE_BADGE : ""}
     <small class="num">${md(s.when)} ${hm(s.when)}〜${hm(apoEnd(s))}</small>
-    <small><i class="dot-c" style="background:${CCOL(s.closer)}"></i>クローザー ${esc(CNAME(s.closer))} ・ 獲得 ${esc(nameOf(s.uid))}${s.pre ? "（10月より前・KPIに数えない）" : ""}</small>
+    <small><i class="dot-c" style="background:${CCOL(s.closer)}"></i>クローザー ${esc(CNAME(s.closer))} ・ 獲得 ${esc(nameOf(s.uid))}${s.pre ? "（" + esc(PRE_LABEL) + "・KPIに数えない）" : ""}</small>
     ${s.tel ? `<a class="ad-tel num" href="${telHref(s.tel)}">☎ ${esc(s.tel)}</a>` : ""}
     ${s.text ? `<div>${esc(s.text)}</div>` : ""}
     ${s.info ? `<div class="ad-info">${esc(s.info)}</div>` : ""}
@@ -1959,6 +1966,7 @@ async function buildMovePlan() {
   return {rows, add: rows.reduce((a, r) => a + r.add.length, 0), has: true};
 }
 async function refreshMove() {
+  if (TENANT.move === false) { $("moveNag").hidden = $("moveRow").hidden = true; return; }   // 他社版：前のカウンターは無い（同じ端末に自社の前の記録があっても読まない）
   if (!U || !me || me.status !== "active" || moving) return;
   if (!itemsLoaded) { setTimeout(refreshMove, 1000); return; }   // 項目名を合わせるので、項目が届いてから
   const who = U;

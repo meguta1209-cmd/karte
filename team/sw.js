@@ -9,7 +9,10 @@
    - キャッシュ削除は "team-" で始まるものだけ。caches.keys() は
      オリジン全体を返すので、無条件に消すと訪販カルテのキャッシュまで消える。
 */
-const CACHE = "team-v42";
+const VER = "team-v43";
+/* 同じサイトに会社ごとの置き場（/karte/team/・/karte/team2/ …）が並ぶので、キャッシュの名前に置き場の住所を付けて分ける
+   （2026-10-03 他社版。前は "team-v42" だけだったので、ほかの置き場の分まで消してしまうおそれがあった） */
+const CACHE = VER + "@" + new URL("./", self.location).pathname;
 const ASSETS = [
   "./",
   "./index.html",
@@ -39,7 +42,8 @@ self.addEventListener("activate", e => {
   e.waitUntil(
     caches.keys()
       .then(keys => Promise.all(
-        keys.filter(k => k.startsWith("team-") && k !== CACHE)
+        // 消すのは「自分の置き場の古い版」と「置き場の印が無い前の形」だけ（ほかの会社の置き場の分は消さない）
+        keys.filter(k => k.startsWith("team-v") && k !== CACHE && (!k.includes("@") || k.endsWith("@" + scopePath())))
             .map(k => caches.delete(k))
       ))
       .then(() => self.clients.claim())
