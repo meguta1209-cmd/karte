@@ -691,6 +691,27 @@ function setTaskQuick() {
   }
   opts.forEach(([l, d]) => { const b = document.createElement("button"); b.type = "button"; b.textContent = l; b.onclick = () => $("tWhen").value = toLocal(d); q.appendChild(b); });
 }
+/* 担当は役職ごとのタブ（プレイヤー／事務／管理職）で分けて選ぶ（社長の指示 2026-10-03「案②でいこう」）。
+   管理者も自分の役職のところに出す（社長「出して！」。前の v28 で管理者を外したのは、渡邉さんが「管理職」のことを書いていたため。
+   SHOW_ADMIN_IN_TASK を false にすると、前と同じく管理者を出さない＝自分ともう担当になっている人だけ出す） */
+const WHO_GROUPS = ["プレイヤー", "事務", "管理職"];
+const SHOW_ADMIN_IN_TASK = true;
+let whoTab = 0;
+function whoGroups() {
+  const t = editingTask;
+  const act = Object.entries(members).filter(([id, m]) => m.status === "active" && (SHOW_ADMIN_IN_TASK || m.role !== "admin" || id === U || (t && t.uid === id)))
+    .sort((a, b) => (a[0] === U ? -1 : b[0] === U ? 1 : (a[1].name || "").localeCompare(b[1].name || "", "ja")));
+  return WHO_GROUPS.map(g => act.filter(([, m]) => (WHO_GROUPS.includes(m.job) ? m.job : "プレイヤー") === g));   // 役職なし＝プレイヤー
+}
+function renderWho() {
+  const groups = whoGroups(), cur = $("tWho").value;
+  $("tWhoTabs").innerHTML = WHO_GROUPS.map((g, i) => groups[i].length ? `<button type="button" role="tab" data-i="${i}" aria-selected="${i === whoTab}">${g}<small>${groups[i].length}</small></button>` : "").join("");
+  $("tWhoChips").innerHTML = (groups[whoTab] || []).map(([id, m]) => `<button type="button" data-id="${esc(id)}" aria-pressed="${id === cur}">${esc(m.name)}${id === U ? "（自分）" : ""}</button>`).join("");
+  const sel = members[cur];
+  $("tWhoNow").innerHTML = sel ? `担当：<b>${esc(sel.name)}${cur === U ? "（自分）" : ""}</b><small>${esc(WHO_GROUPS.includes(sel.job) ? sel.job : "プレイヤー")}</small>` : "";
+}
+$("tWhoTabs").onclick = e => { const b = e.target.closest("button[data-i]"); if (!b) return; whoTab = Number(b.dataset.i); renderWho(); };
+$("tWhoChips").onclick = e => { const b = e.target.closest("button[data-id]"); if (!b) return; $("tWho").value = b.dataset.id; renderWho(); };
 /* t: 直す予定（無ければ新しく作る）。pre: 新しく作るときの初期値 {kind, shop, tel, apoWhen} */
 function openTask(t, pre) {
   editingTask = t || null; pre = pre || {};
@@ -703,11 +724,10 @@ function openTask(t, pre) {
   $("tTel").value = t ? t.memo.tel : (pre.tel || "");
   $("tText").value = t ? t.memo.text : "";
   $("tRemind").checked = t ? t.memo.remind !== false : true;
-  /* 担当に選べるのは、有効なメンバー。管理者は選択肢に出さない（自分が管理者のとき・もう管理者が担当の予定を直すときは出す）
-     フィードバック 2026-10-02 渡邉さん「前確の担当の割り振りで管理者を選べないように」 */
-  const act = Object.entries(members).filter(([id, m]) => m.status === "active" && (m.role !== "admin" || id === U || (t && t.uid === id))).sort((a, b) => (a[0] === U ? -1 : b[0] === U ? 1 : (a[1].name || "").localeCompare(b[1].name || "", "ja")));
-  $("tWho").innerHTML = act.map(([id, m]) => `<option value="${esc(id)}">${esc(m.name)}${id === U ? "（自分）" : ""}</option>`).join("");
   $("tWho").value = t ? t.uid : U;
+  const g = whoGroups().findIndex(list => list.some(([id]) => id === $("tWho").value));
+  whoTab = g < 0 ? 0 : g;   // 今の担当がいる役職のタブから開く
+  renderWho();
   $("tDelete").hidden = !t; delete $("tDelete").dataset.arm; $("tDelete").textContent = "削除";
   drawTaskKinds(); setTaskQuick();
   $("tScrim").hidden = $("taskSheet").hidden = false;

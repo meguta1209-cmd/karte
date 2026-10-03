@@ -18,7 +18,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=BIZ+UDPGothic:wght@400;700&family=Roboto+Mono:wght@500;700&display=swap">
-<link rel="stylesheet" href="./style.css?v=41">
+<link rel="stylesheet" href="./style.css?v=42">
 <script>
 /* LINEの中のブラウザではGoogleログインが通らない（途中の情報を覚えておけない）。
    LINEは ?openExternalBrowser=1 を付けると Safari / Chrome で開き直してくれるので、自動で付け直す */
@@ -371,7 +371,13 @@
       <div class="quick-lbl" id="tQuickLbl"></div>
       <div class="quick" id="tQuick"></div>
     </div>
-    <div class="fld"><label for="tWho">担当</label><select id="tWho" class="member"></select></div>
+    <div class="fld"><label id="tWhoLbl">担当</label>
+      <input type="hidden" id="tWho">
+      <div class="who-pick" role="group" aria-labelledby="tWhoLbl">
+        <div class="who-tabs" id="tWhoTabs" role="tablist" aria-label="役職"></div>
+        <div class="who-chips" id="tWhoChips"></div>
+        <div class="who-now" id="tWhoNow"></div>
+      </div></div>
     <button type="button" class="btn-paste" id="tPaste">📋 リストからコピーした店名と電話番号を貼り付け</button>
     <div class="two">
       <div class="fld"><label for="tShop">店名（あれば）</label><input id="tShop" placeholder="例）ほぐし処 こもれび"></div>
@@ -518,6 +524,6 @@
 <div class="offline" id="offline" hidden>オフライン中：つながったら送ります</div>
 <div class="toast" id="toast"></div>
 
-<script type="module" src="./app.js?v=41"></script>
+<script type="module" src="./app.js?v=42"></script>
 </body>
 </html>
