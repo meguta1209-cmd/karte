@@ -18,7 +18,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=BIZ+UDPGothic:wght@400;700&family=Roboto+Mono:wght@500;700&display=swap">
-<link rel="stylesheet" href="./style.css?v=44">
+<link rel="stylesheet" href="./style.css?v=45">
 <script>
 /* LINEの中のブラウザではGoogleログインが通らない（途中の情報を覚えておけない）。
    LINEは ?openExternalBrowser=1 を付けると Safari / Chrome で開き直してくれるので、自動で付け直す */
@@ -226,6 +226,7 @@
       <div class="card set" id="pendList"></div>
       <h2>メンバー <span class="aside" id="memCount"></span></h2>
       <div class="card set" id="memList"></div>
+      <button class="btn-plain" id="addExt" style="margin-top:8px">＋ 外部クローザーを足す（アプリにログインしない人）</button>
       <h2>届いたフィードバック <span class="aside" id="fbCount"></span></h2>
       <div class="chips" id="fbFilter"><button class="chip-btn" data-f="open" aria-pressed="true">未対応</button><button class="chip-btn" data-f="all" aria-pressed="false">すべて</button></div>
       <div class="card" id="fbInbox"></div>
@@ -252,6 +253,8 @@
         <div class="row wrap-sm"><div class="t">使うGoogleカレンダー<small>ふだんの予定を入れているGoogleアカウントのアドレス</small></div><input type="text" id="gcalEmail" inputmode="email" aria-label="Googleカレンダーのアドレス"><button class="chip-btn" id="saveGcal">保存</button></div>
         <div class="row wrap-sm"><div class="t">2つ目のGoogleカレンダー（あれば）<small>2つのアカウントで予定を入れている人だけ。2つとも空き確認に使います</small></div><input type="text" id="gcalEmail2" inputmode="email" aria-label="2つ目のGoogleカレンダーのアドレス" placeholder="例）work@example.com"><button class="chip-btn" id="saveGcal2">保存</button></div>
         <div class="row" id="invRow" hidden><div class="t">アポの招待の届け先<small id="invNow"></small></div><button class="chip-btn" id="invChange">変える</button></div>
+        <div class="row wrap-sm"><div class="t">アポ可の枠のカレンダー（あれば）<small>「この時間ならアポを入れてよい」を予定で置いているカレンダー（例：ブロック）。その時間がアプリのカレンダーで薄い緑になります</small><small id="gcalAvailSt" class="gcal-addrs"></small></div><input type="text" id="gcalAvail" inputmode="email" aria-label="アポ可の枠のカレンダーのID" placeholder="例）xxxx@group.calendar.google.com"><button class="chip-btn" id="saveGcalAvail">保存</button></div>
+        <div class="row"><div class="t">枠のカレンダーのつなぎ方<small>カレンダーIDの見つけ方と、共有のしかた</small></div><button class="chip-btn" id="openAvHow">手順を開く</button></div>
       </div>
       <button class="btn-plain" id="openGuide" style="margin-top:8px">連携の手順を開く</button>
       <div class="howto" id="gcalHow">
@@ -465,6 +468,34 @@
   <div class="ds-foot"><button id="ggLater">あとで</button><button id="ggOpenCal" class="primary">Googleカレンダーの設定を開く ↗</button><button id="ggClose" class="primary" hidden>完了</button></div>
 </div>
 
+<!-- アポ可の枠のカレンダー（例：ブロック）のつなぎ方（2026-10-06） -->
+<div class="scrim" id="avScrim" hidden></div>
+<div class="daysum" id="avDlg" role="dialog" aria-modal="true" aria-labelledby="avTitle" hidden>
+  <div class="ds-head"><h3 id="avTitle">🟩 アポ可の枠のカレンダーをつなぐ</h3></div>
+  <p class="ds-note">「この時間ならアポを入れてよい」を予定として置いているGoogleカレンダー（例：「ブロック」）をつなぐと、その時間がアプリのカレンダーで薄い緑になります。ふだんの予定のカレンダーとは別のカレンダーにしてください。</p>
+  <ol class="av-steps">
+    <li>パソコンでGoogleカレンダーを開く（下のボタン）</li>
+    <li>左の「マイカレンダー」で、そのカレンダー（例：ブロック）にマウスを当てて「︙」→「設定と共有」</li>
+    <li>「特定のユーザーまたはグループと共有する」に <b>meguta1209@gmail.com</b> が無ければ追加（権限は「予定の表示（時間枠のみ、詳細は非表示）」でOK）</li>
+    <li>下のほうの「カレンダーの統合」にある「カレンダー ID」（…@group.calendar.google.com）をコピー</li>
+    <li>アプリの設定の「アポ可の枠のカレンダー」に貼って［保存］。15分以内に、カレンダーに緑の枠が出ます</li>
+  </ol>
+  <p class="ds-note"><b>枠の予定の入れ方：</b>時間を決めて入れ、「予定あり」のままにしてください。終日の予定や「予定なし（空き時間）」にした予定は読めません。</p>
+  <div class="ds-foot"><button id="avOpenCal">Googleカレンダーの設定を開く ↗</button><button id="avClose" class="primary">閉じる</button></div>
+</div>
+
+<!-- 外部クローザー（アプリにログインしない人）の登録・編集（管理者・2026-10-06） -->
+<div class="scrim" id="extScrim" hidden></div>
+<div class="daysum ext-form" id="extDlg" role="dialog" aria-modal="true" aria-labelledby="extTitle" hidden>
+  <div class="ds-head"><h3 id="extTitle">外部クローザーを足す</h3></div>
+  <p class="ds-note">アプリにログインしない人（商談をする側の人など）を、商談の担当（クローザー）に足します。チームの記録・KPI・予定の担当には入りません。アポが入ると、Googleカレンダーの招待（店名・電話・案件情報入り）が下の「招待を送るアドレス」に届きます。自動でクローザーを選ぶときは、社内のクローザーが埋まっているときだけこの人になります。</p>
+  <div class="fld"><label for="extName">名前</label><input id="extName" maxlength="20" placeholder="例）阪本蓮"></div>
+  <div class="fld"><label for="extMail">招待を送るアドレス</label><input id="extMail" inputmode="email" placeholder="例）name@example.com"></div>
+  <div class="fld"><label for="extCal">予定を見るカレンダー<small>空きの確認に使います。空なら招待のアドレスと同じ。meguta1209@gmail.com に共有されている必要があります</small></label><input id="extCal" inputmode="email"></div>
+  <div class="fld"><label for="extAvail">アポ可の枠のカレンダー（あれば）<small>「この時間ならアポを入れてよい」の予定を置いているカレンダーのID</small></label><input id="extAvail" inputmode="email"></div>
+  <div class="ds-foot"><button id="extCancel">やめる</button><button id="extSave" class="primary">保存</button></div>
+</div>
+
 <!-- 2つ目のカレンダーを登録したとき：アポの招待をどちらに届けるかを選ぶ -->
 <div class="scrim" id="invScrim" hidden></div>
 <div class="daysum invd" id="invDlg" role="dialog" aria-modal="true" aria-labelledby="invTitle" hidden>
@@ -524,6 +555,6 @@
 <div class="offline" id="offline" hidden>オフライン中：つながったら送ります</div>
 <div class="toast" id="toast"></div>
 
-<script type="module" src="./app.js?v=44"></script>
+<script type="module" src="./app.js?v=45"></script>
 </body>
 </html>

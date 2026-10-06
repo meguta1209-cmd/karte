@@ -803,3 +803,18 @@ img{max-width:100%;}
 .who-now{font-size:12.5px; color:var(--ink2);}
 .who-now b{color:var(--ink);}
 .who-now small{margin-left:6px; font-size:11px; color:var(--ink3);}
+/* アポ可の枠（2026-10-06 石川さんの「ブロック」カレンダー）：枠の中の空き＝薄い緑。枠の外で入れられない（AVAIL_ONLY）＝灰色の点 */
+.cal .sl.avail{background:var(--ok-soft);}
+.cal .sl.avail:hover{background:var(--blue-soft);}
+.picking .cal .sl.avail{background:var(--ok-soft); box-shadow:inset 3px 0 0 var(--ok);}
+.cal .sl.outav{background:radial-gradient(var(--rule) 1px, transparent 1.2px) 0 0/8px 8px; cursor:not-allowed;}
+.avail-wk{margin:auto 0; font-size:10px; font-weight:700; color:var(--ok); padding-left:4px;}
+.legend .lg-avail{background:var(--ok-soft); border:1px solid var(--ok);}
+.legend .lg-outav{background:radial-gradient(var(--rule2) 1px, transparent 1.2px) 0 0/4px 4px; border:1px solid var(--rule);}
+/* 外部クローザー（アプリにログインしない人） */
+.ext-tag{font-style:normal; font-size:9.5px; font-weight:700; margin-left:4px; padding:0 4px; border-radius:3px; background:var(--card2); color:var(--ink2); border:1px solid var(--rule);}
+.ext-form .fld{margin-top:10px;}
+.ext-form .fld small{display:block; color:var(--ink3); font-size:11.5px; margin-top:2px;}
+.ext-form input{width:100%;}
+.av-steps{margin:8px 0 0 18px; padding:0; font-size:13px; line-height:1.7;}
+.av-steps li{margin-bottom:4px;}

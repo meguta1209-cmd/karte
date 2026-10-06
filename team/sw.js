@@ -9,7 +9,7 @@
    - キャッシュ削除は "team-" で始まるものだけ。caches.keys() は
      オリジン全体を返すので、無条件に消すと訪販カルテのキャッシュまで消える。
 */
-const VER = "team-v44";
+const VER = "team-v45";
 /* 同じサイトに会社ごとの置き場（/karte/team/・/karte/team2/ …）が並ぶので、キャッシュの名前に置き場の住所を付けて分ける
    （2026-10-03 他社版。前は "team-v42" だけだったので、ほかの置き場の分まで消してしまうおそれがあった） */
 const CACHE = VER + "@" + new URL("./", self.location).pathname;
