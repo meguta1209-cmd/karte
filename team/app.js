@@ -155,7 +155,14 @@ function closerList() {
     .map(([id, m], i) => ({id, name: m.name, color: CLOSER_COLORS[i % CLOSER_COLORS.length], ext: isExt(m)}));
   return list.length ? list : [{id: "none", name: "担当未定", color: "#5F6368"}];
 }
-const CNAME = id => (closerList().find(c => c.id === id) || {name: id === "none" ? "担当未定" : nameOf(id)}).name;
+/* 見るだけのカレンダーの人（外部の人で、商談の担当ではない。2026-10-06 社長「阪本さんのカレンダーを見たいだけ」）。
+   カレンダーの日表示に「（閲覧）」の列で予定ありだけ出す。アポは入れない・招待も送らない・おまかせの候補にもしない */
+function viewList() {
+  return Object.entries(members).filter(([, m]) => m.status === "active" && m.calView && !m.closer)
+    .sort((a, b) => (a[1].name || "").localeCompare(b[1].name || "", "ja"))
+    .map(([id, m]) => ({id, name: m.name, color: "#9AA0A6", ext: true, view: true}));
+}
+const CNAME = id =>(closerList().find(c => c.id === id) || {name: id === "none" ? "担当未定" : nameOf(id)}).name;
 const CCOL = id => (closerList().find(c => c.id === id) || {color: "#5F6368"}).color;
 const OLD_BADGE = `<span class="badge old">前のカウンター</span>`;   // 前のカウンターから引っ越した記録の印
 /* 10月より前（アプリを使う前）に取った案件。カレンダーには普通の商談と同じに入れるが、KPIに数えないので
@@ -1045,8 +1052,9 @@ function laneLayout(list) {
 }
 const blkStyle = (s, L) => { const i = L.lane[s.id] || 0, n = L.n; return `--span:${spanOf(s)};left:calc(2px + (100% - 4px) * ${i} / ${n});width:calc((100% - 4px) / ${n}${n > 1 ? " - 2px" : ""})`; };
 function renderCal() {
-  const now = new Date(), T = today(), cls = closerList();
-  if (calCloser !== "all" && !cls.some(c => c.id === calCloser)) calCloser = "all";
+  const now = new Date(), T = today(), cls = closerList(), vws = viewList();
+  if (calCloser !== "all" && !cls.some(c => c.id === calCloser) && !vws.some(c => c.id === calCloser)) calCloser = "all";
+  const viewTap = c => toast(c.name + "さんの予定を見るだけの列です（アポはクローザーの列から入れてください）");
   $("calView").querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", b.dataset.v === calView));
   const cal = $("cal"); cal.innerHTML = "";
   cal.className = "cal " + calView;
@@ -1059,13 +1067,17 @@ function renderCal() {
     $("wkLbl").textContent = md(day);
     $("calFilter").hidden = true;
     $("legend").innerHTML = `<span><i style="background:transparent;outline:2px solid #FFD54F;outline-offset:-2px"></i>自分が取ったアポ</span><span>列＝クローザー（1人1枠）</span>` +
-      `<span><i class="lg-dot"></i>点線＝ここから始めると、ほかの商談と重なる</span><span><i class="lg-hatch"></i>斜線＝過ぎた時間・ほかの予定</span><span><em class="gc ok">G</em>＝Googleカレンダー連携中（<em class="gc ng">G</em>＝まだ共有されていない）</span>` + availLegend(cls);
-    cal.style.gridTemplateColumns = `50px repeat(${cls.length}, minmax(92px, 1fr))`;
+      `<span><i class="lg-dot"></i>点線＝ここから始めると、ほかの商談と重なる</span><span><i class="lg-hatch"></i>斜線＝過ぎた時間・ほかの予定</span><span><em class="gc ok">G</em>＝Googleカレンダー連携中（<em class="gc ng">G</em>＝まだ共有されていない）</span>` + availLegend(cls) +
+      (vws.length ? `<span><em class="ext-tag">閲覧</em>＝予定を見るだけの列（予定ありの時間だけ出る・アポは入らない）</span>` : "");
+    cal.style.gridTemplateColumns = `50px repeat(${cls.length + vws.length}, minmax(92px, 1fr))`;
     cal.insertAdjacentHTML("beforeend", `<div class="hd corner"></div>` + cls.map(c => {
       let f = 0;
       for (let h = SLOT_H0; h < SLOT_H1; h++) for (const mi of [0, 30]) { const d = new Date(day); d.setHours(h, mi, 0, 0); if (d >= now && !closerBusy(d, c.id, null)) f++; }
       const g = busyMap[c.id], gs = !g ? "" : linkedSt(g.status) ? `<em class="gc ok" title="Googleカレンダー連携中${g.status === "partial" ? "（2つ目は未共有）" : ""}">G</em>` : `<em class="gc ng" title="Googleカレンダーが未共有">G</em>`;
       return `<div class="hd cl"><span><i class="dot-c" style="background:${c.color}"></i>${esc(c.name)}${gs}${c.ext ? `<em class="ext-tag" title="アプリにログインしない外部のクローザー">外部</em>` : ""}</span><small>空き ${f}枠</small></div>`;
+    }).join("") + vws.map(c => {
+      const g = busyMap[c.id], gs = !g ? "" : linkedSt(g.status) ? `<em class="gc ok" title="Googleカレンダー連携中">G</em>` : `<em class="gc ng" title="Googleカレンダーが未共有">G</em>`;
+      return `<div class="hd cl view"><span><i class="dot-c" style="background:${c.color}"></i>${esc(c.name)}${gs}<em class="ext-tag" title="予定を見るだけ（アポは入らない）">閲覧</em></span><small>予定を見るだけ</small></div>`;
     }).join(""));
     const lanesC = {};
     cls.forEach(c => lanesC[c.id] = laneLayout(allSlots().filter(s => s.closer === c.id && s.day === dk(day) && s.when)));
@@ -1096,6 +1108,17 @@ function renderCal() {
         b.onclick = () => slotTap(d, list.length ? list : cover ? [cover] : [], past, !canStart, c.id);
         cal.appendChild(b);
       });
+      /* 見るだけの列：予定ありの斜線だけ（押してもアポは入らない） */
+      vws.forEach(c => {
+        const past = d < now, gb = gBusyAt(d, c.id);
+        const gStart = gb && (gb.s >= d || +d === +new Date(new Date(day).setHours(SLOT_H0, 0, 0, 0)));
+        const b = document.createElement("button");
+        b.className = "sl view" + (mi ? " half" : "") + (past ? " past" : "");
+        b.setAttribute("aria-label", c.name + "（閲覧） " + hm(d) + (gb ? " 予定あり" : ""));
+        b.innerHTML = (gb ? `<span class="gbusy">${gStart ? `予定あり<small>${hm(gb.s)}〜${hm(gb.e)}</small>` : ""}</span>` : "") + (+dayStart(d) === +T ? nowLine(d, now) : "");
+        b.onclick = () => viewTap(c);
+        cal.appendChild(b);
+      });
     }
     $("wkSub").textContent = (off === 0 ? "今日" : off === 1 ? "明日" : off === -1 ? "昨日" : "") + "　アポ " + count + "件 ・ 空き " + free + "枠";
     $("calToday").hidden = +calDay === +calStartDay();
@@ -1107,9 +1130,10 @@ function renderCal() {
     $("wkLbl").textContent = md(days[0]) + " 〜 " + md(days[5]);
     const wOff = Math.round((wkStart - monday(now)) / (7 * 864e5));
     const byC = s => calCloser === "all" || s.closer === calCloser;
+    const viewSel = vws.find(c => c.id === calCloser) || null;   // 見るだけの人を選んでいる（予定ありだけ・アポは入らない）
     $("calFilter").hidden = false;
-    $("calFilter").innerHTML = [{id: "all", name: "クローザー全員"}, ...cls].map(c =>
-      `<button class="chip-btn" data-c="${esc(c.id)}" aria-pressed="${calCloser === c.id}">${c.id !== "all" ? `<i class="dot-c" style="background:${c.color}"></i>` : ""}${esc(c.name)}</button>`).join("");
+    $("calFilter").innerHTML = [{id: "all", name: "クローザー全員"}, ...cls, ...vws].map(c =>
+      `<button class="chip-btn" data-c="${esc(c.id)}" aria-pressed="${calCloser === c.id}">${c.id !== "all" ? `<i class="dot-c" style="background:${c.color}"></i>` : ""}${esc(c.name)}${c.view ? "（閲覧）" : ""}</button>`).join("");
     $("legend").innerHTML = `<span>色＝クローザー</span>` + cls.map(c => `<span><i style="background:${c.color}"></i>${esc(c.name)}${c.ext ? "（外部）" : ""}</span>`).join("") +
       `<span><i style="background:transparent;outline:2px solid #FFD54F;outline-offset:-2px"></i>自分が取ったアポ</span><span><i class="lg-hatch"></i>斜線＝過ぎた時間・クローザーのほかの予定（Googleカレンダー）</span>` +
       availLegend(calCloser === "all" ? cls : cls.filter(c => c.id === calCloser));
@@ -1124,15 +1148,15 @@ function renderCal() {
       days.forEach(day => {
         const d = new Date(day); d.setHours(h, mi, 0, 0);
         const list = slotsAt(d, null).filter(byC).sort((a, b) => a.closer < b.closer ? -1 : 1);
-        const past = d < now, full = !slotOpen(d, null, calCloser);
+        const past = d < now, full = viewSel ? true : !slotOpen(d, null, calCloser);
         if (!past && !full) free++;
         count += list.length;
         /* アポ可の枠：1人に絞っているときはその人の枠、「全員」のときは枠の中で空いている人がいれば緑（名字の1文字目を添える） */
         const avC = past || full ? [] : calCloser !== "all" ? (inAvail(d, calCloser) ? cls.filter(c => c.id === calCloser) : [])
           : cls.filter(c => inAvail(d, c.id) && !closerBusy(d, c.id, null));
-        const outW = !past && !list.length && calCloser !== "all" && outOfAvail(d, calCloser) && !apoCovering(d, calCloser, null) && !gBusyAt(d, calCloser);
+        const outW = !viewSel && !past && !list.length && calCloser !== "all" && outOfAvail(d, calCloser) && !apoCovering(d, calCloser, null) && !gBusyAt(d, calCloser);
         const b = document.createElement("button");
-        b.className = "sl" + (mi ? " half" : "") + (past ? " past" : full ? " full" : " free") + (avC.length ? " avail" : "") + (outW ? " outav" : "") + (+day === +T ? " today" : "");
+        b.className = "sl" + (mi ? " half" : "") + (viewSel ? " view" + (past ? " past" : "") : (past ? " past" : full ? " full" : " free")) + (avC.length ? " avail" : "") + (outW ? " outav" : "") + (+day === +T ? " today" : "");
         b.setAttribute("aria-label", md(d) + " " + hm(d) + (list.length ? " アポ" + list.length + "件" : past ? " 過ぎた枠" : " 空き"));
         /* Googleの予定も出す。クローザーを1人に絞っているときはその人の分、「全員」のときは予定がある人の名字の1文字目を添える
            （社長「カレンダーに石川さんの予定って反映されてなくない？」2026-10-02。前は絞ったときだけ出していた）。
@@ -1145,13 +1169,14 @@ function renderCal() {
           (gAll.length ? `<span class="gbusy wk">予定あり ${gAll.map(c => esc(c.name[0])).join("・")}</span>` : "") +
           (calCloser === "all" && avC.length && !list.length && availCnt > 1 ? `<span class="avail-wk">${avC.map(c => esc(c.name[0])).join("・")}</span>` : "") +
           (+day === +T ? nowLine(d, now) : "");
-        b.onclick = () => slotTap(d, list.length ? list : cover ? [cover] : [], past, full, calCloser !== "all" ? calCloser : undefined);
+        b.onclick = viewSel ? () => viewTap(viewSel) : () => slotTap(d, list.length ? list : cover ? [cover] : [], past, full, calCloser !== "all" ? calCloser : undefined);
         cal.appendChild(b);
       });
     }
     $("wkSub").textContent = (wOff === 0 ? "今週" : wOff === 1 ? "来週" : wOff === -1 ? "先週" : "") + "　アポ " + count + "件 ・ 空き " + free + "枠";
     $("calToday").hidden = wOff === 0; $("calToday").textContent = "今週へ";
-    $("calDefs").textContent = "枠を押すと、商談の詳細を見るか、空いていればその時間から1時間半の商談を登録できます。クローザー1人につき同じ時間は1件まで" +
+    $("calDefs").textContent = viewSel ? "今は" + viewSel.name + "さんの予定（見るだけ）を表示しています。斜線の時間が予定ありです。アポはここからは入れられません。"
+      : "枠を押すと、商談の詳細を見るか、空いていればその時間から1時間半の商談を登録できます。クローザー1人につき同じ時間は1件まで" +
       (calCloser === "all" ? "で、全員が埋まっている時間だけ「埋まり」になります。" : "。今は" + CNAME(calCloser) + "さんの予定だけ表示しています。");
   }
   document.body.classList.toggle("picking", pickMode);
@@ -2248,15 +2273,16 @@ function extRow(id, m) {
   const cal = !g ? "カレンダー確認待ち" : linkedSt(g.status) ? "カレンダー連携中" : "カレンダー未共有";
   const av = m.gcalAvail ? " ・ 枠：" + availState(m.gcalAvail, g) : "";
   return `<div class="row mrow"><div class="avatar" style="background:var(--ink3);width:28px;height:28px;font-size:12px">${esc((m.name || "?")[0])}</div>
-    <div class="t">${esc(m.name)} <em class="ext-tag">外部・ログインなし</em>${m.status === "removed" ? ` <span class="badge pend">外した人</span>` : ""}<small>招待：${esc(m.email || "")} ・ ${esc(cal)}${esc(av)}</small></div>
+    <div class="t">${esc(m.name)} <em class="ext-tag">外部・${m.closer ? "商談の担当" : "見るだけ"}</em>${m.status === "removed" ? ` <span class="badge pend">外した人</span>` : ""}<small>${m.closer ? "招待" : "アドレス"}：${esc(m.email || "")} ・ ${esc(cal)}${esc(av)}</small></div>
     <div class="acts2">${m.status === "active" ? `<button data-a="extEdit" data-id="${esc(id)}">編集</button><button class="ng" data-a="rm" data-id="${esc(id)}">外す</button>` : `<button data-a="back" data-id="${esc(id)}">戻す</button>`}</div></div>`;
 }
 let extEditing = null;
 function openExt(id) {
   extEditing = id || null;
   const m = (id && members[id]) || {};
-  $("extTitle").textContent = id ? "外部クローザーを直す" : "外部クローザーを足す";
+  $("extTitle").textContent = id ? "外部の人のカレンダーを直す" : "外部の人のカレンダーを足す";
   $("extName").value = m.name || "";
+  $("extCloser").checked = !!m.closer;   // 新しく足すときは「見るだけ」（社長 2026-10-06「見たいだけ」）
   $("extMail").value = m.email || "";
   $("extCal").value = m.gcalEmail && m.gcalEmail !== m.email ? m.gcalEmail : "";
   $("extAvail").value = m.gcalAvail || "";
@@ -2270,16 +2296,18 @@ document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("extDlg
 $("extSave").onclick = () => {
   const name = $("extName").value.trim(), mail = $("extMail").value.trim(), cal = $("extCal").value.trim(), avail = $("extAvail").value.trim();
   if (!name) { toast("名前を入れてください"); return; }
-  if (!calIdOk(mail)) { toast("招待を送るアドレスの形が正しくありません"); return; }
+  if (!calIdOk(mail)) { toast("アドレスの形が正しくありません"); return; }
   if (cal && !calIdOk(cal)) { toast("予定を見るカレンダーの形が正しくありません"); return; }
   if (avail && !calIdOk(avail)) { toast("枠のカレンダーIDの形が正しくありません"); return; }
   if (avail && [mail, cal].some(a => a && a.toLowerCase() === avail.toLowerCase())) { toast("枠のカレンダーは、予定を見るカレンダーとは別のものにしてください"); return; }
   if (mail.toLowerCase() === ADMIN_EMAIL) { toast("管理者のアドレスは使えません"); return; }
-  const data = {name, email: mail, gcalEmail: cal || mail, gcalAvail: avail};
+  /* 商談の担当（closer）か、見るだけ（calView）か。見るだけの人はアポ入力・おまかせ・招待に出ない */
+  const asCloser = $("extCloser").checked;
+  const data = {name, email: mail, gcalEmail: cal || mail, gcalAvail: avail, closer: asCloser, calView: !asCloser};
   const id = extEditing;
   const p = id ? updateDoc(doc(db, "members", id), data)
-    : setDoc(doc(db, "members", "ext_" + randomId(12)), {...data, closer: true, status: "active", role: "member", external: true, job: "外部", createdAt: serverTimestamp()});
-  p.then(() => { toast(id ? name + "さんを直しました" : name + "さんを外部クローザーに足しました。15分以内にカレンダーが確認されます"); closeExt(); }).catch(e => toast(errMsg(e)));
+    : setDoc(doc(db, "members", "ext_" + randomId(12)), {...data, status: "active", role: "member", external: true, job: "外部", createdAt: serverTimestamp()});
+  p.then(() => { toast((id ? name + "さんを直しました" : name + "さんを足しました（" + (asCloser ? "商談の担当" : "見るだけ") + "）") + "。15分以内にカレンダーが確認されます"); closeExt(); }).catch(e => toast(errMsg(e)));
 };
 function randomId(n) {
   const cs = "abcdefghijklmnopqrstuvwxyz0123456789", a = new Uint8Array(n);

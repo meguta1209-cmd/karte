@@ -18,7 +18,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=BIZ+UDPGothic:wght@400;700&family=Roboto+Mono:wght@500;700&display=swap">
-<link rel="stylesheet" href="./style.css?v=45">
+<link rel="stylesheet" href="./style.css?v=46">
 <script>
 /* LINEの中のブラウザではGoogleログインが通らない（途中の情報を覚えておけない）。
    LINEは ?openExternalBrowser=1 を付けると Safari / Chrome で開き直してくれるので、自動で付け直す */
@@ -226,7 +226,7 @@
       <div class="card set" id="pendList"></div>
       <h2>メンバー <span class="aside" id="memCount"></span></h2>
       <div class="card set" id="memList"></div>
-      <button class="btn-plain" id="addExt" style="margin-top:8px">＋ 外部クローザーを足す（アプリにログインしない人）</button>
+      <button class="btn-plain" id="addExt" style="margin-top:8px">＋ 外部の人のカレンダーを足す（アプリにログインしない人）</button>
       <h2>届いたフィードバック <span class="aside" id="fbCount"></span></h2>
       <div class="chips" id="fbFilter"><button class="chip-btn" data-f="open" aria-pressed="true">未対応</button><button class="chip-btn" data-f="all" aria-pressed="false">すべて</button></div>
       <div class="card" id="fbInbox"></div>
@@ -487,11 +487,13 @@
 <!-- 外部クローザー（アプリにログインしない人）の登録・編集（管理者・2026-10-06） -->
 <div class="scrim" id="extScrim" hidden></div>
 <div class="daysum ext-form" id="extDlg" role="dialog" aria-modal="true" aria-labelledby="extTitle" hidden>
-  <div class="ds-head"><h3 id="extTitle">外部クローザーを足す</h3></div>
-  <p class="ds-note">アプリにログインしない人（商談をする側の人など）を、商談の担当（クローザー）に足します。チームの記録・KPI・予定の担当には入りません。アポが入ると、Googleカレンダーの招待（店名・電話・案件情報入り）が下の「招待を送るアドレス」に届きます。自動でクローザーを選ぶときは、社内のクローザーが埋まっているときだけこの人になります。</p>
+  <div class="ds-head"><h3 id="extTitle">外部の人のカレンダーを足す</h3></div>
+  <p class="ds-note">アプリにログインしない人（商談をする側の人など）のGoogleカレンダーを、アプリのカレンダーに出します。チームの記録・KPI・予定の担当には入りません。<br>
+    <b>ふつうは「見るだけ」</b>：日表示に「（閲覧）」の列が出て、予定ありの時間が斜線で見えます。アポは入らず、招待も送りません。</p>
   <div class="fld"><label for="extName">名前</label><input id="extName" maxlength="20" placeholder="例）阪本蓮"></div>
-  <div class="fld"><label for="extMail">招待を送るアドレス</label><input id="extMail" inputmode="email" placeholder="例）name@example.com"></div>
-  <div class="fld"><label for="extCal">予定を見るカレンダー<small>空きの確認に使います。空なら招待のアドレスと同じ。meguta1209@gmail.com に共有されている必要があります</small></label><input id="extCal" inputmode="email"></div>
+  <label class="chk-row"><input type="checkbox" id="extCloser"><span>商談の担当にもする（アポを入れられる・招待を送る）<small>チェックすると、アポ入力のクローザーに出て、アポが入るとGoogleカレンダーの招待（店名・電話・案件情報入り）が下のアドレスに届きます。おまかせでは社内のクローザーが埋まっているときだけ</small></span></label>
+  <div class="fld"><label for="extMail">アドレス（Googleアカウント）<small>予定を見るのに使います（商談の担当にしたときは招待もここへ）</small></label><input id="extMail" inputmode="email" placeholder="例）name@example.com"></div>
+  <div class="fld"><label for="extCal">予定を見るカレンダー（別のときだけ）<small>空なら上のアドレスのカレンダーを見ます。meguta1209@gmail.com に共有されている必要があります</small></label><input id="extCal" inputmode="email"></div>
   <div class="fld"><label for="extAvail">アポ可の枠のカレンダー（あれば）<small>「この時間ならアポを入れてよい」の予定を置いているカレンダーのID</small></label><input id="extAvail" inputmode="email"></div>
   <div class="ds-foot"><button id="extCancel">やめる</button><button id="extSave" class="primary">保存</button></div>
 </div>
@@ -555,6 +557,6 @@
 <div class="offline" id="offline" hidden>オフライン中：つながったら送ります</div>
 <div class="toast" id="toast"></div>
 
-<script type="module" src="./app.js?v=45"></script>
+<script type="module" src="./app.js?v=46"></script>
 </body>
 </html>
