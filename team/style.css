@@ -827,3 +827,13 @@ img{max-width:100%;}
 .ext-form .chk-row small{display:block; font-weight:400; color:var(--ink3); font-size:11.5px; margin-top:2px;}
 .ext-tag{white-space:nowrap;}
 .cal .sl.view.past{background:repeating-linear-gradient(135deg, transparent 0 5px, var(--card2) 5px 7px);}
+/* 人ごとの色つきの「予定あり」（週表示。2026-10-06 社長「阪本さんと石川さんの予定の色が分かりにくいから、分けて」）。
+   color-mix が使えない古い端末では、ふつうの灰色の斜線のまま */
+.gbusy.pp{flex-direction:row; align-items:center; gap:3px; border-left:3px solid var(--pc); padding-left:3px;
+  background:repeating-linear-gradient(135deg, color-mix(in srgb, var(--pc) 12%, var(--card)) 0 6px, color-mix(in srgb, var(--pc) 34%, var(--card)) 6px 8px);}
+.gbusy.pp b{flex:none; font-size:10.5px; color:#fff; background:var(--pc); border-radius:3px; padding:0 3px; line-height:1.5;}
+.gb-row{display:flex; gap:2px; flex:1; min-width:0;}
+.gb-row .gbusy.pp{flex:1; min-width:0; justify-content:center; padding:2px 2px 2px 3px;}
+/* 外部の人のカレンダーの【商談】【契約】：アプリのアポと同じ帯（押すと中身） */
+.ad-place{font-size:12.5px; color:var(--ink2); margin-top:4px;}
+.deal-tag{font-style:normal; font-size:9.5px; font-weight:700; margin-left:6px; padding:0 4px; border-radius:3px; background:var(--card2); color:var(--ink2); border:1px solid var(--rule);}
