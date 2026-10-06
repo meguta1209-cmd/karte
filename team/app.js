@@ -1904,9 +1904,20 @@ $("ggCopy").onclick = async () => {
   try { await navigator.clipboard.writeText(ADMIN_EMAIL); toast("コピーしました：" + ADMIN_EMAIL); }
   catch (_) { const s = getSelection(), rg = document.createRange(); rg.selectNodeContents($("gcalGuide").querySelector(".gg-mail")); s.removeAllRanges(); s.addRange(rg); toast("選択しました。コピーしてください"); }
 };
+/* アドレスの掃除。チャットやメールのリンクからコピーすると付く「mailto:」・< >・まわりのかっこや引用符・末尾の句読点・
+   前後の空白（見えない空白も）を取り、全角の英数字・＠・．は半角に（2026-10-06 阪本さんの登録が「mailto:…」のまま保存され、
+   カレンダーが読めなかった。句読点・かっこ・全角はテスター案） */
+const cleanAddr = v => {
+  let s = String(v || "").normalize("NFKC").replace(/[\u200b-\u200d\u2060\ufeff]/g, "").trim();
+  const inner = s.match(/<([^<>]+)>/); if (inner) s = inner[1].trim();   // 「名前 <x@y.com>」の形 → 中だけ
+  if (/^mailto:/i.test(s)) s = s.slice(7).split("?")[0];
+  return s.replace(/^[\s<(\[「『"'“”‘’]+|[\s>)\]」』"'“”‘’.,;:、。]+$/g, "");
+};
+/* メールの形（…@group.calendar.google.com も同じ形）。後ろ（ドメイン）は英数字・点・ハイフンだけ */
+const calIdOk = v => /^[^@\s:<>()「」『』、。,;]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/.test(v);
 function saveGcalEmail(v) {
-  v = String(v || "").trim();
-  if (v && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v)) { toast("アドレスの形が正しくありません"); return; }
+  v = cleanAddr(v);
+  if (v && !calIdOk(v)) { toast("アドレスの形が正しくありません"); return; }
   updateDoc(doc(db, "members", U), {gcalEmail: v}).then(() => toast("保存しました。15分以内に確認されます")).catch(e => toast(errMsg(e)));
 }
 $("saveGcal").onclick = () => saveGcalEmail($("gcalEmail").value);
@@ -1921,9 +1932,8 @@ function availState(a, g) {
   /* 終日の予定や「予定なし」にした予定は読めない（freeBusy に出ない）ので、0日のときは入れ方を知らせる（テスター指摘） */
   return days ? "連携中（これから3週間で " + days + "日分の枠）" : "連携中ですが、これから3週間の枠が0日です（枠の予定は時間を決めて「予定あり」で入れてください。終日・「予定なし」は読めません）";
 }
-const calIdOk = v => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v);   // メールの形（…@group.calendar.google.com も同じ形）
 function saveGcalAvail(v) {
-  v = String(v || "").trim();
+  v = cleanAddr(v);
   if (v && !calIdOk(v)) { toast("カレンダーIDの形が正しくありません（…@group.calendar.google.com）"); return; }
   if (v && [gcalAddr1(), gcalAddr2()].some(a => a && a.toLowerCase() === v.toLowerCase())) { toast("予定を見るカレンダーと同じです。枠用の別のカレンダーを入れてください"); return; }
   updateDoc(doc(db, "members", U), {gcalAvail: v}).then(() => toast(v ? "保存しました。15分以内に緑の枠が出ます" : "枠のカレンダーを外しました")).catch(e => toast(errMsg(e)));
@@ -1936,8 +1946,8 @@ $("avOpenCal").onclick = () => window.open("https://calendar.google.com/calendar
 document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("avDlg").hidden) closeAvHow(); });
 /* 2つ目のカレンダー。新しく入れた・変えたときは、アポの招待をどちらに届けるかを選んでもらう */
 function saveGcalEmail2(v) {
-  v = String(v || "").trim();
-  if (v && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v)) { toast("アドレスの形が正しくありません"); return; }
+  v = cleanAddr(v);
+  if (v && !calIdOk(v)) { toast("アドレスの形が正しくありません"); return; }
   if (v && v.toLowerCase() === gcalAddr1().toLowerCase()) { toast("1つ目と同じアドレスです"); return; }
   const before = gcalAddr2();
   const upd = {gcalEmail2: v};
@@ -2283,9 +2293,10 @@ function openExt(id) {
   $("extTitle").textContent = id ? "外部の人のカレンダーを直す" : "外部の人のカレンダーを足す";
   $("extName").value = m.name || "";
   $("extCloser").checked = !!m.closer;   // 新しく足すときは「見るだけ」（社長 2026-10-06「見たいだけ」）
-  $("extMail").value = m.email || "";
-  $("extCal").value = m.gcalEmail && m.gcalEmail !== m.email ? m.gcalEmail : "";
-  $("extAvail").value = m.gcalAvail || "";
+  /* 前に「mailto:」付きで保存された人も、開いて保存し直せば直る */
+  $("extMail").value = cleanAddr(m.email);
+  $("extCal").value = m.gcalEmail && cleanAddr(m.gcalEmail) !== cleanAddr(m.email) ? cleanAddr(m.gcalEmail) : "";
+  $("extAvail").value = cleanAddr(m.gcalAvail);
   $("extScrim").hidden = $("extDlg").hidden = false;
   setTimeout(() => $("extName").focus(), 50);
 }
@@ -2294,7 +2305,7 @@ $("addExt").onclick = () => openExt(null);
 $("extCancel").onclick = closeExt; $("extScrim").onclick = closeExt;
 document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("extDlg").hidden) closeExt(); });
 $("extSave").onclick = () => {
-  const name = $("extName").value.trim(), mail = $("extMail").value.trim(), cal = $("extCal").value.trim(), avail = $("extAvail").value.trim();
+  const name = $("extName").value.trim(), mail = cleanAddr($("extMail").value), cal = cleanAddr($("extCal").value), avail = cleanAddr($("extAvail").value);
   if (!name) { toast("名前を入れてください"); return; }
   if (!calIdOk(mail)) { toast("アドレスの形が正しくありません"); return; }
   if (cal && !calIdOk(cal)) { toast("予定を見るカレンダーの形が正しくありません"); return; }
