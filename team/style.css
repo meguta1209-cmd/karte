@@ -837,3 +837,7 @@ img{max-width:100%;}
 /* 外部の人のカレンダーの【商談】【契約】：アプリのアポと同じ帯（押すと中身） */
 .ad-place{font-size:12.5px; color:var(--ink2); margin-top:4px;}
 .deal-tag{font-style:normal; font-size:9.5px; font-weight:700; margin-left:6px; padding:0 4px; border-radius:3px; background:var(--card2); color:var(--ink2); border:1px solid var(--rule);}
+/* 日程を変える（リスケ）：カレンダーの商談の詳細に、取り消しと並べて出す */
+.ad-acts{display:flex; flex-wrap:wrap; gap:6px; margin-top:6px;}
+.ad-acts .ad-cx{margin-top:0;}
+.ad-rs{border:1px solid var(--blue); background:var(--card); color:var(--blue); border-radius:6px; padding:5px 12px; font-size:12.5px; font-weight:700;}

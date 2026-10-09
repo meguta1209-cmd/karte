@@ -595,25 +595,30 @@ function setQuick(kind) {
 }
 function openMemo(rec) {
   editing = rec; const m = rec.memo || {};
-  const kind = rec.r, timed = kind === "アポ" || kind === "再架電", mine = rec.uid === U;
-  $("mTitle").innerHTML = resChip(kind) + (kind === "アポ" ? " アポの詳細" : kind === "再架電" ? " 再架電の予定" : " メモ");
-  $("mHint").textContent = !mine ? nameOf(rec.uid) + "さんの記録です（見るだけ）" :
+  /* rs＝日程を変える（リスケ）：日時とクローザーだけ選び直す。取った本人・管理者・そのアポのクローザーが使える（中身は見るだけ） */
+  const kind = rec.r, timed = kind === "アポ" || kind === "再架電", rs = !!rec.rs, mine = rec.uid === U && !rs;
+  $("mTitle").innerHTML = resChip(kind) + (rs ? " 日程を変える（リスケ）" : kind === "アポ" ? " アポの詳細" : kind === "再架電" ? " 再架電の予定" : " メモ");
+  $("mHint").textContent = rs ? "今：" + md(m.when) + " " + hm(m.when) + "〜" + hm(new Date(m.when.getTime() + APO_MIN * 6e4)) + "（クローザー " + CNAME(m.closer) + "）。新しい日時" +
+      (rsCloserFixed(rec) ? "" : "とクローザー") + "を選んで［日程を変える］を押してください。同じアポのまま日時だけ変わります（KPIの数はそのまま。クローザーのGoogleカレンダーと営業結果シートも新しい日時に変わります）" :
+    !mine ? nameOf(rec.uid) + "さんの記録です（見るだけ）" :
     rec.draft ? "カレンダーから登録します。保存するとアポが1件増えます" :
     rec.canceled ? "キャンセルした記録です" + (m.when ? "（元の日時 " + md(m.when) + " " + hm(m.when) + "）" : "") + "。日時を入れずに保存するとメモだけ保存（キャンセルのまま）。新しい日時を入れて保存すると、もう一度" + (kind === "アポ" ? "アポ" : "予定") + "として入ります" :
     hm(rec.t) + " の記録" + (timed ? "。日時を入れるとリマインドに出ます" : "");
   $("mShop").value = m.shop || ""; $("mTel").value = m.tel || ""; $("mText").value = m.text || "";
   $("mInfo").value = m.info || ""; $("mInfoBox").hidden = kind !== "アポ";
-  $("mWhenBox").hidden = !timed; $("mRemindBox").hidden = !timed;
-  $("mPick").hidden = kind !== "アポ" || !mine;
+  $("mWhenBox").hidden = !timed; $("mRemindBox").hidden = !timed || rs;
+  $("mPick").hidden = kind !== "アポ" || !(mine || rs);
   $("mCloserBox").hidden = kind !== "アポ";
   if (timed) {
     selCloser = m.closer || "auto";
     $("mWhenLbl").textContent = kind === "アポ" ? "商談日時（1時間半）" : "かけ直す日時";
     $("mWhen").value = m.when && !rec.canceled ? toLocal(m.when) : ""; $("mRemind").checked = m.remind !== false; setQuick(kind);   // キャンセルした記録は日時を空で開く（メモを足して保存しただけで復活しないように）
   }
-  ["mShop", "mTel", "mText", "mWhen", "mInfo"].forEach(id => $(id).readOnly = !mine);
+  ["mShop", "mTel", "mText", "mInfo"].forEach(id => $(id).readOnly = !mine);
+  $("mWhen").readOnly = !(mine || rs);
   $("mPaste").hidden = !mine;
-  $("mSave").hidden = !mine; $("mSkip").textContent = mine ? "あとで" : "閉じる";
+  $("mSave").hidden = !(mine || rs); $("mSave").textContent = rs ? "日程を変える" : "保存";
+  $("mSkip").textContent = rs ? "やめる" : mine ? "あとで" : "閉じる";
   $("mUndo").hidden = !(rec.fresh && mine && !rec.draft && rec.src !== "old");
   /* カレンダーから新しく入れるアポだけ：10月より前に取った案件として（KPIに数えずに）入れられる。管理者は取った人を選べる */
   const preOk = !!rec.draft && kind === "アポ";
@@ -623,6 +628,7 @@ function openMemo(rec) {
   $("scrim").hidden = $("msheet").hidden = false;
   memoSnap = sheetSnap("msheet") + selCloser; delete $("msheet").dataset.armClose;
   if (mine) setTimeout(() => $(timed ? "mShop" : "mText").focus(), 50);
+  if (rs) setTimeout(() => $("mWhen").focus(), 50);
 }
 function fillBy() {
   const list = Object.entries(members).filter(([, m]) => m.status === "active" && !isExt(m)).sort((a, b) => (a[1].name || "").localeCompare(b[1].name || "", "ja"));
@@ -806,7 +812,7 @@ function skipMemo() {
   const r = editing, changed = memoChanged();
   const shop = $("mShop").value.trim(), tel = $("mTel").value.trim(), text = $("mText").value.trim(), info = $("mInfo").value.trim();
   closeMemo();
-  if (!r || r.uid !== U || r.draft) return;
+  if (!r || r.uid !== U || r.draft || r.rs) return;   // リスケの画面の「やめる」は何も保存しない
   const undatedApo = r.r === "アポ" && !(r.memo && r.memo.when) && !r.canceled;   // キャンセルした記録は「日時未定のアポ」に戻さない
   if (!changed) { if (undatedApo) toast("日時未定のアポとして残しました"); return; }
   const m = {...(r.memo || {}), shop, tel, text};
@@ -824,7 +830,7 @@ function skipMemo() {
 $("mSkip").onclick = skipMemo;
 /* 外側を押した・Esc：自分の記録で入力が変わっていたら「あとで」と同じく保存して閉じる（どう閉じても消えない）。
    カレンダーから開いた新しいアポ（draft）は保存すると件数が増えるので、今まで通り1回目は知らせるだけ */
-const tryCloseMemo = () => (editing && !editing.draft && editing.uid === U && memoChanged()) ? skipMemo() : guardClose("msheet", memoChanged(), closeMemo, "mSave");
+const tryCloseMemo = () => (editing && !editing.draft && !editing.rs && editing.uid === U && memoChanged()) ? skipMemo() : guardClose("msheet", memoChanged(), closeMemo, "mSave");
 $("scrim").onclick = tryCloseMemo;
 document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("msheet").hidden) tryCloseMemo(); });
 $("mWhen").addEventListener("input", checkClash);
@@ -841,7 +847,7 @@ function renderClosers() {
     if (d && isSlotTime(d)) state = c.id === "auto" ? (freeClosers(d, editing).length ? "" : "×") : (closerBusy(d, c.id, editing) ? "×" : inAvail(d, c.id) ? "アポ可" : "空き");
     if (c.id !== "auto") b.innerHTML = `<i style="background:${c.color}"></i>`;
     b.insertAdjacentHTML("beforeend", esc(c.name) + (c.ext ? "（外部）" : "") + (state ? `<small class="${state === "×" ? "ng" : "okk"}">${state}</small>` : ""));
-    b.disabled = editing && editing.uid !== U;
+    b.disabled = editing && (editing.rs ? rsCloserFixed(editing) && c.id !== (editing.memo || {}).closer : editing.uid !== U);   // リスケのクローザーは自分のまま
     b.onclick = () => { selCloser = c.id; renderClosers(); setQuick("アポ"); checkClash(); };
     box.appendChild(b);
   });
@@ -869,6 +875,7 @@ function checkClash() {
 }
 
 $("mSave").onclick = async () => {
+  if (editing && editing.rs) { saveResched(editing); return; }
   const rec = editing; if (!rec || rec.uid !== U) return;
   const w = $("mWhen").value ? new Date($("mWhen").value) : null;
   const m = {shop: $("mShop").value.trim(), tel: $("mTel").value.trim(), text: $("mText").value.trim()};
@@ -956,6 +963,84 @@ async function bookSlot(rec, m, when, remind) {
 }
 
 /* ============================================================
+   日程を変える（リスケ）（社長 2026-10-06「架電以外のアポで、リスケになったとき、すでにカレンダーに入れている予定を簡単に日程変更できる機能」）
+   ・同じ記録のまま、日時（とクローザー）だけ動かす。KPI（取った日・数）は変わらない。店名などの中身もそのまま
+   ・クローザーのGoogleカレンダーの招待は連携の係（5分おき）が同じ予定の日時を書き換え、営業結果シートは同じ行の I（商談日）を書き直す
+   ・使えるのは、取った本人・管理者・そのアポのクローザー（クローザーは自分を担当のまま動かすだけ）
+   ・前は「消して入れ直す」しかなく、KPIが減ったりシートに取り消しの行が残ったりしていた
+   ============================================================ */
+const canResched = r => !r.isTask && r.r === "アポ" && !r.canceled && !!(r.memo && r.memo.when) && (r.uid === U || isAdminMe() || isCloserOf(r));
+const rsCloserFixed = r => !(r.uid === U || isAdminMe());   // そのアポのクローザーとして動かす人は、クローザーを変えられない
+function openResched(r) {
+  if (!canResched(r)) { toast("日程を変えられるのは、アポを取った本人・管理者・そのアポのクローザーだけです"); return; }
+  openMemo({...r, rs: true});
+}
+async function openReschedById(id) {
+  let r = pendTeam.concat(pendMine).find(x => x.id === id && !x.isTask);
+  if (!r) r = await getDoc(doc(db, "records", id)).then(s => s.exists() ? recOf(s) : null).catch(() => null);
+  if (!r) { toast("記録が見つかりませんでした"); return; }
+  $("adScrim").hidden = $("apoDetail").hidden = true;
+  openResched(r);
+}
+async function saveResched(rec) {
+  const w = $("mWhen").value ? new Date($("mWhen").value) : null;
+  if (!w) { toast("新しい日時を選んでください"); return; }
+  if (!isSlotTime(w)) { toast("アポの枠の外です（10:00〜22:00・30分ごと・日曜休み）"); return; }
+  const old = rec.memo.when, oldC = rec.memo.closer;
+  const cid = rsCloserFixed(rec) ? oldC : selCloser;
+  if (cid !== "auto" && +w === +old && cid === oldC) { toast("日時もクローザーも今のままです"); return; }
+  /* カレンダーと同じく、Googleの予定・アポ可の枠も見て決める（おまかせは空いている人だけ） */
+  const cands = cid === "auto" ? freeClosers(w, rec).map(c => c.id) : closerBusy(w, cid, rec) ? [] : [cid];
+  if (!cands.length) { toast(whyNot(w, cid, rec)); return; }
+  $("mSave").disabled = true;
+  try {
+    const got = await moveApo(rec.id, w, cands);
+    closeMemo();
+    toast("日程を変えました：" + md(old) + " " + hm(old) + " → " + md(w) + " " + hm(w) + "（クローザー " + CNAME(got.closer) + "）。招待も5分以内に変わります",
+      "元に戻す", () => moveApo(rec.id, old, [oldC]).then(() => toast("元の日時に戻しました")).catch(e => toast(e && e.message === "FULL" ? "元の時間に別の商談が入ったため、戻せませんでした" : errMsg(e))), 10000);
+  } catch (e) {
+    toast(e && e.message === "FULL" ? "その時間は、ほかの商談と重なるため入れられませんでした（今入ったかもしれません）" :
+      e && e.message === "GONE" ? "このアポは消されています" : e && e.message === "CANCELED" ? "このアポは取り消されています" : errMsg(e));
+  } finally { $("mSave").disabled = false; }
+}
+/* アポを when へ動かす（cands の中で、重なる商談が無い最初のクローザー）。記録・枠をトランザクションで書く。戻り値 {closer, sid} */
+async function moveApo(recId, when, cands) {
+  const recRef = doc(db, "records", recId);
+  let out = null;
+  await runTransaction(db, async tx => {
+    const rs = await tx.get(recRef);
+    if (!rs.exists()) throw new Error("GONE");
+    const raw = rs.data();
+    if (raw.canceled) throw new Error("CANCELED");
+    const oldRef = raw.slotId ? doc(db, "slots", raw.slotId) : null;
+    const oldS = oldRef ? await tx.get(oldRef) : null;
+    let chosen = null;
+    for (const c of [...new Set(cands)]) {
+      let clash = false;
+      for (const off of OVERLAP_STEPS) {
+        const s = await tx.get(doc(db, "slots", slotIdOf(new Date(when.getTime() + off * 6e4), c)));
+        if (s.exists() && s.data().recId !== recId) { clash = true; break; }
+      }
+      if (!clash) { chosen = c; break; }
+    }
+    if (!chosen) throw new Error("FULL");
+    const m = raw.memo || {};
+    const base = oldS && oldS.exists() ? oldS.data()
+      : {uid: raw.uid, recId, dur: APO_MIN, shop: m.shop || "", tel: m.tel || "", text: m.text || "", info: m.info || "", ...(raw.pre ? {pre: true} : {})};
+    const sid = slotIdOf(when, chosen);
+    if (oldS && oldS.exists() && raw.slotId !== sid) tx.delete(oldRef);
+    tx.set(doc(db, "slots", sid), {...base, day: dk(when), time: hm(when), when: Timestamp.fromDate(when), closer: chosen});
+    tx.update(recRef, {"memo.when": Timestamp.fromDate(when), "memo.closer": chosen, slotId: sid, pending: true});
+    out = {closer: chosen, sid, base};
+  });
+  /* サーバーからの通知を待たずに、自分のカレンダーへすぐ出す */
+  slots = slots.filter(s => s.recId !== recId).concat([{...out.base, id: out.sid, day: dk(when), time: hm(when), when, closer: out.closer}]);
+  if (curTab === "cal") renderCal();
+  refreshHistSoon();
+  return out;
+}
+
+/* ============================================================
    アポカレンダー
    ============================================================ */
 const isSlotTime = d => d.getDay() !== 0 && d.getMinutes() % 30 === 0 && d.getHours() >= SLOT_H0 && d.getHours() < SLOT_H1;
@@ -1033,7 +1118,16 @@ function freeSlots(from, n) {
   return out;
 }
 const monday = d => addDays(dayStart(d), -((d.getDay() + 6) % 7));
-let wkStart = monday(new Date()), pickMode = false, pickReturn = "count", calCloser = "all";
+let wkStart = monday(new Date()), pickMode = false, pickReturn = "count", calCloser = null;   // null＝まだ決めていない（開いたときに決める）
+/* 週表示で最初に出す人（社長 2026-10-06「クローザー全員」は残して B：最初は、自分がクローザーなら自分、そうでなければ並び順の先頭の人）。
+   そのスマホで最後に選んだ人（「全員」も）を覚えておき、次からはその人。名簿が届く前は決めない */
+function defaultCalCloser(cls, vws) {
+  const saved = lsGet("team-calCloser", null);
+  if (saved && (saved === "all" || cls.some(c => c.id === saved) || vws.some(c => c.id === saved))) return saved;
+  if (cls.some(c => c.id === U)) return U;
+  return cls.length && cls[0].id !== "none" ? cls[0].id : "all";
+}
+let calBeforePick = null, calAuto = false;   // 空きを選ぶ（日切り）あいだだけ「全員」などにするので、終わったら元の人に戻す
 /* 表示：週（月〜土）か日（クローザーごとの列）。スマホは日、PCは週から始める。選んだ方を覚える */
 let calView = lsGet("team-calview", innerWidth < 640 ? "day" : "week");
 /* 日表示の最初の日：ふだんは今日。営業が終わった時間（22:00）を過ぎたら明日。日曜は次の月曜 */
@@ -1050,7 +1144,7 @@ $("wkNext").onclick = () => {
   if (calView === "day") { calDay = skipSun(calDay, 1); wkStart = monday(calDay); } else wkStart = addDays(wkStart, 7);
   renderCal();
 };
-$("calFilter").onclick = e => { const b = e.target.closest("button"); if (!b) return; calCloser = b.dataset.c; renderCal(); };
+$("calFilter").onclick = e => { const b = e.target.closest("button"); if (!b) return; calCloser = b.dataset.c; calAuto = false; if (!pickMode) lsSet("team-calCloser", calCloser); renderCal(); };
 $("calView").onclick = e => {
   const b = e.target.closest("button"); if (!b) return;
   calView = b.dataset.v; lsSet("team-calview", calView);
@@ -1089,7 +1183,11 @@ function laneLayout(list) {
 const blkStyle = (s, L) => { const i = L.lane[s.id] || 0, n = L.n; return `--span:${spanOf(s)};left:calc(2px + (100% - 4px) * ${i} / ${n});width:calc((100% - 4px) / ${n}${n > 1 ? " - 2px" : ""})`; };
 function renderCal() {
   const now = new Date(), T = today(), cls = closerList(), vws = viewList();
-  if (calCloser !== "all" && !cls.some(c => c.id === calCloser) && !vws.some(c => c.id === calCloser)) calCloser = "all";
+  /* 名簿が届く前は仮に「全員」で出し（calAuto）、届いたら決め直す */
+  const known = Object.keys(members).length > 0;
+  if (!calCloser || calAuto || (calCloser !== "all" && !cls.some(c => c.id === calCloser) && !vws.some(c => c.id === calCloser))) {
+    calCloser = known ? defaultCalCloser(cls, vws) : "all"; calAuto = !known;
+  }
   const viewTap = c => toast(c.name + "さんの予定を見るだけの列です（アポはクローザーの列から入れてください）");
   $("calView").querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", b.dataset.v === calView));
   const cal = $("cal"); cal.innerHTML = "";
@@ -1286,14 +1384,17 @@ function showApoDetail(d, list, past) {
     ${s.tel ? `<a class="ad-tel num" href="${telHref(s.tel)}">☎ ${esc(s.tel)}</a>` : ""}
     ${s.text ? `<div>${esc(s.text)}</div>` : ""}
     ${s.info ? `<div class="ad-info">${esc(s.info)}</div>` : ""}
-    ${s.recId && (s.uid === U || isAdminMe() || s.closer === U) ? `<button type="button" class="ad-cx" data-rec="${esc(s.recId)}">予定を取り消す</button>` : ""}</div>`).join("") +
+    ${s.recId && (s.uid === U || isAdminMe() || s.closer === U) ? `<div class="ad-acts"><button type="button" class="ad-rs" data-rec="${esc(s.recId)}">日程を変える（リスケ）</button><button type="button" class="ad-cx" data-rec="${esc(s.recId)}">予定を取り消す</button></div>` : ""}</div>`).join("") +
     (!past ? `<div class="ad-row"><small>この時間から1時間半とれるクローザー：${free.length ? free.map(c => esc(c.name)).join("・") : "なし"}</small></div>` : "");
   $("adNew").hidden = past || !slotOpen(d, null, calCloser);
   $("adScrim").hidden = $("apoDetail").hidden = false;
 }
 $("adNew").onclick = () => { $("adScrim").hidden = $("apoDetail").hidden = true; if (adSlot) newApoAt(adSlot); };
 $("adClose").onclick = $("adScrim").onclick = () => { $("adScrim").hidden = $("apoDetail").hidden = true; };
-$("adBody").addEventListener("click", e => { const b = e.target.closest(".ad-cx"); if (b) openCancelById(b.dataset.rec); });
+$("adBody").addEventListener("click", e => {
+  const b = e.target.closest(".ad-cx"); if (b) openCancelById(b.dataset.rec);
+  const r = e.target.closest(".ad-rs"); if (r) openReschedById(r.dataset.rec);
+});
 
 /* 日切り：メモの画面 → カレンダーで空きを選ぶ → メモの画面に戻る */
 $("mPick").onclick = () => {
@@ -1301,11 +1402,13 @@ $("mPick").onclick = () => {
   $("scrim").hidden = $("msheet").hidden = true;
   const w = $("mWhen").value ? new Date($("mWhen").value) : new Date();
   wkStart = monday(w); calDay = dayStart(w); if (calDay.getDay() === 0) calDay = addDays(calDay, 1);
+  calBeforePick = calCloser; calAuto = false;
   calCloser = selCloser === "auto" ? "all" : selCloser;
   showTab("cal");
 };
-function finishPick() { pickMode = false; document.body.classList.remove("picking"); $("pickBar").hidden = true; showTab(pickReturn); $("scrim").hidden = $("msheet").hidden = false; }
-function cancelPick() { pickMode = false; document.body.classList.remove("picking"); $("pickBar").hidden = true; $("scrim").hidden = $("msheet").hidden = false; }
+const endPick = () => { pickMode = false; document.body.classList.remove("picking"); $("pickBar").hidden = true; if (calBeforePick) calCloser = calBeforePick; calBeforePick = null; };
+function finishPick() { endPick(); showTab(pickReturn); $("scrim").hidden = $("msheet").hidden = false; }
+function cancelPick() { endPick(); $("scrim").hidden = $("msheet").hidden = false; }
 $("pickCancel").onclick = () => { cancelPick(); showTab(pickReturn); };
 
 /* 日時未定のアポ */
@@ -1473,6 +1576,7 @@ function openDetail(r) {
   if (r.isTask && mine && !r.done) acts.push(`<button class="primary" data-a="done">${r.r === "再架電" ? "かけた（結果を押す）" : "完了にする"}</button>`, `<button data-a="later">明日へ延期</button>`);
   if (!r.isTask && mine && r.r === "再架電" && !r.done && !r.canceled && w) acts.push(`<button class="primary" data-a="done">かけた（結果を押す）</button>`, `<button data-a="later">明日へ延期</button>`);
   /* アポからは、前確の予定をそのまま作れる */
+  if (canResched(r)) acts.push(`<button data-a="rs">日程を変える（リスケ）</button>`);
   if (!r.isTask && r.r === "アポ" && !r.canceled) acts.push(`<button data-a="prec">＋ 前確の予定を作る</button>`);
   /* 予定を取り消す（キャンセル／入れ間違いで消す）：取った本人・管理者・そのアポのクローザー */
   if (canCancel(r)) acts.push(`<button class="cx-btn" data-a="cx">予定を取り消す</button>`);
@@ -1495,6 +1599,7 @@ $("rdActs").onclick = e => {
   if (b.dataset.a === "later") postpone(r);
   if (b.dataset.a === "prec") openTask(null, {kind: "前確", shop: (r.memo || {}).shop, tel: (r.memo || {}).tel, apoWhen: (r.memo || {}).when});
   if (b.dataset.a === "cx") openCancel(r);
+  if (b.dataset.a === "rs") openResched(r);
 };
 
 /* ============================================================
