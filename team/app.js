@@ -9,6 +9,12 @@
        config/items    結果の項目（管理者が編集）
        imports/{uid}   前のカウンターからの引っ越しの進み具合 days.{日} = {n, last, done, skip}
    ・カレンダーとアポはリアルタイム、チームの架電数は30秒ごとに読む（無料枠に収めるため）
+   ・変更履歴（最近の分。それより前は各所のコメントと project-kekka-counter.md）
+       v50 2026-10-09 カレンダーの商談を押すと、リマインドから開いたときと同じ「記録の詳細」を出す（メモを編集・前確の予定・リスケ・取り消しが
+                      同じ決まりで使える。社長「カレンダーの予定の編集もリマインド画面から予定を開いた時と同じ機能を追加して」）。
+                      同じ時間に2件以上あるときは今までの一覧→行を押して詳細。「この時間にアポを追加」は詳細の中に残した。
+                      ついでに：同じ日にリスケしたときも通知が出るよう、鳴らした印に日時を含めた（checkNotifs）／
+                      リスケで「おまかせ」のまま日時もクローザーも変わらないときは何も書かない（管理者に「権限がありません」が出ていた。saveResched）
    ============================================================ */
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
@@ -976,11 +982,17 @@ function openResched(r) {
   openMemo({...r, rs: true});
 }
 async function openReschedById(id) {
-  let r = pendTeam.concat(pendMine).find(x => x.id === id && !x.isTask);
-  if (!r) r = await getDoc(doc(db, "records", id)).then(s => s.exists() ? recOf(s) : null).catch(() => null);
+  const r = await recById(id);
   if (!r) { toast("記録が見つかりませんでした"); return; }
-  $("adScrim").hidden = $("apoDetail").hidden = true;
+  hideApoDetail();
   openResched(r);
+}
+/* 記録を番号で取る：手元の予定（購読中の pending のアポ・再架電）にあればそれ、無ければ読む（3日より前に終わったアポなど）。
+   ほかの人の記録もメンバーなら読める（ルール records read: isActive）。読めなければ null */
+async function recById(id) {
+  const r = pendTeam.concat(pendMine).find(x => x.id === id && !x.isTask);
+  if (r) return r;
+  return getDoc(doc(db, "records", id)).then(s => s.exists() ? recOf(s) : null).catch(() => null);
 }
 async function saveResched(rec) {
   const w = $("mWhen").value ? new Date($("mWhen").value) : null;
@@ -988,9 +1000,12 @@ async function saveResched(rec) {
   if (!isSlotTime(w)) { toast("アポの枠の外です（10:00〜22:00・30分ごと・日曜休み）"); return; }
   const old = rec.memo.when, oldC = rec.memo.closer;
   const cid = rsCloserFixed(rec) ? oldC : selCloser;
-  if (cid !== "auto" && +w === +old && cid === oldC) { toast("日時もクローザーも今のままです"); return; }
   /* カレンダーと同じく、Googleの予定・アポ可の枠も見て決める（おまかせは空いている人だけ） */
   const cands = cid === "auto" ? freeClosers(w, rec).map(c => c.id) : closerBusy(w, cid, rec) ? [] : [cid];
+  /* 日時もクローザーも今のまま（おまかせなら、空いている人の先頭＝今の人）なら何も書かない。
+     前は「おまかせ」だとこの判定を通り抜けて同じ枠に書き直そうとし、管理者には「権限がありません」が出ていた（テスター 2026-10-09。
+     枠の書き換えは取った本人しかできないルールのため。日時やクローザーが変わるときは「消して作る」なので管理者・クローザーも通る） */
+  if (+w === +old && (cid === "auto" ? cands[0] === oldC : cid === oldC)) { toast("日時もクローザーも今のままです"); return; }
   if (!cands.length) { toast(whyNot(w, cid, rec)); return; }
   $("mSave").disabled = true;
   try {
@@ -1363,22 +1378,40 @@ function slotTap(d, list, past, full, closerId) {
     if (cid) selCloser = cid;
     $("mWhen").value = toLocal(d); finishPick(); setQuick("アポ"); checkClash(); return;
   }
-  if (list.length) { showApoDetail(d, list, past); return; }
+  if (list.length) { openSlotDetail(d, list, past); return; }
   if (full && !past) { toast(whyNot(d, closerId || calCloser, null)); return; }
   if (past) return;
   newApoAt(d, closerId);
+}
+/* カレンダーの商談を押したとき（社長 2026-10-09「カレンダーの予定の編集もリマインド画面から予定を開いた時と同じ機能を追加して」）：
+   1件なら、リマインドから開いたときと同じ「記録の詳細」（openDetail。メモを編集・前確の予定・リスケ・取り消しが同じ決まりで使える）。
+   同じ時間に2件以上（クローザーが別）なら今まで通りの一覧（showApoDetail）を出し、行を押すとその商談の詳細。
+   詳細に出すのは記録（records）なので、枠の recId から記録を取る。読めなければ（消された記録など）一覧のまま */
+let slotOpening = false;
+async function openSlotDetail(d, list, past) {
+  if (list.length === 1 && list[0].recId) {
+    if (slotOpening) return;   // 読んでいる間に二度押ししても1回だけ
+    slotOpening = true;
+    let r = null;
+    try { r = await recById(list[0].recId); } finally { slotOpening = false; }
+    if (r) { openDetail(r, {at: d, past}); return; }
+  }
+  showApoDetail(d, list, past);
 }
 function newApoAt(d, closerId) {
   const ref = doc(collection(db, "records"));
   const c = closerId || (calCloser === "all" ? undefined : calCloser);
   openMemo({id: ref.id, uid: U, t: new Date(), r: "アポ", memo: {when: new Date(d), remind: true, closer: c}, draft: true});
 }
-let adSlot = null;
+/* 同じ時間の商談の一覧（2件以上のとき。1件は openSlotDetail から記録の詳細へ）。行を押すとその商談の詳細（openDetail）。
+   外部の人の【商談】（showDeal）もこの画面を使う（見るだけ・行は押せない） */
+let adSlot = null, adList = [], adPast = false;
+const hideApoDetail = () => { $("adScrim").hidden = $("apoDetail").hidden = true; };
 function showApoDetail(d, list, past) {
-  adSlot = d;
+  adSlot = d; adList = list; adPast = !!past;
   $("adTitle").textContent = md(d) + " " + hm(d) + " の商談";
   const free = freeClosers(d, null);
-  $("adBody").innerHTML = list.map(s => `<div class="ad-row"><b>${esc(s.shop || "（店名なし）")}</b>${s.pre ? PRE_BADGE : ""}
+  $("adBody").innerHTML = list.map(s => `<div class="ad-row${s.recId ? " tap" : ""}"${s.recId ? ` data-open="${esc(s.recId)}" role="button" tabindex="0" aria-label="${esc(s.shop || "（店名なし）")}の詳細"` : ""}><b>${esc(s.shop || "（店名なし）")}</b>${s.pre ? PRE_BADGE : ""}${s.recId ? `<span class="ad-go">詳細 ›</span>` : ""}
     <small class="num">${md(s.when)} ${hm(s.when)}〜${hm(apoEnd(s))}</small>
     <small><i class="dot-c" style="background:${CCOL(s.closer)}"></i>クローザー ${esc(CNAME(s.closer))} ・ 獲得 ${esc(nameOf(s.uid))}${s.pre ? "（" + esc(PRE_LABEL) + "・KPIに数えない）" : ""}</small>
     ${s.tel ? `<a class="ad-tel num" href="${telHref(s.tel)}">☎ ${esc(s.tel)}</a>` : ""}
@@ -1389,12 +1422,23 @@ function showApoDetail(d, list, past) {
   $("adNew").hidden = past || !slotOpen(d, null, calCloser);
   $("adScrim").hidden = $("apoDetail").hidden = false;
 }
-$("adNew").onclick = () => { $("adScrim").hidden = $("apoDetail").hidden = true; if (adSlot) newApoAt(adSlot); };
-$("adClose").onclick = $("adScrim").onclick = () => { $("adScrim").hidden = $("apoDetail").hidden = true; };
+$("adNew").onclick = () => { hideApoDetail(); if (adSlot) newApoAt(adSlot); };
+$("adClose").onclick = $("adScrim").onclick = hideApoDetail;
 $("adBody").addEventListener("click", e => {
-  const b = e.target.closest(".ad-cx"); if (b) openCancelById(b.dataset.rec);
-  const r = e.target.closest(".ad-rs"); if (r) openReschedById(r.dataset.rec);
+  const b = e.target.closest(".ad-cx"); if (b) { openCancelById(b.dataset.rec); return; }
+  const r = e.target.closest(".ad-rs"); if (r) { openReschedById(r.dataset.rec); return; }
+  if (e.target.closest("a, button")) return;   // 電話のリンクはそのまま電話をかける
+  const row = e.target.closest("[data-open]"); if (row) openDetailFromList(row.dataset.open);
 });
+$("adBody").addEventListener("keydown", e => { const id = e.key === "Enter" && e.target.dataset && e.target.dataset.open; if (id) openDetailFromList(id); });
+/* 一覧の行 → その商談の記録の詳細。一覧はいったん閉じ、詳細を「閉じる」と一覧に戻る（別の行も見られるように） */
+async function openDetailFromList(id) {
+  const r = await recById(id);
+  if (!r) { toast("記録が見つかりませんでした"); return; }
+  const back = {d: adSlot, list: adList, past: adPast};
+  hideApoDetail();
+  openDetail(r, {at: adSlot, past: adPast, back});
+}
 
 /* 日切り：メモの画面 → カレンダーで空きを選ぶ → メモの画面に戻る */
 $("mPick").onclick = () => {
@@ -1547,12 +1591,14 @@ function postpone(r) {
   toast(md(w) + " " + hm(w) + " に延期しました");
 }
 
-/* ---------- 記録の詳細（電話番号・日時・クローザー・メモ） ---------- */
+/* ---------- 記録の詳細（電話番号・日時・クローザー・メモ） ----------
+   cal＝カレンダーの商談から開いたとき {at: 押した枠の時刻, past: 過ぎた枠か, back: 同じ時間の一覧から開いたなら、閉じたときに戻る一覧 {d, list, past}}。
+   リマインド・記録・通知から開くときは無し（2026-10-09 v50） */
 const telHref = t => "tel:" + String(t || "").replace(/[^\d+]/g, "");
-let detailRec = null;
-function openDetail(r) {
+let detailRec = null, detailBack = null;
+function openDetail(r, cal) {
   if (!r) return;
-  detailRec = r;
+  detailRec = r; detailBack = (cal && cal.back) || null;
   const m = r.memo || {}, mine = r.isTask ? canEditTask(r) : r.uid === U, w = m.when, now = new Date();
   $("rdTitle").innerHTML = resChip(r.r) + " " + esc(r.isTask ? ([r.title, m.shop].filter(Boolean).join(" ") || r.r) : (m.shop || "（店名なし）"));
   const rows = [];
@@ -1583,18 +1629,28 @@ function openDetail(r) {
   $("rdActs").innerHTML = acts.join(""); $("rdActs").hidden = !acts.length;
   $("rdEdit").hidden = !mine;
   $("rdEdit").textContent = r.isTask ? "編集" : "メモを編集";
+  /* カレンダーから開いたときだけ：同じ時間にもう1件（ほかのクローザーで）入れる。前の一覧にあった「この時間にアポを追加」と同じ条件・同じ動き */
+  const at = cal && cal.at;
+  $("rdNew").hidden = !(at && !cal.past && slotOpen(at, null, calCloser));
+  $("rdNew").onclick = () => { closeDetail({noBack: true}); newApoAt(at); };
   $("rdScrim").hidden = $("recDetail").hidden = false;
   if ($("rdCopy")) $("rdCopy").onclick = async () => {
     try { await navigator.clipboard.writeText(m.tel); toast("電話番号をコピーしました"); }
     catch (_) { const s = getSelection(), rg = document.createRange(); rg.selectNodeContents($("rdTel").querySelector("b")); s.removeAllRanges(); s.addRange(rg); toast("選択しました。コピーしてください"); }
   };
 }
-function closeDetail() { $("rdScrim").hidden = $("recDetail").hidden = true; detailRec = null; }
-$("rdClose").onclick = closeDetail; $("rdScrim").onclick = closeDetail;
-$("rdEdit").onclick = () => { const r = detailRec; closeDetail(); if (r) (r.isTask ? openTask(r) : openMemo(r)); };
+/* 閉じる。カレンダーの同じ時間の一覧から開いた詳細なら、一覧に戻る（編集などへ進むときは noBack で戻らない）。
+   戻るときの一覧は、その間に変わった枠があれば今の中身に差し替える */
+function closeDetail(opt) {
+  $("rdScrim").hidden = $("recDetail").hidden = true; detailRec = null;
+  const back = detailBack; detailBack = null;
+  if (back && !(opt && opt.noBack)) showApoDetail(back.d, back.list.map(s => allSlots().find(x => x.id === s.id) || s), back.past);
+}
+$("rdClose").onclick = () => closeDetail(); $("rdScrim").onclick = () => closeDetail();
+$("rdEdit").onclick = () => { const r = detailRec; closeDetail({noBack: true}); if (r) (r.isTask ? openTask(r) : openMemo(r)); };
 $("rdActs").onclick = e => {
   const b = e.target.closest("button"); if (!b || !detailRec) return;
-  const r = detailRec; closeDetail();
+  const r = detailRec; closeDetail({noBack: true});
   if (b.dataset.a === "done") markDone(r);
   if (b.dataset.a === "later") postpone(r);
   if (b.dataset.a === "prec") openTask(null, {kind: "前確", shop: (r.memo || {}).shop, tel: (r.memo || {}).tel, apoWhen: (r.memo || {}).when});
@@ -1611,8 +1667,7 @@ $("rdActs").onclick = e => {
    ============================================================ */
 let cxRec = null;
 async function openCancelById(id) {
-  let r = pendTeam.concat(pendMine).find(x => x.id === id && !x.isTask);
-  if (!r) r = await getDoc(doc(db, "records", id)).then(s => s.exists() ? recOf(s) : null).catch(() => null);
+  const r = await recById(id);
   if (!r) { toast("記録が見つかりませんでした"); return; }
   openCancel(r);
 }
@@ -1620,7 +1675,7 @@ function openCancel(r) {
   if (!canCancel(r)) { toast("取り消せるのは、アポを取った本人・管理者・そのアポのクローザーだけです"); return; }
   cxRec = r;
   const m = r.memo || {}, w = m.when, apo = r.r === "アポ", erase = canErase(r);
-  $("adScrim").hidden = $("apoDetail").hidden = true;
+  hideApoDetail();
   $("cxTitle").textContent = apo ? "このアポを取り消しますか？" : "この再架電の予定を取り消しますか？";
   $("cxTarget").innerHTML = `${resChip(r.r)} <b>${esc(m.shop || "（店名なし）")}</b>${r.pre ? PRE_BADGE : ""}` +
     `<small>${w ? (apo ? "商談 " : "かけ直し ") + md(w) + " " + hm(w) : "日時なし"}${apo && m.closer ? " ・ クローザー " + esc(CNAME(m.closer)) : ""} ・ ${apo ? "獲得" : "担当"} ${esc(nameOf(r.uid))}</small>`;
@@ -1630,7 +1685,7 @@ function openCancel(r) {
   $("cxDelete").hidden = !erase;
   $("cxNote").textContent = (erase ? "どちらも、" : "") + "消したあと10秒間は画面の下の［元に戻す］で戻せます" + (erase ? "" : "（記録ごと消せるのは、アポを取った本人と管理者だけです）");
   $("cxDeleteD").textContent = (r.pre ? "記録ごと消えます（KPIには元から数えていません）。" : "記録ごと消えて、KPIの" + (apo ? "アポ数と" : "") + "架電数も1件減ります（" + md(new Date(r.day + "T00:00")) + " の分）。") + slot;
-  closeDetail();
+  closeDetail({noBack: true});
   $("cxScrim").hidden = $("cxDlg").hidden = false;
 }
 function closeCancel() { $("cxScrim").hidden = $("cxDlg").hidden = true; cxRec = null; }
@@ -1737,7 +1792,8 @@ $("alDone").onclick = () => { const r = alertRec; hideAlert(); if (r) markDone(r
 $("alSnooze").onclick = () => { const r = alertRec; hideAlert(); if (r) { snoozed[r.id] = Date.now() + 5 * 6e4; } toast("5分後にもう一度出します"); };
 $("alClose").onclick = hideAlert;
 
-/* 15秒ごとに、自分の今日の予定を見て「15分前」「ちょうど」を1回ずつ出す */
+/* 15秒ごとに、自分の今日の予定を見て「15分前」「ちょうど」を1回ずつ出す。
+   鳴らした印は「記録の番号＠日時」で覚える（前は番号だけだったので、同じ日の中でリスケすると新しい日時の通知が出なかった。テスター 2026-10-09） */
 const snoozed = {};
 function checkNotifs() {
   if (!started) return;
@@ -1745,10 +1801,10 @@ function checkNotifs() {
   const fired = lsGet(key, {});
   for (const r of todayMine()) {
     if (r.memo.remind === false) continue;
-    const w = r.memo.when.getTime();
+    const w = r.memo.when.getTime(), k = r.id + "@" + w;
     if (snoozed[r.id] && now >= snoozed[r.id]) { delete snoozed[r.id]; showAlert(r, "now"); return; }
-    if (!fired[r.id + ":now"] && now >= w && now < w + 30 * 6e4) { fired[r.id + ":now"] = 1; fired[r.id + ":pre"] = 1; lsSet(key, fired); showAlert(r, "now"); return; }
-    if (!fired[r.id + ":pre"] && now >= w - 15 * 6e4 && now < w) { fired[r.id + ":pre"] = 1; lsSet(key, fired); showAlert(r, "pre"); return; }
+    if (!fired[k + ":now"] && now >= w && now < w + 30 * 6e4) { fired[k + ":now"] = 1; fired[k + ":pre"] = 1; lsSet(key, fired); showAlert(r, "now"); return; }
+    if (!fired[k + ":pre"] && now >= w - 15 * 6e4 && now < w) { fired[k + ":pre"] = 1; lsSet(key, fired); showAlert(r, "pre"); return; }
   }
 }
 

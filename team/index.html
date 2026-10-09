@@ -18,7 +18,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=BIZ+UDPGothic:wght@400;700&family=Roboto+Mono:wght@500;700&display=swap">
-<link rel="stylesheet" href="./style.css?v=49">
+<link rel="stylesheet" href="./style.css?v=50">
 <script>
 /* LINEの中のブラウザではGoogleログインが通らない（途中の情報を覚えておけない）。
    LINEは ?openExternalBrowser=1 を付けると Safari / Chrome で開き直してくれるので、自動で付け直す */
@@ -427,7 +427,8 @@
   <div class="rd-tel" id="rdTel"></div>
   <div id="rdBody"></div>
   <div class="rd-acts" id="rdActs" hidden></div>
-  <div class="ds-foot"><button id="rdEdit">メモを編集</button><button id="rdClose" class="primary">閉じる</button></div>
+  <!-- カレンダーの商談から開いたときだけ（v50）：同じ時間にもう1件入れる。下の固定の帯に置く（ノートPC・小さいスマホでも隠れないように） -->
+  <div class="ds-foot"><button type="button" class="rd-new" id="rdNew" hidden>＋ この時間にアポを追加</button><button id="rdEdit">メモを編集</button><button id="rdClose" class="primary">閉じる</button></div>
 </div>
 
 <!-- 予定を取り消す（キャンセル＝記録は残す／入れ間違い＝記録ごと消す） -->
@@ -557,6 +558,6 @@
 <div class="offline" id="offline" hidden>オフライン中：つながったら送ります</div>
 <div class="toast" id="toast"></div>
 
-<script type="module" src="./app.js?v=49"></script>
+<script type="module" src="./app.js?v=50"></script>
 </body>
 </html>
