@@ -18,7 +18,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=BIZ+UDPGothic:wght@400;700&family=Roboto+Mono:wght@500;700&display=swap">
-<link rel="stylesheet" href="./style.css?v=50">
+<link rel="stylesheet" href="./style.css?v=51">
 <script>
 /* LINEの中のブラウザではGoogleログインが通らない（途中の情報を覚えておけない）。
    LINEは ?openExternalBrowser=1 を付けると Safari / Chrome で開き直してくれるので、自動で付け直す */
@@ -182,6 +182,8 @@
   <!-- KPI -->
   <section id="v-kpi" hidden>
     <div class="kpi-top"><h1 class="screen">KPI</h1><span class="kpi-at" id="kpiAt"></span><button class="kpi-refresh" id="kpiRefresh" type="button">↻ 最新にする</button></div>
+    <!-- 毎日の日報（LINE WORKSに貼る文）をコピー。今は管理者だけに出す（v51・2026-10-10 社長） -->
+    <div class="rep-bar" id="repBar" hidden><button class="rep-btn" id="repBtn" type="button">📋 日報をコピー</button><span class="aside">獲得アポ数・週間目標・全体目標・個人コミットの文を作ります</span></div>
     <div class="filters">
       <div class="seg" id="period">
         <button data-p="today" aria-pressed="true">今日</button>
@@ -508,6 +510,40 @@
   <div class="ds-foot"><button id="invLater">あとで決める（今は1つ目に届く）</button></div>
 </div>
 
+<!-- 日報をコピー（KPIタブ。v51・2026-10-10 社長「毎日上げる日報をコピーできる機能追加して！」） -->
+<div class="scrim" id="repScrim" hidden></div>
+<div class="daysum repd" id="repDlg" role="dialog" aria-modal="true" aria-labelledby="repTitle" hidden>
+  <div class="ds-head"><h3 id="repTitle">日報をコピー</h3><label class="rep-date">日付 <input type="date" id="repDate" aria-label="日報の日付"></label></div>
+  <p class="ds-note" id="repNote"></p>
+  <textarea id="repText" spellcheck="false" aria-label="日報の文"></textarea>
+  <p class="rep-hint">文は手で直してからコピーできます（直した分は保存されません。日付を変えると作り直します）</p>
+  <div class="ds-foot"><button id="repEdit" type="button" hidden>設定を直す</button><button id="repClose" type="button">閉じる</button><button id="repCopy" type="button" class="primary">コピー</button></div>
+</div>
+
+<!-- 日報の設定（管理者だけ）：目標・名前の対応・繰り越し・週の補正 -->
+<div class="scrim" id="rpeScrim" hidden></div>
+<div class="daysum rped" id="rpeDlg" role="dialog" aria-modal="true" aria-labelledby="rpeTitle" hidden>
+  <div class="ds-head"><h3 id="rpeTitle">日報の設定を直す</h3></div>
+  <p class="ds-note">全体目標・個人コミットの累計は、アプリの集計そのままです。日報を出したあとに入ったアポは「繰り越し」で次の日の獲得アポ数に回せます（累計は変わりません）。</p>
+  <div class="fld"><label for="rpeWeek">週間目標（毎週同じ件数）</label><input id="rpeWeek" type="number" inputmode="numeric" min="1"></div>
+  <h4>名前と月の目標 <span class="aside">上から日報に出る順</span></h4>
+  <p class="rep-hint">「アプリの名前」は、メンバーの名前がその字で始まれば同じ人として数えます（「・」で区切って複数OK。例：渡邊・渡邉）。アプリにいない人は0で出ます。</p>
+  <div class="rpe-head"><span>日報の名前</span><span>月の目標</span><span>アプリの名前</span><span></span></div>
+  <div id="rpePeople"></div>
+  <button type="button" class="btn-plain rpe-add" id="rpeAddP">＋ 人を足す</button>
+  <h4>繰り越し <span class="aside">日報を出したあとに入ったアポを、次の日の獲得アポ数へ</span></h4>
+  <p class="rep-hint">「元の日」の獲得アポ数から引いて、「足す日」の獲得アポ数に足します（累計はそのまま）。</p>
+  <div class="rpe-head rpc-head"><span>元の日</span><span>足す日</span><span>人</span><span>件</span><span></span></div>
+  <div id="rpeCarry"></div>
+  <button type="button" class="btn-plain rpe-add" id="rpeAddC">＋ 繰り越しを足す</button>
+  <h4>週の補正 <span class="aside">その週の「週間目標」の数だけに足し引き</span></h4>
+  <p class="rep-hint">社長の日報の週の数とアプリの数が合わないとき、週の始まり（月曜。月の最初の週は1日）を選んで差を入れます。例：10/5の週 −1</p>
+  <div class="rpe-head rpw-head"><span>週の始まり</span><span>足し引き</span><span></span></div>
+  <div id="rpeWeekAdj"></div>
+  <button type="button" class="btn-plain rpe-add" id="rpeAddW">＋ 週の補正を足す</button>
+  <div class="ds-foot"><button id="rpeCancel" type="button">やめる</button><button id="rpeSave" type="button" class="primary">保存</button></div>
+</div>
+
 <!-- 結果ボタンの意味 -->
 <div class="scrim" id="hpScrim" hidden></div>
 <div class="daysum hpd" id="helpDlg" role="dialog" aria-modal="true" aria-labelledby="hpTitle" hidden>
@@ -558,6 +594,6 @@
 <div class="offline" id="offline" hidden>オフライン中：つながったら送ります</div>
 <div class="toast" id="toast"></div>
 
-<script type="module" src="./app.js?v=50"></script>
+<script type="module" src="./app.js?v=51"></script>
 </body>
 </html>

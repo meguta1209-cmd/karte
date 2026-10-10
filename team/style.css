@@ -851,3 +851,29 @@ img{max-width:100%;}
 .rd-new:hover{background:var(--blue-soft); color:var(--blue); border-color:var(--blue);}
 .rdetail .ds-foot{flex-wrap:wrap;}
 .ds-foot .rd-new{flex:1 0 100%; margin-top:0; min-height:40px;}
+
+/* 日報をコピー（KPIタブ。v51 2026-10-10 社長「毎日上げる日報をコピーできる機能」） */
+.rep-bar{display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin:2px 0 4px;}
+.rep-bar .aside{font-size:12px; color:var(--ink3);}
+.rep-btn{border:1px solid var(--blue); background:var(--blue); color:var(--on-blue); border-radius:999px; padding:8px 16px; font-size:13.5px; font-weight:700; white-space:nowrap;}
+.rep-btn:hover{filter:brightness(1.06);}
+.repd{z-index:56; max-width:480px;}
+.repd .ds-head{flex-wrap:wrap; align-items:center;}
+.rep-date{margin-left:auto; display:flex; align-items:center; gap:6px; font-size:12.5px; font-weight:700; color:var(--ink2);}
+.rep-date input{border:1px solid var(--rule); background:var(--card2); border-radius:8px; padding:5px 8px; font-size:16px; font-family:var(--mono);}
+#repText{width:100%; min-height:310px; border:1px solid var(--rule); background:var(--card2); border-radius:8px; padding:10px 12px; font-size:14.5px; line-height:1.5; font-family:var(--mono); resize:vertical; white-space:pre; overflow-wrap:normal;}
+.rep-hint{font-size:11.5px; color:var(--ink3); margin:6px 0 0; line-height:1.5;}
+/* 日報の設定（管理者） */
+.rped{z-index:57; max-width:540px;}
+.rped h4{margin:16px 0 2px; font-size:14px; display:flex; align-items:baseline; gap:8px; flex-wrap:wrap;}
+.rped h4 .aside{font-size:11.5px; font-weight:400; color:var(--ink3);}
+.rped .rep-hint{margin:0 0 4px;}
+.rpe-head,.rpe-row{display:grid; grid-template-columns:5.2em 4.8em 1fr 34px; gap:6px; align-items:center; margin-top:6px;}
+.rpe-head{font-size:11px; color:var(--ink3); font-weight:700; margin-top:6px;}
+.rpc-head,.rpc-row{grid-template-columns:1fr 1fr 4.6em 3.4em 34px;}
+.rpw-head,.rpw-row{grid-template-columns:1fr 5em 34px;}
+.rpe-row input{border:1px solid var(--rule); background:var(--card2); border-radius:8px; padding:7px 8px; font-size:16px; min-width:0; width:100%;}
+.rpe-row input[type=date]{padding:7px 4px; font-family:var(--mono); font-size:14px;}
+.rpe-x{border:1px solid var(--rule); background:var(--card); border-radius:8px; min-height:38px; color:var(--ink2); font-size:16px;}
+.rpe-x:hover{color:var(--red); border-color:var(--red);}
+.rpe-add{margin-top:8px; min-height:38px; font-size:13px;}

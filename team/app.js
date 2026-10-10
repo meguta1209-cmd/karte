@@ -7,9 +7,16 @@
        slots/{日_時刻_クローザー}  アポの枠。1枠1件なので二重予約できない
        stats/{日}      日ごとの集計 c.{uid}.{結果} / h.{uid}.{時}（KPIとチーム数はここだけ読む）
        config/items    結果の項目（管理者が編集）
+       config/report   日報の設定（週間目標・名前と月の目標・繰り越し・週の補正。管理者が編集。無ければ DEFAULT_REPORT）
        imports/{uid}   前のカウンターからの引っ越しの進み具合 days.{日} = {n, last, done, skip}
    ・カレンダーとアポはリアルタイム、チームの架電数は30秒ごとに読む（無料枠に収めるため）
    ・変更履歴（最近の分。それより前は各所のコメントと project-kekka-counter.md）
+       v51 2026-10-10 KPIタブに［日報をコピー］（社長「アプリのKPIの機能に、毎日上げる日報をコピーできる機能追加して！」）。
+                      日付を選ぶと【10月度】獲得アポ数／週間目標 n/20／全体目標 n/97／個人コミット の文が出て、手で直してからコピーできる。
+                      累計（全体・個人）はアプリの集計そのまま（社長「今日からの分はアプリと数字合うと思うから、それでお願い」）。
+                      日報を出したあとに入ったアポは「繰り越し」で次の日の獲得アポ数へ（10/10 渡邊 +2。社長「日報上げた後に上がってきたアポやから、今日の分に加算していいよ」）、
+                      週の数は社長の日報を正にする「週の補正」（10/5の週 −1。社長「日報を正にして計算していいよ」）。設定は config/report、管理者が［設定を直す］で変えられる。
+                      今は管理者だけに出す（REPORT_ALL で全員に切り替え可）
        v50 2026-10-09 カレンダーの商談を押すと、リマインドから開いたときと同じ「記録の詳細」を出す（メモを編集・前確の予定・リスケ・取り消しが
                       同じ決まりで使える。社長「カレンダーの予定の編集もリマインド画面から予定を開いた時と同じ機能を追加して」）。
                       同じ時間に2件以上あるときは今までの一覧→行を押して詳細。「この時間にアポを追加」は詳細の中に残した。
@@ -289,6 +296,11 @@ function startApp() {
     ITEMS = list; COL = Object.fromEntries(ITEMS.map(i => [i.k, i])); itemsLoaded = true;
     buildGrid(); renderCount();
   }, onErr("項目")));
+  /* 日報の設定（v51）。無ければ DEFAULT_REPORT。読めなくても日報以外は動くので onErr にはしない */
+  unsubs.push(onSnapshot(doc(db, "config", "report"), s => {
+    REPORT = normReport(s.exists() ? s.data() : null); reportLoaded = true;
+    if (!$("repDlg").hidden) refreshReport();   // 開いている日報は新しい設定で作り直す
+  }, e => console.error("日報の設定", e)));
   subscribeToday();
   unsubs.push(onSnapshot(query(recs, where("uid", "==", U), where("pending", "==", true)), s => {
     recPendMine = s.docs.map(recOf); loadedFlags.rec = true; rebuildPending(); cleanupOldApos();
@@ -358,6 +370,7 @@ function renderMe() {
   renderGcal();
   $("adminBox").hidden = me.role !== "admin";
   $("lineBox").hidden = me.role !== "admin" || TENANT.line === false;   // 準備中の事情はメンバーには見せない。他社版には出さない
+  $("repBar").hidden = !canReport();                                     // KPIタブの［日報をコピー］（v51。今は管理者だけ）
 }
 const grid = $("grid");
 function buildGrid() {
@@ -2029,6 +2042,187 @@ function drawChart(bk) {
   };
   svg.addEventListener("pointermove", show); svg.addEventListener("pointerdown", show); svg.addEventListener("pointerleave", () => tip.hidden = true);
 }
+
+/* ============================================================
+   日報をコピー（v51 2026-10-10。社長「アプリのKPIの機能に、毎日上げる日報をコピーできる機能追加して！」）
+   社長が毎日 LINE WORKS に上げている文を、KPIの集計（stats/{日} のアポ）から作る。見本（10/9の分）：
+     【10月度】／10月9日（金）／■獲得アポ数 竹内 3 …／■週間目標 19/20 達成率:95%／■全体目標 26/97 達成率:26.8%／■個人コミット 竹内12/27 …
+   数字の決まり：
+   ・獲得アポ数＝その日の人ごとのアポ（KPIと同じ。「KPIに数えない」案件は stats に無いので入らない）＋繰り越し
+   ・週間目標＝その週（月〜土。月の最初の週は1日から。日曜は入れない）の獲得アポ数の合計／週間目標（毎週同じ20）＋週の補正。達成率は整数の％
+   ・全体目標＝月の1日からその日までの全員のアポ／全員の目標の合計（97）。達成率は小数1けた
+   ・個人コミット＝月の1日からその日までのその人のアポ／その人の目標（竹内27・渡邊25・東海林25・高井10・原田5・寶田5）
+   ・累計（全体・個人）はアプリの集計そのまま（社長 2026-10-10「今日からの分はアプリと数字合うと思うから、それでお願い」）
+   ・繰り越し：日報を出したあとに入ったアポを次の日の獲得アポ数に回す（元の日から引いて足す日に足す。累計は変わらない）。
+     10月は「10/9→10/10 渡邊 +2」（社長「渡邊の数字に関しては、日報上げた後に上がってきたアポやから、今日の分に加算していいよ」）
+   ・週の補正：社長の日報の週の数を正にするための足し引き（その週の「週間目標」の数だけに効く）。
+     10月は「10/5の週 −1」（社長「日報を正にして計算していいよ」。日報19＝アプリ22−渡邊2−1）。10/12の週からは補正なし
+   ・名前は日報の字のまま（渡邊・寶田）。アプリの名前（竹内芽太・渡邉健太・東海林蒼・高井実桃・寳田颯志朗）との対応は match（名前の頭の字か uid）で。原田はアプリにいない→0
+   設定はぜんぶ config/report（管理者が［設定を直す］で変えられる）。無いときは DEFAULT_REPORT。
+   使えるのは今は管理者だけ（全員に見せるかは社長に確認中→ REPORT_ALL か TENANT.reportAll で切り替え）
+   ============================================================ */
+const REPORT_ALL = TENANT.reportAll === true;   // true にすると全員のKPIタブに［日報をコピー］を出す
+const canReport = () => !!me && (me.role === "admin" || REPORT_ALL);
+const DEFAULT_REPORT = {
+  weekGoal: 20,
+  people: [   // 日報に出る順。goal＝月の目標。match＝アプリの名前の頭の字（どれかで始まれば同じ人）か uid
+    {label: "竹内",   goal: 27, match: ["竹内"]},
+    {label: "渡邊",   goal: 25, match: ["渡邊", "渡邉"]},
+    {label: "東海林", goal: 25, match: ["東海林"]},
+    {label: "高井",   goal: 10, match: ["高井"]},   // 名簿は「高井実桃」（2026-10-10 社長が「実桃」から改名。名字の頭でつなぐので例外は要らない）
+    {label: "原田",   goal: 5,  match: ["原田"]},
+    {label: "寶田",   goal: 5,  match: ["寶田", "寳田"]}
+  ],
+  carry: [{from: "2026-10-09", to: "2026-10-10", label: "渡邊", n: 2}],   // 繰り越し（元の日→足す日、人、件数）
+  weekAdj: {"2026-10-05": -1}                                             // 週の補正（週の始まりの日 → 足し引き）
+};
+let REPORT = DEFAULT_REPORT, reportLoaded = false;
+const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
+/* Firestore から読んだ設定を、壊れていても使える形に */
+function normReport(d) {
+  if (!d || typeof d !== "object") return DEFAULT_REPORT;
+  const people = Array.isArray(d.people) ? d.people.filter(p => p && p.label).map(p => ({label: String(p.label), goal: Math.max(0, +p.goal || 0),
+    match: Array.isArray(p.match) && p.match.length ? p.match.map(String) : [String(p.label)]})) : DEFAULT_REPORT.people;
+  const carry = Array.isArray(d.carry) ? d.carry.filter(c => c && DAY_RE.test(c.from || "") && DAY_RE.test(c.to || "") && c.label && +c.n)
+    .map(c => ({from: c.from, to: c.to, label: String(c.label), n: +c.n})) : [];
+  const weekAdj = {}; Object.entries(d.weekAdj || {}).forEach(([k, v]) => { if (DAY_RE.test(k) && +v) weekAdj[k] = +v; });
+  return {weekGoal: +d.weekGoal > 0 ? +d.weekGoal : DEFAULT_REPORT.weekGoal, people, carry, weekAdj};
+}
+/* 日報の1人に当たるアプリのメンバー（外した人も含む。外部の人は除く） */
+function reportUids(p) {
+  return Object.keys(members).filter(id => !isExt(members[id]) && p.match.some(x => x && (id === x || String(members[id].name || "").startsWith(x))));
+}
+const apoOf = (dayDoc, uids) => uids.reduce((a, u) => a + ((((dayDoc || {}).c || {})[u] || {})["アポ"] || 0), 0);
+/* その週の始まり（月曜。月の最初の週は1日） */
+function weekStart(D) { const m0 = new Date(D.getFullYear(), D.getMonth(), 1), mon = monday(D); return mon < m0 ? m0 : mon; }
+/* 日報の数字と文を作る。dayKey＝"2026-10-09" の形 */
+async function buildReport(dayKey) {
+  const D = new Date(dayKey + "T00:00"), m0 = new Date(D.getFullYear(), D.getMonth(), 1), w0 = weekStart(D);
+  delete statCache[dk(m0) + "~" + dk(addDays(D, 1))];   // 日報はいつも最新の数で（KPIの30秒のとっておきは使わない）
+  const data = await loadStats(m0, addDays(D, 1));
+  const w0k = dk(w0), inWeek = k => k >= w0k && k <= dayKey && new Date(k + "T00:00").getDay() !== 0;
+  const carryOf = (label, k) => REPORT.carry.reduce((a, c) => a + (c.label === label ? (c.to === k ? c.n : 0) - (c.from === k ? c.n : 0) : 0), 0);
+  const missing = [];
+  const rows = REPORT.people.map(p => {
+    const uids = reportUids(p); if (!uids.length) missing.push(p.label);
+    let day = 0, month = 0, week = 0;
+    for (let d = new Date(m0); d <= D; d = addDays(d, 1)) {   // 1日からその日まで（stats が無い日＝0 でも、繰り越しの足し引きは効かせる）
+      const k = dk(d), n = apoOf(data[k], uids), adj = n + carryOf(p.label, k);   // adj＝繰り越し後のその日の獲得アポ数
+      month += n; if (k === dayKey) day = adj; if (inWeek(k)) week += adj;
+    }
+    return {label: p.label, goal: p.goal, day, month, week};
+  });
+  const weekAdj = REPORT.weekAdj[w0k] || 0, week = rows.reduce((a, r) => a + r.week, 0) + weekAdj;
+  const monthTot = rows.reduce((a, r) => a + r.month, 0), goalTot = rows.reduce((a, r) => a + r.goal, 0), wg = REPORT.weekGoal;
+  const pct0 = wg ? Math.round(week / wg * 100) : 0, pct1 = goalTot ? (monthTot / goalTot * 100).toFixed(1) : "0.0";
+  const mo = D.getMonth() + 1;
+  const text = [`【${mo}月度】`, `${mo}月${D.getDate()}日（${WD[D.getDay()]}）`, "■獲得アポ数", ...rows.map(r => `${r.label} ${r.day}`),
+    "■週間目標", `${week}/${wg}`, `達成率:${pct0}%`, "■全体目標", `${monthTot}/${goalTot}`, `達成率:${pct1}%`,
+    "■個人コミット", ...rows.map(r => `${r.label}${r.month}/${r.goal}`)].join("\n");
+  const carries = REPORT.carry.filter(c => c.to === dayKey || c.from === dayKey);
+  const notes = [`週＝${md(w0)}〜${md(D)}（日曜は入れない）`];
+  if (carries.length) notes.push("繰り越し：" + carries.map(c => `${c.label} ${c.to === dayKey ? "+" : "−"}${c.n}（${md(new Date((c.to === dayKey ? c.from : c.to) + "T00:00"))}${c.to === dayKey ? "の分を足す" : "へ回す"}）`).join("・"));
+  if (weekAdj) notes.push(`週の補正 ${weekAdj > 0 ? "+" : ""}${weekAdj}`);
+  if (missing.length) notes.push(`アプリにいない人は0（${missing.join("・")}）`);
+  return {text, note: notes.join("　")};
+}
+let repSeq = 0;
+function openReport() {
+  if (!canReport()) { toast("日報をコピーできるのは管理者だけです"); return; }
+  const t = dk(today());
+  $("repDate").max = t; $("repDate").value = t;   // 開くたびに今日から（前の日は日付を変えて選ぶ）
+  $("repEdit").hidden = !isAdminMe();
+  $("repScrim").hidden = $("repDlg").hidden = false;
+  refreshReport();
+}
+async function refreshReport() {
+  const seq = ++repSeq, k = $("repDate").value;
+  if (!DAY_RE.test(k)) { $("repText").value = ""; $("repNote").textContent = "日付を選んでください"; return; }
+  $("repNote").textContent = "計算しています…";
+  try {
+    const r = await buildReport(k);
+    if (seq !== repSeq) return;
+    $("repText").value = r.text; $("repNote").textContent = r.note;
+  } catch (e) {
+    if (seq !== repSeq) return;
+    $("repText").value = ""; $("repNote").textContent = "読み込めませんでした。閉じてもう一度開いてください";
+  }
+}
+function closeReport() { $("repScrim").hidden = $("repDlg").hidden = true; }
+$("repBtn").onclick = openReport;
+$("repDate").onchange = refreshReport;
+$("repClose").onclick = closeReport; $("repScrim").onclick = closeReport;
+document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("repDlg").hidden && $("rpeDlg").hidden) closeReport(); });
+/* コピー（電話番号のコピーと同じ書き方。コピーできない端末は全選択にして、手でコピーしてもらう） */
+$("repCopy").onclick = async () => {
+  const t = $("repText").value; if (!t.trim()) { toast("日報の文がまだできていません"); return; }
+  try { await navigator.clipboard.writeText(t); toast("日報をコピーしました。LINE WORKSに貼り付けてください"); }
+  catch (_) { $("repText").focus(); $("repText").select(); toast("選択しました。コピーしてください"); }
+};
+
+/* ---------- 日報の設定を直す（管理者） ---------- */
+const numIn = (cls, v, extra) => `<input class="${cls}" type="number" inputmode="numeric" step="1" value="${esc(v)}" ${extra || ""}>`;
+const peopleRow = p => `<div class="rpe-row"><input class="rpe-l" maxlength="10" value="${esc(p.label)}" placeholder="例）竹内">${numIn("rpe-g", p.goal, 'min="0" placeholder="目標"')}<input class="rpe-m" value="${esc(p.match.join("・"))}" placeholder="例）渡邊・渡邉"><button type="button" class="rpe-x" aria-label="この人を外す">×</button></div>`;
+const carryRow = c => `<div class="rpe-row rpc-row"><input class="rpc-f" type="date" value="${esc(c.from)}" aria-label="元の日"><input class="rpc-t" type="date" value="${esc(c.to)}" aria-label="足す日"><input class="rpc-l" maxlength="10" value="${esc(c.label)}" placeholder="人" list="rpeNames">${numIn("rpc-n", c.n, 'min="1" placeholder="件"')}<button type="button" class="rpe-x" aria-label="この繰り越しを消す">×</button></div>`;
+const weekRow = (k, v) => `<div class="rpe-row rpw-row"><input class="rpw-k" type="date" value="${esc(k)}" aria-label="週の始まり">${numIn("rpw-n", v, 'placeholder="例）-1"')}<button type="button" class="rpe-x" aria-label="この補正を消す">×</button></div>`;
+function openReportEdit() {
+  if (!isAdminMe()) { toast("設定を直せるのは管理者だけです"); return; }
+  $("rpeWeek").value = REPORT.weekGoal;
+  $("rpePeople").innerHTML = REPORT.people.map(peopleRow).join("");
+  $("rpeCarry").innerHTML = REPORT.carry.map(carryRow).join("");
+  $("rpeWeekAdj").innerHTML = Object.entries(REPORT.weekAdj).sort().map(([k, v]) => weekRow(k, v)).join("");
+  syncNameList();
+  $("rpeScrim").hidden = $("rpeDlg").hidden = false;
+}
+/* 繰り越しの「人」の候補＝日報の名前（入力しながら足した名前も出る） */
+function syncNameList() {
+  let dl = $("rpeNames"); if (!dl) { dl = document.createElement("datalist"); dl.id = "rpeNames"; $("rpeDlg").appendChild(dl); }
+  dl.innerHTML = [...$("rpePeople").querySelectorAll(".rpe-l")].map(i => i.value.trim()).filter(Boolean).map(v => `<option value="${esc(v)}">`).join("");
+}
+function closeReportEdit() { $("rpeScrim").hidden = $("rpeDlg").hidden = true; }
+$("repEdit").onclick = openReportEdit;
+$("rpeCancel").onclick = closeReportEdit; $("rpeScrim").onclick = closeReportEdit;
+document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("rpeDlg").hidden) closeReportEdit(); });
+$("rpeAddP").onclick = () => { $("rpePeople").insertAdjacentHTML("beforeend", peopleRow({label: "", goal: "", match: []})); $("rpePeople").lastElementChild.querySelector("input").focus(); };
+$("rpeAddC").onclick = () => { const k = $("repDate").value || dk(today()); $("rpeCarry").insertAdjacentHTML("beforeend", carryRow({from: dk(addDays(new Date(k + "T00:00"), -1)), to: k, label: "", n: ""})); };
+$("rpeAddW").onclick = () => { $("rpeWeekAdj").insertAdjacentHTML("beforeend", weekRow(dk(weekStart(new Date(($("repDate").value || dk(today())) + "T00:00"))), "")); };
+$("rpeDlg").addEventListener("click", e => { const b = e.target.closest(".rpe-x"); if (b) b.closest(".rpe-row").remove(); });
+$("rpeDlg").addEventListener("input", e => { if (e.target.classList.contains("rpe-l")) syncNameList(); });
+$("rpeSave").onclick = () => {
+  const weekGoal = +$("rpeWeek").value;
+  if (!(weekGoal > 0)) { toast("週間目標を入れてください"); return; }
+  const people = [...$("rpePeople").querySelectorAll(".rpe-row")].map(r => ({
+    label: r.querySelector(".rpe-l").value.trim(), goal: Math.max(0, Math.round(+r.querySelector(".rpe-g").value || 0)),
+    match: r.querySelector(".rpe-m").value.split(/[・,、\s/／]+/).map(s => s.trim()).filter(Boolean)
+  })).filter(p => p.label).map(p => ({...p, match: p.match.length ? p.match : [p.label]}));
+  if (!people.length) { toast("名前を1人は入れてください"); return; }
+  if (new Set(people.map(p => p.label)).size !== people.length) { toast("同じ名前が2つあります"); return; }
+  const labels = new Set(people.map(p => p.label));
+  const carry = [];
+  for (const r of $("rpeCarry").querySelectorAll(".rpc-row")) {
+    const c = {from: r.querySelector(".rpc-f").value, to: r.querySelector(".rpc-t").value, label: r.querySelector(".rpc-l").value.trim(), n: Math.round(+r.querySelector(".rpc-n").value || 0)};
+    if (!c.from && !c.to && !c.label && !c.n) continue;   // 空の行は飛ばす
+    if (!DAY_RE.test(c.from) || !DAY_RE.test(c.to)) { toast("繰り越しの日付を入れてください"); return; }
+    if (c.from === c.to) { toast("繰り越しの「元の日」と「足す日」が同じです"); return; }
+    if (!labels.has(c.label)) { toast(`繰り越しの人「${c.label || "（空）"}」は、上の名前のどれかにしてください`); return; }
+    if (!(c.n > 0)) { toast("繰り越しの件数は1以上にしてください"); return; }
+    carry.push(c);
+  }
+  const weekAdj = {};
+  for (const r of $("rpeWeekAdj").querySelectorAll(".rpw-row")) {
+    const k = r.querySelector(".rpw-k").value, n = Math.round(+r.querySelector(".rpw-n").value || 0);
+    if (!k && !n) continue;
+    if (!DAY_RE.test(k)) { toast("週の補正の日付を入れてください"); return; }
+    const ws = dk(weekStart(new Date(k + "T00:00")));
+    if (ws !== k) { toast(`週の補正の日付は週の始まり（${md(new Date(ws + "T00:00"))}）にしてください`); return; }
+    if (!n) continue;   // 0 は無いのと同じ
+    weekAdj[k] = (weekAdj[k] || 0) + n;
+  }
+  const b = $("rpeSave"); b.disabled = true;
+  setDoc(doc(db, "config", "report"), {weekGoal, people, carry, weekAdj, updatedAt: serverTimestamp(), updatedBy: U})
+    .then(() => { toast("日報の設定を保存しました"); closeReportEdit(); })   // 開いている日報は config/report の購読が作り直す
+    .catch(e => toast(errMsg(e))).finally(() => { b.disabled = false; });
+};
 
 /* ============================================================
    設定（自分・管理者）
