@@ -1014,7 +1014,10 @@ async function saveResched(rec) {
   const old = rec.memo.when, oldC = rec.memo.closer;
   const cid = rsCloserFixed(rec) ? oldC : selCloser;
   /* カレンダーと同じく、Googleの予定・アポ可の枠も見て決める（おまかせは空いている人だけ） */
-  const cands = cid === "auto" ? freeClosers(w, rec).map(c => c.id) : closerBusy(w, cid, rec) ? [] : [cid];
+  /* カレンダーで「予定あり」の枠を確認のうえで選んだ（rec.force＝その日時）ときは、商談と重なる人だけ除く（v52） */
+  const force = rec.force === +w;
+  const cands = cid === "auto" ? (force ? closerList().filter(c => !hardBusy(w, c.id, rec)) : freeClosers(w, rec)).map(c => c.id)
+    : (force ? hardBusy(w, cid, rec) : closerBusy(w, cid, rec)) ? [] : [cid];
   /* 日時もクローザーも今のまま（おまかせなら、空いている人の先頭＝今の人）なら何も書かない。
      前は「おまかせ」だとこの判定を通り抜けて同じ枠に書き直そうとし、管理者には「権限がありません」が出ていた（テスター 2026-10-09。
      枠の書き換えは取った本人しかできないルールのため。日時やクローザーが変わるときは「消して作る」なので管理者・クローザーも通る） */
@@ -1137,6 +1140,13 @@ function availLegend(list) {
 const outOfAvail = (d, cid) => AVAIL_ONLY && !!availOf(cid) && !inAvail(d, cid);
 /* d から始める商談を、そのクローザーに入れられないか */
 const closerBusy = (d, cid, except) => !!apoOverlap(d, cid, except) || !!gBusyRange(d, cid) || outOfAvail(d, cid);
+/* 「予定あり」でも承知のうえで入れる（社長 2026-10-12「基本はいれへんけど、どうしてもそこしか無理って時用に」）。
+   hardBusy＝アプリの商談と重なる（これはどうしても入れられない：1人のクローザーが同時に2つの商談はできない）。
+   softBlocked＝Googleカレンダーの予定・アポ可の枠の外だけで埋まっている（確認を1回はさめば入れられる） */
+const hardBusy = (d, cid, except) => !!apoOverlap(d, cid, except);
+const softBlocked = (d, cid, except) => (cid && cid !== "all" && cid !== "auto")
+  ? closerBusy(d, cid, except) && !hardBusy(d, cid, except)
+  : !slotOpen(d, except, "all") && closerList().some(c => !hardBusy(d, c.id, except));
 const freeClosers = (d, except) => closerList().filter(c => !closerBusy(d, c.id, except));
 const slotOpen = (d, except, cid) => (!cid || cid === "auto" || cid === "all") ? freeClosers(d, except).length > 0 : !closerBusy(d, cid, except);
 function freeSlots(from, n) {
@@ -1387,15 +1397,41 @@ function slotTap(d, list, past, full, closerId) {
     /* 日時を選び直しているアポ自身とは重なってもよい */
     const cid = closerId || (calCloser !== "all" ? calCloser : null);
     const blocked = cid ? closerBusy(d, cid, editing) : !slotOpen(d, editing, "all");
-    if (blocked) { toast(whyNot(d, cid, editing)); return; }
-    if (cid) selCloser = cid;
-    $("mWhen").value = toLocal(d); finishPick(); setQuick("アポ"); checkClash(); return;
+    const pick = () => { if (cid) selCloser = cid; $("mWhen").value = toLocal(d); finishPick(); setQuick("アポ"); checkClash(); };
+    if (blocked) {
+      /* Googleの予定・枠の外だけで埋まっているなら、確認のうえで選べる（商談と重なるときは選べない） */
+      if (softBlocked(d, cid, editing)) confirmBusy(d, cid, editing, () => { if (editing) editing.force = +d; pick(); });
+      else toast(whyNot(d, cid, editing));
+      return;
+    }
+    pick(); return;
   }
   if (list.length) { openSlotDetail(d, list, past); return; }
-  if (full && !past) { toast(whyNot(d, closerId || calCloser, null)); return; }
+  if (full && !past) {
+    const cid = closerId || calCloser;
+    /* 「予定あり」の枠を押した：確認を1回はさんで、空いている枠と同じアポ追加へ */
+    if (softBlocked(d, cid, null)) confirmBusy(d, cid, null, () => newApoAt(d, closerId));
+    else toast(whyNot(d, cid, null));
+    return;
+  }
   if (past) return;
   newApoAt(d, closerId);
 }
+/* 「予定あり」の時間に入れる前の確認（押し間違いで入らないよう必ず1回はさむ）。
+   使える人＝ふだんアポを入れられる人と同じ（特別な権限は作らない）。「やめる」は何もしない */
+let fbGo = null;
+function confirmBusy(d, cid, except, go) {
+  fbGo = go;
+  const who = cid && cid !== "all" && cid !== "auto" ? CNAME(cid) + "さん" : "クローザー全員";
+  $("fbTarget").innerHTML = `<b>${md(d)} ${hm(d)}〜${hm(new Date(d.getTime() + APO_MIN * 6e4))}</b><small>${esc(whyNot(d, cid, except))}</small>` +
+    (cid && cid !== "all" && cid !== "auto" ? "" : `<small>おまかせで、商談と重なっていない人に入ります</small>`);
+  $("fbTitle").textContent = who + "のこの時間は「予定あり」です";
+  $("fbScrim").hidden = $("fbDlg").hidden = false;
+}
+function closeBusy() { $("fbScrim").hidden = $("fbDlg").hidden = true; fbGo = null; }
+$("fbClose").onclick = closeBusy; $("fbScrim").onclick = closeBusy;
+document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("fbDlg").hidden) closeBusy(); });
+$("fbGo").onclick = () => { const f = fbGo; closeBusy(); if (f) f(); };
 /* カレンダーの商談を押したとき（社長 2026-10-09「カレンダーの予定の編集もリマインド画面から予定を開いた時と同じ機能を追加して」）：
    1件なら、リマインドから開いたときと同じ「記録の詳細」（openDetail。メモを編集・前確の予定・リスケ・取り消しが同じ決まりで使える）。
    同じ時間に2件以上（クローザーが別）なら今まで通りの一覧（showApoDetail）を出し、行を押すとその商談の詳細。

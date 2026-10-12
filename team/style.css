@@ -877,3 +877,6 @@ img{max-width:100%;}
 .rpe-x{border:1px solid var(--rule); background:var(--card); border-radius:8px; min-height:38px; color:var(--ink2); font-size:16px;}
 .rpe-x:hover{color:var(--red); border-color:var(--red);}
 .rpe-add{margin-top:8px; min-height:38px; font-size:13px;}
+/* 「予定あり」の時間に入れる前の確認（v52）。進むボタンは控えめな赤字、「やめる」が目立つ側 */
+.fb-go{color:var(--red); border-color:var(--red) !important;}
+#fbScrim{z-index:58;} #fbDlg{z-index:59;}
