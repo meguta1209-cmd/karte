@@ -881,15 +881,29 @@ function checkClash() {
   const free = freeClosers(d, editing);
   const span = md(d) + " " + hm(d) + "〜" + hm(new Date(d.getTime() + APO_MIN * 6e4));
   const others = free.length ? "。この時間から入れられるのは " + free.map(c => c.name).join("・") : "";
+  /* カレンダーで「予定あり」を確認のうえで選んだ日時（editing.force）：Googleの予定・枠の外は赤ではなく黄色で「確認済み」と出す（v53。
+     テスター「赤のままだと入らないように見えて迷う」）。商談と重なるときは今までどおり赤 */
+  const forced = editing.force === +d;
+  const warn = t => { box.className = "clash warn"; box.textContent = span + " " + t + "（予定ありですが、確認済みのため入れられます）"; };
   if (selCloser === "auto") {
-    if (!free.length) { box.className = "clash"; box.textContent = "この時間からの1時間半は、クローザー全員が埋まっています"; return; }
+    if (!free.length) {
+      if (forced && closerList().some(c => !hardBusy(d, c.id, editing))) { warn("おまかせ：商談と重なっていない人に入ります"); return; }
+      box.className = "clash"; box.textContent = "この時間からの1時間半は、クローザー全員が埋まっています"; return;
+    }
     box.className = "clash ok"; box.textContent = span + " 空いているクローザー：" + free.map(c => c.name).join("・"); return;
   }
   const hit = apoOverlap(d, selCloser, editing);
+  if (hit && editing.over && editing.over.t === +d && editing.over.c === selCloser) { warn(CNAME(selCloser) + "さんの商談（" + (hit.shop || "店名なし") + " " + hm(hit.when) + "〜" + hm(apoEnd(hit)) + "）に重ねて入れます"); return; }
   if (hit) { box.className = "clash"; box.textContent = CNAME(selCloser) + "さんは " + hm(hit.when) + "〜" + hm(apoEnd(hit)) + " に商談があります（" + nameOf(hit.uid) + "さんのアポ：" + (hit.shop || "店名なし") + "）。1時間半とれません" + others; return; }
   const gb = gBusyRange(d, selCloser);
-  if (gb) { box.className = "clash"; box.textContent = CNAME(selCloser) + "さんは " + hm(gb.s) + "〜" + hm(gb.e) + " にほかの予定があります。1時間半とれません" + others; return; }
-  if (outOfAvail(d, selCloser)) { box.className = "clash"; box.textContent = CNAME(selCloser) + "さんのアポ可の枠の外です（1時間半まるごと枠の中の時間だけ入れられます）" + others; return; }
+  if (gb) {
+    if (forced) { warn(CNAME(selCloser) + "さんは " + hm(gb.s) + "〜" + hm(gb.e) + " にほかの予定があります"); return; }
+    box.className = "clash"; box.textContent = CNAME(selCloser) + "さんは " + hm(gb.s) + "〜" + hm(gb.e) + " にほかの予定があります。1時間半とれません" + others; return;
+  }
+  if (outOfAvail(d, selCloser)) {
+    if (forced) { warn(CNAME(selCloser) + "さんのアポ可の枠の外です"); return; }
+    box.className = "clash"; box.textContent = CNAME(selCloser) + "さんのアポ可の枠の外です（1時間半まるごと枠の中の時間だけ入れられます）" + others; return;
+  }
   box.className = "clash ok"; box.textContent = span + " " + CNAME(selCloser) + "さん 空いています" + (availOf(selCloser) ? (inAvail(d, selCloser) ? "（アポ可の枠の中）" : "（アポ可の枠の外）") : "");
 }
 
@@ -917,7 +931,7 @@ $("mSave").onclick = async () => {
       if (!isSlotTime(w)) { toast("アポの枠の外です（10:00〜22:00・30分ごと・日曜休み）"); return; }
       const cl = await bookSlot(rec, m, w, remind);
       /* サーバーからの通知を待たずに、自分のカレンダーへすぐ出す */
-      const sid = slotIdOf(w, cl);
+      const sid = lastBookedSid || slotIdOf(w, cl);
       slots = slots.filter(s => s.recId !== rec.id && s.id !== sid).concat([{id: sid, day: dk(w), time: hm(w), when: w, dur: APO_MIN, closer: cl, uid: rec.owner || U, recId: rec.id, shop: m.shop, tel: m.tel, text: m.text, info: m.info || "", ...(rec.pre ? {pre: true} : {})}]);
       if (curTab === "cal") renderCal();
       closeMemo();
@@ -945,11 +959,16 @@ $("mSave").onclick = async () => {
 const OVERLAP_STEPS = [-60, -30, 0, 30, 60];   // 30分刻みで、1時間半の商談と重なる開始時刻
 async function bookSlot(rec, m, when, remind) {
   const cands = selCloser === "auto" ? freeClosers(when, rec).map(c => c.id).concat(closerList().map(c => c.id)) : [selCloser];
+  /* 確認のうえで重ねる（rec.over：日時とクローザーが確認したものと同じときだけ。v54）：
+     枠の文書は「日_時刻_クローザー_ov記録ID」にして、同じクローザー・同じ時刻のふつうの枠とぶつけない。重なりの確認は飛ばす。
+     日時やクローザーを入力シートで変えたら over は効かず、今までどおり重なりを防ぐ */
+  const over = !!(rec.over && rec.over.t === +when && rec.over.c === selCloser);
   const recRef = doc(db, "records", rec.id);
-  let chosenId = null;
+  let chosenId = null, chosenSid = null;
   await runTransaction(db, async tx => {
     let chosen = null;
-    for (const c of [...new Set(cands)]) {
+    if (over) chosen = {c: selCloser, sref: doc(db, "slots", slotIdOf(when, selCloser) + "_ov" + rec.id)};
+    for (const c of over ? [] : [...new Set(cands)]) {
       let clash = false;
       for (const off of OVERLAP_STEPS) {
         const s = await tx.get(doc(db, "slots", slotIdOf(new Date(when.getTime() + off * 6e4), c)));
@@ -958,6 +977,7 @@ async function bookSlot(rec, m, when, remind) {
       if (!clash) { chosen = {c, sref: doc(db, "slots", slotIdOf(when, c))}; break; }
     }
     if (!chosen) throw new Error("FULL");
+    chosenSid = chosen.sref.id;
     const memo = {...m, when: Timestamp.fromDate(when), remind, closer: chosen.c};
     const owner = rec.draft ? (rec.owner || U) : rec.uid;   // 枠の持ち主＝アポを取った人（10月より前の案件は管理者が代わりに入れることがある）
     const sdata = {day: dk(when), time: hm(when), when: Timestamp.fromDate(when), dur: APO_MIN, closer: chosen.c, uid: owner, recId: rec.id,
@@ -978,8 +998,10 @@ async function bookSlot(rec, m, when, remind) {
     }
     chosenId = chosen.c;
   });
+  lastBookedSid = chosenSid;
   return chosenId;
 }
+let lastBookedSid = null;   // bookSlot が最後に書いた枠のID（重ねたときは _ov 付きなので、呼ぶ側が計算できない）
 
 /* ============================================================
    日程を変える（リスケ）（社長 2026-10-06「架電以外のアポで、リスケになったとき、すでにカレンダーに入れている予定を簡単に日程変更できる機能」）
@@ -1012,11 +1034,12 @@ async function saveResched(rec) {
   if (!w) { toast("新しい日時を選んでください"); return; }
   if (!isSlotTime(w)) { toast("アポの枠の外です（10:00〜22:00・30分ごと・日曜休み）"); return; }
   const old = rec.memo.when, oldC = rec.memo.closer;
+  const oldSid = rec.slotId && String(rec.slotId).includes("_ov") ? rec.slotId : null;   // 重ねて入れた枠（_ov）なら、戻すときは同じ枠IDへ（重なりの確認なし。v54）
   const cid = rsCloserFixed(rec) ? oldC : selCloser;
   /* カレンダーと同じく、Googleの予定・アポ可の枠も見て決める（おまかせは空いている人だけ） */
   /* カレンダーで「予定あり」の枠を確認のうえで選んだ（rec.force＝その日時）ときは、商談と重なる人だけ除く（v52） */
   const force = rec.force === +w;
-  const cands = cid === "auto" ? (force ? closerList().filter(c => !hardBusy(w, c.id, rec)) : freeClosers(w, rec)).map(c => c.id)
+  const cands = cid === "auto" ? (force ? [...freeClosers(w, rec), ...closerList().filter(c => !hardBusy(w, c.id, rec))] : freeClosers(w, rec)).map(c => c.id)
     : (force ? hardBusy(w, cid, rec) : closerBusy(w, cid, rec)) ? [] : [cid];
   /* 日時もクローザーも今のまま（おまかせなら、空いている人の先頭＝今の人）なら何も書かない。
      前は「おまかせ」だとこの判定を通り抜けて同じ枠に書き直そうとし、管理者には「権限がありません」が出ていた（テスター 2026-10-09。
@@ -1028,14 +1051,14 @@ async function saveResched(rec) {
     const got = await moveApo(rec.id, w, cands);
     closeMemo();
     toast("日程を変えました：" + md(old) + " " + hm(old) + " → " + md(w) + " " + hm(w) + "（クローザー " + CNAME(got.closer) + "）。招待も5分以内に変わります",
-      "元に戻す", () => moveApo(rec.id, old, [oldC]).then(() => toast("元の日時に戻しました")).catch(e => toast(e && e.message === "FULL" ? "元の時間に別の商談が入ったため、戻せませんでした" : errMsg(e))), 10000);
+      "元に戻す", () => moveApo(rec.id, old, [oldC], oldSid).then(() => toast("元の日時に戻しました")).catch(e => toast(e && e.message === "FULL" ? "元の時間に別の商談が入ったため、戻せませんでした" : errMsg(e))), 10000);
   } catch (e) {
     toast(e && e.message === "FULL" ? "その時間は、ほかの商談と重なるため入れられませんでした（今入ったかもしれません）" :
       e && e.message === "GONE" ? "このアポは消されています" : e && e.message === "CANCELED" ? "このアポは取り消されています" : errMsg(e));
   } finally { $("mSave").disabled = false; }
 }
 /* アポを when へ動かす（cands の中で、重なる商談が無い最初のクローザー）。記録・枠をトランザクションで書く。戻り値 {closer, sid} */
-async function moveApo(recId, when, cands) {
+async function moveApo(recId, when, cands, forceSid) {
   const recRef = doc(db, "records", recId);
   let out = null;
   await runTransaction(db, async tx => {
@@ -1045,8 +1068,9 @@ async function moveApo(recId, when, cands) {
     if (raw.canceled) throw new Error("CANCELED");
     const oldRef = raw.slotId ? doc(db, "slots", raw.slotId) : null;
     const oldS = oldRef ? await tx.get(oldRef) : null;
-    let chosen = null;
-    for (const c of [...new Set(cands)]) {
+    /* forceSid＝重ねて入れた枠（_ov）へ戻すとき：その枠IDをそのまま使い、重なりの確認はしない（v54） */
+    let chosen = forceSid ? cands[0] : null;
+    for (const c of forceSid ? [] : [...new Set(cands)]) {
       let clash = false;
       for (const off of OVERLAP_STEPS) {
         const s = await tx.get(doc(db, "slots", slotIdOf(new Date(when.getTime() + off * 6e4), c)));
@@ -1058,7 +1082,7 @@ async function moveApo(recId, when, cands) {
     const m = raw.memo || {};
     const base = oldS && oldS.exists() ? oldS.data()
       : {uid: raw.uid, recId, dur: APO_MIN, shop: m.shop || "", tel: m.tel || "", text: m.text || "", info: m.info || "", ...(raw.pre ? {pre: true} : {})};
-    const sid = slotIdOf(when, chosen);
+    const sid = forceSid || slotIdOf(when, chosen);
     if (oldS && oldS.exists() && raw.slotId !== sid) tx.delete(oldRef);
     tx.set(doc(db, "slots", sid), {...base, day: dk(when), time: hm(when), when: Timestamp.fromDate(when), closer: chosen});
     tx.update(recRef, {"memo.when": Timestamp.fromDate(when), "memo.closer": chosen, slotId: sid, pending: true});
@@ -1410,7 +1434,7 @@ function slotTap(d, list, past, full, closerId) {
   if (full && !past) {
     const cid = closerId || calCloser;
     /* 「予定あり」の枠を押した：確認を1回はさんで、空いている枠と同じアポ追加へ */
-    if (softBlocked(d, cid, null)) confirmBusy(d, cid, null, () => newApoAt(d, closerId));
+    if (softBlocked(d, cid, null)) confirmBusy(d, cid, null, () => newApoAt(d, closerId, true));
     else toast(whyNot(d, cid, null));
     return;
   }
@@ -1428,9 +1452,20 @@ function confirmBusy(d, cid, except, go) {
   $("fbTitle").textContent = who + "のこの時間は「予定あり」です";
   $("fbScrim").hidden = $("fbDlg").hidden = false;
 }
-function closeBusy() { $("fbScrim").hidden = $("fbDlg").hidden = true; fbGo = null; }
+/* すでに入っている商談に重ねて入れる前の確認（v54）。同じ画面（#fbDlg）を文言だけ替えて使う */
+const FB_NOTE_BUSY = $("fbNote2").innerHTML;
+function confirmOverlap(d, cid, r, go) {
+  fbGo = go;
+  const m = r.memo || {};
+  $("fbTitle").textContent = "この時間にはもう商談が入っています";
+  $("fbTarget").innerHTML = `<b>${md(d)} ${hm(d)}〜${hm(new Date(d.getTime() + APO_MIN * 6e4))}</b><small>${esc(CNAME(cid))}さんの商談：${esc(m.shop || "（店名なし）")}（獲得 ${esc(nameOf(r.uid))}）</small>`;
+  $("fbNote2").innerHTML = `${esc(CNAME(cid))}さんに、同じ時間でもう1件<b>重ねて</b>入れます。ふつうは重ねません。重ねると、ふつうのアポと同じに登録されます（集計・リマインド・クローザーへの招待も同じ）。`;
+  $("fbGo").textContent = "重ねて入れる";
+  $("fbScrim").hidden = $("fbDlg").hidden = false;
+}
+function closeBusy() { $("fbScrim").hidden = $("fbDlg").hidden = true; fbGo = null; $("fbNote2").innerHTML = FB_NOTE_BUSY; $("fbGo").textContent = "予定ありでも入れる"; }
 $("fbClose").onclick = closeBusy; $("fbScrim").onclick = closeBusy;
-document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("fbDlg").hidden) closeBusy(); });
+document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("fbDlg").hidden) { e.stopImmediatePropagation(); closeBusy(); } });   // 下の記録の詳細までは閉じない
 $("fbGo").onclick = () => { const f = fbGo; closeBusy(); if (f) f(); };
 /* カレンダーの商談を押したとき（社長 2026-10-09「カレンダーの予定の編集もリマインド画面から予定を開いた時と同じ機能を追加して」）：
    1件なら、リマインドから開いたときと同じ「記録の詳細」（openDetail。メモを編集・前確の予定・リスケ・取り消しが同じ決まりで使える）。
@@ -1447,10 +1482,12 @@ async function openSlotDetail(d, list, past) {
   }
   showApoDetail(d, list, past);
 }
-function newApoAt(d, closerId) {
+function newApoAt(d, closerId, force, over) {
   const ref = doc(collection(db, "records"));
   const c = closerId || (calCloser === "all" ? undefined : calCloser);
-  openMemo({id: ref.id, uid: U, t: new Date(), r: "アポ", memo: {when: new Date(d), remind: true, closer: c}, draft: true});
+  /* force＝「予定あり」を確認のうえで入れる日時（入力シートの警告を黄色にするだけ。保存の中身は同じ）
+     over＝{t: 日時, c: クローザー}：その人の商談に確認のうえで重ねて入れる（bookSlot が別の枠IDで保存する。v54） */
+  openMemo({id: ref.id, uid: U, t: new Date(), r: "アポ", memo: {when: new Date(d), remind: true, closer: c}, draft: true, ...(force ? {force: +d} : {}), ...(over ? {over} : {})});
 }
 /* 同じ時間の商談の一覧（2件以上のとき。1件は openSlotDetail から記録の詳細へ）。行を押すとその商談の詳細（openDetail）。
    外部の人の【商談】（showDeal）もこの画面を使う（見るだけ・行は押せない） */
@@ -1680,8 +1717,16 @@ function openDetail(r, cal) {
   $("rdEdit").textContent = r.isTask ? "編集" : "メモを編集";
   /* カレンダーから開いたときだけ：同じ時間にもう1件（ほかのクローザーで）入れる。前の一覧にあった「この時間にアポを追加」と同じ条件・同じ動き */
   const at = cal && cal.at;
-  $("rdNew").hidden = !(at && !cal.past && slotOpen(at, null, calCloser));
-  $("rdNew").onclick = () => { closeDetail({noBack: true}); newApoAt(at); };
+  /* 重ねて入れる（社長 2026-10-12「今既存で入ってるやつを押したら、同じ時間にアポの追加ができる機能を」）：
+     ほかのクローザーが空いていなくても、この商談のクローザーに、同じ時間でもう1件を確認のうえで重ねられる */
+  const ovC = !r.isTask && r.r === "アポ" && !r.canceled && r.memo && r.memo.closer && r.memo.closer !== "auto" ? r.memo.closer : null;
+  const open = at && !cal.past && slotOpen(at, null, calCloser);
+  $("rdNew").hidden = !(at && !cal.past && (open || ovC));
+  $("rdNew").onclick = () => {
+    /* この商談のクローザーが分かるときは、いつも「重ねる」の確認から（入力シートでほかの空いているクローザーに替えれば、ふつうの登録になる） */
+    if (!ovC) { closeDetail({noBack: true}); newApoAt(at); return; }
+    confirmOverlap(at, ovC, r, () => { closeDetail({noBack: true}); newApoAt(at, ovC, false, {t: +at, c: ovC}); });
+  };
   $("rdScrim").hidden = $("recDetail").hidden = false;
   if ($("rdCopy")) $("rdCopy").onclick = async () => {
     try { await navigator.clipboard.writeText(m.tel); toast("電話番号をコピーしました"); }
@@ -1768,7 +1813,7 @@ async function runCancel(kind) {
 async function restoreCancel(kind, id, raw, sraw) {
   try {
     await runTransaction(db, async tx => {
-      if (sraw) {   // その間に同じクローザーの重なる時間へ別の商談が入っていたら戻さない
+      if (sraw && !String(raw.slotId).includes("_ov")) {   // その間に同じクローザーの重なる時間へ別の商談が入っていたら戻さない（確認のうえで重ねた _ov の枠は、元の商談に当たるので見ない。v54）
         const when = tsd(sraw.when);
         for (const off of OVERLAP_STEPS) {
           const s = await tx.get(doc(db, "slots", slotIdOf(new Date(when.getTime() + off * 6e4), sraw.closer)));

@@ -18,7 +18,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=BIZ+UDPGothic:wght@400;700&family=Roboto+Mono:wght@500;700&display=swap">
-<link rel="stylesheet" href="./style.css?v=52">
+<link rel="stylesheet" href="./style.css?v=54">
 <script>
 /* LINEの中のブラウザではGoogleログインが通らない（途中の情報を覚えておけない）。
    LINEは ?openExternalBrowser=1 を付けると Safari / Chrome で開き直してくれるので、自動で付け直す */
@@ -451,7 +451,7 @@
 <div class="daysum cxd" id="fbDlg" role="dialog" aria-modal="true" aria-labelledby="fbTitle" hidden>
   <div class="ds-head"><h3 id="fbTitle">この時間は「予定あり」です</h3></div>
   <div class="cx-target" id="fbTarget"></div>
-  <p class="cx-note">基本はここには入れません。<b>どうしてもこの時間しか無理なときだけ</b>入れてください。入れると、ふつうのアポと同じに登録されます（集計・リマインド・クローザーへの招待も同じ）。</p>
+  <p class="cx-note" id="fbNote2">基本はここには入れません。<b>どうしてもこの時間しか無理なときだけ</b>入れてください。入れると、ふつうのアポと同じに登録されます（集計・リマインド・クローザーへの招待も同じ）。</p>
   <div class="ds-foot"><button type="button" id="fbGo" class="fb-go">予定ありでも入れる</button><button type="button" id="fbClose" class="primary">やめる</button></div>
 </div>
 
@@ -603,6 +603,6 @@
 <div class="offline" id="offline" hidden>オフライン中：つながったら送ります</div>
 <div class="toast" id="toast"></div>
 
-<script type="module" src="./app.js?v=52"></script>
+<script type="module" src="./app.js?v=54"></script>
 </body>
 </html>
