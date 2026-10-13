@@ -904,3 +904,6 @@ img{max-width:100%;}
 /* リマインドの「かけ済み」（v59）：薄く、戻すボタンは控えめ */
 .rm.done .time, .rm.done .shop, .rm.done .memo{opacity:.75;}
 .rm.done .btns .back{background:var(--card); color:var(--blue); border-color:var(--blue);}
+/* 昼休憩明け（オレンジ）と稼働終了（紫）の帯（v60）。架電再開（青）・休憩（緑）と見分けがつくように */
+.brkbar.lunch .in{background:#E65100; border-color:#BF360C;}
+.brkbar.end .in{background:#4A2F8A; border-color:#2E1A5E;}
