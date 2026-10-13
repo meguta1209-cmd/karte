@@ -1663,8 +1663,67 @@ function renderRemind() {
     });
     body.appendChild(c);
   });
+  if (rmF === "me") renderDone(body);
+}
+/* ---------- かけ済み（社長 2026-10-13「リマインド案件かけた後消えちゃうから残せるようにしてほしい」v59）----------
+   「かけた」「完了」にした案件は pending/done の購読から外れて一覧から消えていた（記録タブの履歴には残っている）。
+   リマインドの一番下に「かけ済み」を出す。自分の分だけ（チーム全員の分は人数分の読み込みになるので出さない）。
+   期間は7日：かけ直しの振り返りに足りる長さで、読み込みを小さく保つため。記録は、架電日(day)が14日以内の「再架電」の記録を
+   既存の索引(uid, r, day)で読んで done だけ残す（14日より前に架電した再架電をかけ終えた分は出ない＝まれ）。予定(tasks)は自分の done を読む。
+   新しい索引・ルールの変更は無し。「戻す」でもう一度リマインドに入る（done を外す。KPIは変わらない） */
+let doneCache = {at: 0, list: []}, doneLoading = false;
+const doneAtOf = r => r.doneAt || r.memo.when || r.t;
+async function loadDone() {
+  const cut = addDays(today(), -7);
+  const [rs, ts] = await Promise.all([
+    getDocs(query(collection(db, "records"), where("uid", "==", U), where("r", "==", "再架電"), where("day", ">=", dk(addDays(today(), -14))), orderBy("day", "desc"))),
+    getDocs(query(collection(db, "tasks"), where("uid", "==", U), where("done", "==", true)))
+  ]);
+  const recs = rs.docs.map(recOf).filter(r => r.done && r.memo && r.memo.when).map(r => ({...r, doneAt: tsd(r.doneAt)}));
+  const tasks = ts.docs.map(s => ({...taskOf(s), doneAt: tsd(s.data().doneAt)}));
+  doneCache = {at: Date.now(), list: recs.concat(tasks).filter(r => doneAtOf(r) >= cut).sort((a, b) => doneAtOf(b) - doneAtOf(a))};
+}
+async function renderDone(body) {
+  const h = document.createElement("h2"); h.innerHTML = `かけ済み <span class="aside">7日以内・自分の分</span>`; body.appendChild(h);
+  const c = document.createElement("div"); c.className = "card"; c.id = "rmDone"; body.appendChild(c);
+  if (doneLoading) { c.innerHTML = `<div class="empty">読み込み中…</div>`; return; }   // 読んでいる最中に描き直された：読み終わったら向こうが描き直す
+  if (Date.now() - doneCache.at > 60000) {
+    doneLoading = true; c.innerHTML = `<div class="empty">読み込み中…</div>`;
+    try { await loadDone(); } catch (_) { c.innerHTML = `<div class="empty">読み込めませんでした</div>`; return; } finally { doneLoading = false; }
+    if (!document.body.contains(c)) { if (curTab === "remind") renderRemind(); return; }   // 読んでいる間に描き直されていた → 新しいキャッシュで描き直す（もう読みには行かない）
+  }
+  const list = doneCache.list;
+  if (!list.length) { c.innerHTML = `<div class="empty">ありません（「かけた」「完了」にした案件が7日間ここに残ります）</div>`; return; }
+  c.innerHTML = "";
+  list.slice(0, 50).forEach(r => {
+    const row = document.createElement("div"); row.className = "rm done" + (r.isTask ? " task" : "");
+    const head = r.isTask ? `${resChip(r.r)} ${esc(r.title || "")}${r.memo.shop ? ` <span class="t-shop">${esc(r.memo.shop)}</span>` : ""}` : `${resChip(r.r)} ${esc(r.memo.shop || "（店名なし）")}`;
+    const da = r.doneAt;
+    row.innerHTML = `<div class="time">${r.memo.when ? hm(r.memo.when) : "--:--"}<small>${r.memo.when ? md(r.memo.when) : ""}</small></div>
+      <div class="info"><div class="shop">${head}<span class="badge done">${r.isTask && r.r !== "再架電" ? "完了" : "かけた"}</span></div>
+      <div class="meta">${da ? (r.isTask && r.r !== "再架電" ? "完了 " : "かけた ") + md(da) + " " + hm(da) : "かけ済み"}${!r.isTask ? " ・ " + md(r.t) + " に架電" : ""}</div>
+      ${r.memo.tel ? `<div class="tel-line num">☎ ${esc(r.memo.tel)}</div>` : ""}
+      ${r.memo.text ? `<div class="memo">${esc(r.memo.text)}</div>` : ""}</div>
+      <div class="btns"><button class="back">戻す</button></div>`;
+    row.querySelector(".back").onclick = e => { e.stopPropagation(); undoDone(r); };
+    row.classList.add("tap"); row.tabIndex = 0;
+    row.onclick = () => openDetail(r);
+    row.onkeydown = e => { if (e.key === "Enter") openDetail(r); };
+    c.appendChild(row);
+  });
+}
+/* 「戻す」：もう一度リマインドに入れる（done を外す）。予定が過ぎていれば「過ぎている予定」に出るので、そこで「明日へ」が使える。
+   予定が3日より前だと一覧に出ない（visiblePending は3日前まで）ので、そのときは予定の日を今日に直す（時刻はそのまま。テスター 2026-10-13） */
+function undoDone(r) {
+  const w = r.memo.when, old = w && w < addDays(today(), -3);
+  let nw = null;
+  if (old) { nw = new Date(today()); nw.setHours(w.getHours(), w.getMinutes(), 0, 0); }
+  const p = r.isTask ? updateDoc(doc(db, "tasks", r.id), {done: false, doneAt: null, ...(nw ? {when: Timestamp.fromDate(nw)} : {})})
+    : updateDoc(doc(db, "records", r.id), {done: false, pending: true, doneAt: null, ...(nw ? {"memo.when": Timestamp.fromDate(nw)} : {})});
+  p.then(() => { doneCache = {at: 0, list: []}; histLoadedAt = 0; if (curTab === "remind") renderRemind(); toast(nw ? "今日 " + hm(nw) + " の予定に戻しました（元は " + md(w) + "）" : "リマインドに戻しました"); }).catch(e => toast(errMsg(e)));
 }
 function markDone(r) {
+  doneCache = {at: 0, list: []};   // かけ済みを次に開いたとき読み直す
   if (r.isTask) {   // 予定は架電ではないので、終わりにするだけ（再架電の予定は、このあと結果ボタンで数える）
     updateDoc(doc(db, "tasks", r.id), {done: true, doneAt: serverTimestamp()}).catch(e => toast(errMsg(e)));
     if (r.r === "再架電") { showTab("count"); toast("今回の結果のボタンを押してください"); }
@@ -1672,7 +1731,7 @@ function markDone(r) {
     return;
   }
   histLoadedAt = 0;
-  updateDoc(doc(db, "records", r.id), {done: true, pending: false}).catch(e => toast(errMsg(e)));
+  updateDoc(doc(db, "records", r.id), {done: true, pending: false, doneAt: serverTimestamp()}).catch(e => toast(errMsg(e)));   // doneAt＝かけ済みの並びと期間に使う（v59）
   showTab("count"); toast("今回の結果のボタンを押してください");
 }
 function postpone(r) {

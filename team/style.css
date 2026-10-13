@@ -901,3 +901,6 @@ img{max-width:100%;}
 .brkbar .bb-sub{font-size:13px; opacity:.95; margin-top:2px;}
 .brkbar .bb-x{margin-left:auto; min-width:44px; min-height:44px; border-radius:8px; border:1px solid rgba(255,255,255,.6); background:rgba(255,255,255,.15); color:#fff; font-size:18px; font-weight:700;}
 @media (prefers-reduced-motion:reduce){ .brkbar .in{animation:none;} }
+/* リマインドの「かけ済み」（v59）：薄く、戻すボタンは控えめ */
+.rm.done .time, .rm.done .shop, .rm.done .memo{opacity:.75;}
+.rm.done .btns .back{background:var(--card); color:var(--blue); border-color:var(--blue);}
