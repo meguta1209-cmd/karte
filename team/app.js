@@ -1237,14 +1237,20 @@ function timeCell(h, mi) {
    何枠ぶんか（カレンダーの終わり 22:00 で切る）と、同じ列で時間が重なる商談を横に並べるための「レーン」 */
 const spanOf = s => Math.max(1, Math.min(Math.ceil((s.dur || APO_MIN) / 30), (SLOT_H1 * 60 - s.when.getHours() * 60 - s.when.getMinutes()) / 30));
 function laneLayout(list) {
-  const ends = [], lane = {};
+  /* 列の数は「時間がつながって重なっているまとまり」ごと（v58。社長「重ねてアポ入れたら、その日全部半分になる」＝前は日・列ごとに1つの数だった）。
+     重なっていない帯は今までどおり全幅 */
+  const lane = {}, nOf = {};
+  let ends = [], group = [];
+  const flush = () => { const n = Math.max(1, ends.length); group.forEach(id => nOf[id] = n); ends = []; group = []; };
   list.slice().sort((a, b) => a.when - b.when || (a.closer < b.closer ? -1 : 1)).forEach(s => {
+    if (ends.length && ends.every(e => e <= s.when)) flush();   // 今のまとまりの帯が全部終わっている → 新しいまとまり
     let i = ends.findIndex(e => e <= s.when); if (i < 0) { i = ends.length; ends.push(0); }
-    ends[i] = apoEnd(s); lane[s.id] = i;
+    ends[i] = apoEnd(s); lane[s.id] = i; group.push(s.id);
   });
-  return {lane, n: Math.max(1, ends.length)};
+  flush();
+  return {lane, nOf};
 }
-const blkStyle = (s, L) => { const i = L.lane[s.id] || 0, n = L.n; return `--span:${spanOf(s)};left:calc(2px + (100% - 4px) * ${i} / ${n});width:calc((100% - 4px) / ${n}${n > 1 ? " - 2px" : ""})`; };
+const blkStyle = (s, L) => { const i = L.lane[s.id] || 0, n = L.nOf[s.id] || 1; return `--span:${spanOf(s)};left:calc(2px + (100% - 4px) * ${i} / ${n});width:calc((100% - 4px) / ${n}${n > 1 ? " - 2px" : ""})`; };
 function renderCal() {
   const now = new Date(), T = today(), cls = closerList(), vws = viewList();
   /* 名簿が届く前は仮に「全員」で出し（calAuto）、届いたら決め直す */
