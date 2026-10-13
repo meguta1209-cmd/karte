@@ -286,6 +286,8 @@ function stopAll() {
 let listenDay = null;
 function startApp() {
   started = true;
+  /* 架電と休憩のタイマー（v55）。音・ふるえは通知の設定に従う */
+  if (window.BreakTimer && $("brkTimer")) window.BreakTimer.mount({timer: $("brkTimer"), bar: $("brkBar"), notify: k => { beep(k === "break" ? 2 : 1); if ($("swVib").checked && navigator.vibrate) navigator.vibrate(k === "break" ? [200, 100, 200] : [150]); }});
   const recs = collection(db, "records");
   unsubs.push(onSnapshot(collection(db, "members"), s => {
     members = {}; s.forEach(d => members[d.id] = d.data());

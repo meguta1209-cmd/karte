@@ -881,3 +881,23 @@ img{max-width:100%;}
 /* 「予定あり」の時間に入れる前の確認（v52）。進むボタンは控えめな赤字、「やめる」が目立つ側 */
 .fb-go{color:var(--red); border-color:var(--red) !important;}
 #fbScrim{z-index:58;} #fbDlg{z-index:59;}
+/* 架電と休憩のタイマー（v55、社長 2026-10-12）。カウント画面のチームの帯の下。休憩中は色が変わる */
+.bkt{margin-top:8px; display:flex; align-items:center; gap:8px; padding:7px 12px; border-radius:8px; font-size:13px;
+  background:var(--card); border:1.5px solid var(--rule2); color:var(--ink);}
+.bkt b, .bkt .bkt-left, .bkt .bkt-ic{white-space:nowrap; flex:none;}
+.bkt b{font-size:13.5px;}
+.bkt .bkt-ic{font-size:15px;}
+.bkt .bkt-left{font-weight:700; font-size:15px; color:var(--blue);}
+.bkt small{margin-left:auto; flex:1 1 auto; min-width:0; color:var(--ink2); font-size:11.5px; text-align:right; line-height:1.3;}
+.bkt.bkt-break{background:var(--ok-soft); border-color:var(--ok);}
+.bkt.bkt-break .bkt-left{color:var(--ok);}
+/* 49分（11・17時台は59分）の通知。リマインドの通知（.alert）の少し下の層。90秒で消える・×でも消える */
+.brkbar{position:fixed; left:0; right:0; top:0; z-index:54; padding:calc(env(safe-area-inset-top,0px) + 8px) 12px 0;}
+.brkbar .in{max-width:536px; margin:0 auto; display:flex; align-items:center; gap:10px; padding:12px 14px; border-radius:12px;
+  box-shadow:0 8px 28px rgba(0,0,0,.28); animation:drop .35s ease-out; color:#fff; background:#2E7D32; border:2px solid #1B5E20;}
+.brkbar.call .in{background:#1E4E86; border-color:#143660;}
+.brkbar .bb-ic{font-size:26px;}
+.brkbar .bb-ttl{font-size:18px; font-weight:700; line-height:1.2;}
+.brkbar .bb-sub{font-size:13px; opacity:.95; margin-top:2px;}
+.brkbar .bb-x{margin-left:auto; min-width:44px; min-height:44px; border-radius:8px; border:1px solid rgba(255,255,255,.6); background:rgba(255,255,255,.15); color:#fff; font-size:18px; font-weight:700;}
+@media (prefers-reduced-motion:reduce){ .brkbar .in{animation:none;} }
