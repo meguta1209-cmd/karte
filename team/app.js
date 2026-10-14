@@ -619,7 +619,7 @@ function openMemo(rec) {
   /* rs＝日程を変える（リスケ）：日時とクローザーだけ選び直す。取った本人・管理者・そのアポのクローザーが使える（中身は見るだけ） */
   const kind = rec.r, timed = kind === "アポ" || kind === "再架電", rs = !!rec.rs, mine = rec.uid === U && !rs;
   $("mTitle").innerHTML = resChip(kind) + (rs ? " 日程を変える（リスケ）" : kind === "アポ" ? " アポの詳細" : kind === "再架電" ? " 再架電の予定" : " メモ");
-  $("mHint").textContent = rs ? "今：" + md(m.when) + " " + hm(m.when) + "〜" + hm(new Date(m.when.getTime() + APO_MIN * 6e4)) + "（クローザー " + CNAME(m.closer) + "）。新しい日時" +
+  $("mHint").textContent = rs ? "今：" + md(m.when) + " " + hm(m.when) + "〜" + hm(new Date(m.when.getTime() + recDur(rec) * 6e4)) + "（クローザー " + CNAME(m.closer) + "）。新しい日時" +
       (rsCloserFixed(rec) ? "" : "とクローザー") + "を選んで［日程を変える］を押してください。同じアポのまま日時だけ変わります（KPIの数はそのまま。クローザーのGoogleカレンダーと営業結果シートも新しい日時に変わります）" :
     !mine ? nameOf(rec.uid) + "さんの記録です（見るだけ）" :
     rec.draft ? "カレンダーから登録します。保存するとアポが1件増えます" :
@@ -632,7 +632,7 @@ function openMemo(rec) {
   $("mCloserBox").hidden = kind !== "アポ";
   if (timed) {
     selCloser = m.closer || "auto";
-    $("mWhenLbl").textContent = kind === "アポ" ? "商談日時（1時間半）" : "かけ直す日時";
+    $("mWhenLbl").textContent = kind === "アポ" ? "商談日時（" + APO_LBL + "）" : "かけ直す日時";
     $("mWhen").value = m.when && !rec.canceled ? toLocal(m.when) : ""; $("mRemind").checked = m.remind !== false; setQuick(kind);   // キャンセルした記録は日時を空で開く（メモを足して保存しただけで復活しないように）
   }
   ["mShop", "mTel", "mText", "mInfo"].forEach(id => $(id).readOnly = !mine);
@@ -865,7 +865,7 @@ function renderClosers() {
     const b = document.createElement("button"); b.type = "button"; b.className = "cl-chip";
     b.setAttribute("aria-pressed", selCloser === c.id);
     let state = "";
-    if (d && isSlotTime(d)) state = c.id === "auto" ? (freeClosers(d, editing).length ? "" : "×") : (closerBusy(d, c.id, editing) ? "×" : inAvail(d, c.id) ? "アポ可" : "空き");
+    if (d && isSlotTime(d)) state = c.id === "auto" ? (freeClosers(d, editing).length ? "" : "×") : (closerBusy(d, c.id, editing) ? "×" : inAvail(d, c.id, spanFor(editing)) ? "アポ可" : "空き");
     if (c.id !== "auto") b.innerHTML = `<i style="background:${c.color}"></i>`;
     b.insertAdjacentHTML("beforeend", esc(c.name) + (c.ext ? "（外部）" : "") + (state ? `<small class="${state === "×" ? "ng" : "okk"}">${state}</small>` : ""));
     b.disabled = editing && (editing.rs ? rsCloserFixed(editing) && c.id !== (editing.memo || {}).closer : editing.uid !== U);   // リスケのクローザーは自分のまま
@@ -881,7 +881,8 @@ function checkClash() {
   box.hidden = false;
   if (!isSlotTime(d)) { box.className = "clash"; box.textContent = "アポの枠の外です（10:00〜22:00・30分ごと・日曜休み）"; return; }
   const free = freeClosers(d, editing);
-  const span = md(d) + " " + hm(d) + "〜" + hm(new Date(d.getTime() + APO_MIN * 6e4));
+  const L = spanFor(editing);   // この商談の長さ（新規＝APO_MIN、リスケ・日時の直し＝元の長さ）
+  const span = md(d) + " " + hm(d) + "〜" + hm(new Date(d.getTime() + L * 6e4));
   const others = free.length ? "。この時間から入れられるのは " + free.map(c => c.name).join("・") : "";
   /* カレンダーで「予定あり」を確認のうえで選んだ日時（editing.force）：Googleの予定・枠の外は赤ではなく黄色で「確認済み」と出す（v53。
      テスター「赤のままだと入らないように見えて迷う」）。商談と重なるときは今までどおり赤 */
@@ -890,23 +891,23 @@ function checkClash() {
   if (selCloser === "auto") {
     if (!free.length) {
       if (forced && closerList().some(c => !hardBusy(d, c.id, editing))) { warn("おまかせ：商談と重なっていない人に入ります"); return; }
-      box.className = "clash"; box.textContent = "この時間からの1時間半は、クローザー全員が埋まっています"; return;
+      box.className = "clash"; box.textContent = "この時間からの" + APO_LBL + "は、クローザー全員が埋まっています"; return;
     }
     box.className = "clash ok"; box.textContent = span + " 空いているクローザー：" + free.map(c => c.name).join("・"); return;
   }
-  const hit = apoOverlap(d, selCloser, editing);
+  const hit = apoOverlap(d, selCloser, editing, L);
   if (hit && editing.over && editing.over.t === +d && editing.over.c === selCloser) { warn(CNAME(selCloser) + "さんの商談（" + (hit.shop || "店名なし") + " " + hm(hit.when) + "〜" + hm(apoEnd(hit)) + "）に重ねて入れます"); return; }
-  if (hit) { box.className = "clash"; box.textContent = CNAME(selCloser) + "さんは " + hm(hit.when) + "〜" + hm(apoEnd(hit)) + " に商談があります（" + nameOf(hit.uid) + "さんのアポ：" + (hit.shop || "店名なし") + "）。1時間半とれません" + others; return; }
-  const gb = gBusyRange(d, selCloser);
+  if (hit) { box.className = "clash"; box.textContent = CNAME(selCloser) + "さんは " + hm(hit.when) + "〜" + hm(apoEnd(hit)) + " に商談があります（" + nameOf(hit.uid) + "さんのアポ：" + (hit.shop || "店名なし") + "）。" + APO_LBL + "とれません" + others; return; }
+  const gb = gBusyRange(d, selCloser, L);
   if (gb) {
     if (forced) { warn(CNAME(selCloser) + "さんは " + hm(gb.s) + "〜" + hm(gb.e) + " にほかの予定があります"); return; }
-    box.className = "clash"; box.textContent = CNAME(selCloser) + "さんは " + hm(gb.s) + "〜" + hm(gb.e) + " にほかの予定があります。1時間半とれません" + others; return;
+    box.className = "clash"; box.textContent = CNAME(selCloser) + "さんは " + hm(gb.s) + "〜" + hm(gb.e) + " にほかの予定があります。" + APO_LBL + "とれません" + others; return;
   }
-  if (outOfAvail(d, selCloser)) {
+  if (outOfAvail(d, selCloser, L)) {
     if (forced) { warn(CNAME(selCloser) + "さんのアポ可の枠の外です"); return; }
-    box.className = "clash"; box.textContent = CNAME(selCloser) + "さんのアポ可の枠の外です（1時間半まるごと枠の中の時間だけ入れられます）" + others; return;
+    box.className = "clash"; box.textContent = CNAME(selCloser) + "さんのアポ可の枠の外です（" + APO_LBL + "まるごと枠の中の時間だけ入れられます）" + others; return;
   }
-  box.className = "clash ok"; box.textContent = span + " " + CNAME(selCloser) + "さん 空いています" + (availOf(selCloser) ? (inAvail(d, selCloser) ? "（アポ可の枠の中）" : "（アポ可の枠の外）") : "");
+  box.className = "clash ok"; box.textContent = span + " " + CNAME(selCloser) + "さん 空いています" + (availOf(selCloser) ? (inAvail(d, selCloser, L) ? "（アポ可の枠の中）" : "（アポ可の枠の外）") : "");
 }
 
 $("mSave").onclick = async () => {
@@ -934,7 +935,7 @@ $("mSave").onclick = async () => {
       const cl = await bookSlot(rec, m, w, remind);
       /* サーバーからの通知を待たずに、自分のカレンダーへすぐ出す */
       const sid = lastBookedSid || slotIdOf(w, cl);
-      slots = slots.filter(s => s.recId !== rec.id && s.id !== sid).concat([{id: sid, day: dk(w), time: hm(w), when: w, dur: APO_MIN, closer: cl, uid: rec.owner || U, recId: rec.id, shop: m.shop, tel: m.tel, text: m.text, info: m.info || "", ...(rec.pre ? {pre: true} : {})}]);
+      slots = slots.filter(s => s.recId !== rec.id && s.id !== sid).concat([{id: sid, day: dk(w), time: hm(w), when: w, dur: lastBookedDur || APO_MIN, closer: cl, uid: rec.owner || U, recId: rec.id, shop: m.shop, tel: m.tel, text: m.text, info: m.info || "", ...(rec.pre ? {pre: true} : {})}]);
       if (curTab === "cal") renderCal();
       closeMemo();
       toast((rec.draft ? (rec.pre ? PRE_LABEL + "の案件として登録しました（KPIには数えません）" : "アポを登録しました（アポ+1）") : "保存しました。" + md(w) + " " + hm(w)) + "（クローザー " + CNAME(cl) + (rec.pre && rec.owner !== U ? "・獲得 " + nameOf(rec.owner) : "") + "）");
@@ -956,9 +957,8 @@ $("mSave").onclick = async () => {
 };
 
 /* アポの枠を取る。枠の文書は「日_開始時刻_クローザー」。
-   商談は1時間半なので、同じクローザーの「1時間前・30分前・同時刻・30分後・1時間後」に始まる枠が
-   ひとつも無いことをトランザクションの中で確かめる（同時に保存しても、重なる片方は必ず失敗する） */
-const OVERLAP_STEPS = [-60, -30, 0, 30, 60];   // 30分刻みで、1時間半の商談と重なる開始時刻
+   商談の長さ（APO_MIN）と重なりうる開始時刻（OVERLAP_STEPS）の同じクローザーの枠を読み、本当に重なるもの（stepClash。
+   もう入っている1時間半の枠はその長さで見る）がひとつも無いことをトランザクションの中で確かめる（同時に保存しても、重なる片方は必ず失敗する） */
 async function bookSlot(rec, m, when, remind) {
   const cands = selCloser === "auto" ? freeClosers(when, rec).map(c => c.id).concat(closerList().map(c => c.id)) : [selCloser];
   /* 確認のうえで重ねる（rec.over：日時とクローザーが確認したものと同じときだけ。v54）：
@@ -966,15 +966,19 @@ async function bookSlot(rec, m, when, remind) {
      日時やクローザーを入力シートで変えたら over は効かず、今までどおり重なりを防ぐ */
   const over = !!(rec.over && rec.over.t === +when && rec.over.c === selCloser);
   const recRef = doc(db, "records", rec.id);
-  let chosenId = null, chosenSid = null;
+  let chosenId = null, chosenSid = null, chosenDur = APO_MIN;
   await runTransaction(db, async tx => {
+    /* 長さ：新しいアポは APO_MIN。もう枠があるアポ（日時を直す）は、その枠の長さをそのまま（社長 2026-10-14「既存のものはそのまま」） */
+    let myDur = APO_MIN;
+    if (rec.slotId) { const os = await tx.get(doc(db, "slots", rec.slotId)); if (os.exists()) myDur = durOf(os.data()); }
+    chosenDur = myDur;
     let chosen = null;
     if (over) chosen = {c: selCloser, sref: doc(db, "slots", slotIdOf(when, selCloser) + "_ov" + rec.id)};
     for (const c of over ? [] : [...new Set(cands)]) {
       let clash = false;
       for (const off of OVERLAP_STEPS) {
         const s = await tx.get(doc(db, "slots", slotIdOf(new Date(when.getTime() + off * 6e4), c)));
-        if (s.exists() && s.data().recId !== rec.id) { clash = true; break; }
+        if (s.exists() && s.data().recId !== rec.id && stepClash(off, s.data(), myDur)) { clash = true; break; }
       }
       if (!clash) { chosen = {c, sref: doc(db, "slots", slotIdOf(when, c))}; break; }
     }
@@ -982,7 +986,7 @@ async function bookSlot(rec, m, when, remind) {
     chosenSid = chosen.sref.id;
     const memo = {...m, when: Timestamp.fromDate(when), remind, closer: chosen.c};
     const owner = rec.draft ? (rec.owner || U) : rec.uid;   // 枠の持ち主＝アポを取った人（10月より前の案件は管理者が代わりに入れることがある）
-    const sdata = {day: dk(when), time: hm(when), when: Timestamp.fromDate(when), dur: APO_MIN, closer: chosen.c, uid: owner, recId: rec.id,
+    const sdata = {day: dk(when), time: hm(when), when: Timestamp.fromDate(when), dur: myDur, closer: chosen.c, uid: owner, recId: rec.id,
       shop: m.shop, tel: m.tel, text: m.text, info: m.info || ""};
     if (rec.pre) sdata.pre = true;
     if (rec.slotId && rec.slotId !== chosen.sref.id) tx.delete(doc(db, "slots", rec.slotId));
@@ -1000,10 +1004,10 @@ async function bookSlot(rec, m, when, remind) {
     }
     chosenId = chosen.c;
   });
-  lastBookedSid = chosenSid;
+  lastBookedSid = chosenSid; lastBookedDur = chosenDur;
   return chosenId;
 }
-let lastBookedSid = null;   // bookSlot が最後に書いた枠のID（重ねたときは _ov 付きなので、呼ぶ側が計算できない）
+let lastBookedSid = null, lastBookedDur = 0;   // bookSlot が最後に書いた枠のID（重ねたときは _ov 付きなので、呼ぶ側が計算できない）
 
 /* ============================================================
    日程を変える（リスケ）（社長 2026-10-06「架電以外のアポで、リスケになったとき、すでにカレンダーに入れている予定を簡単に日程変更できる機能」）
@@ -1070,20 +1074,21 @@ async function moveApo(recId, when, cands, forceSid) {
     if (raw.canceled) throw new Error("CANCELED");
     const oldRef = raw.slotId ? doc(db, "slots", raw.slotId) : null;
     const oldS = oldRef ? await tx.get(oldRef) : null;
+    const myDur = oldS && oldS.exists() ? durOf(oldS.data()) : APO_MIN_OLD;   // リスケはそのアポの長さのまま（枠が無い古い記録は 90 分）
     /* forceSid＝重ねて入れた枠（_ov）へ戻すとき：その枠IDをそのまま使い、重なりの確認はしない（v54） */
     let chosen = forceSid ? cands[0] : null;
     for (const c of forceSid ? [] : [...new Set(cands)]) {
       let clash = false;
       for (const off of OVERLAP_STEPS) {
         const s = await tx.get(doc(db, "slots", slotIdOf(new Date(when.getTime() + off * 6e4), c)));
-        if (s.exists() && s.data().recId !== recId) { clash = true; break; }
+        if (s.exists() && s.data().recId !== recId && stepClash(off, s.data(), myDur)) { clash = true; break; }
       }
       if (!clash) { chosen = c; break; }
     }
     if (!chosen) throw new Error("FULL");
     const m = raw.memo || {};
     const base = oldS && oldS.exists() ? oldS.data()
-      : {uid: raw.uid, recId, dur: APO_MIN, shop: m.shop || "", tel: m.tel || "", text: m.text || "", info: m.info || "", ...(raw.pre ? {pre: true} : {})};
+      : {uid: raw.uid, recId, dur: myDur, shop: m.shop || "", tel: m.tel || "", text: m.text || "", info: m.info || "", ...(raw.pre ? {pre: true} : {})};
     const sid = forceSid || slotIdOf(when, chosen);
     if (oldS && oldS.exists() && raw.slotId !== sid) tx.delete(oldRef);
     tx.set(doc(db, "slots", sid), {...base, day: dk(when), time: hm(when), when: Timestamp.fromDate(when), closer: chosen});
@@ -1142,20 +1147,32 @@ function showDeal(id) {
   $("adNew").hidden = true;
   $("adScrim").hidden = $("apoDetail").hidden = false;
 }
-/* 商談は1時間半。13:00の商談があると、そのクローザーは13:00〜14:30が埋まる */
-const APO_MIN = 90;
-const apoEnd = s => new Date(s.when.getTime() + (s.dur || APO_MIN) * 6e4);
+/* 商談の長さ（分）。2026-10-14 社長「商談間隔2時間にして！」で 90 → 120（v61）。13:00の商談があると、そのクローザーは13:00〜15:00が埋まる。
+   もう入っているアポは枠に dur（90）が書いてあるのでそのまま1時間半、これから入れる分（リスケで動かした分も dur は保ったまま）だけ2時間。
+   長さの文字（「2時間」「1時間半」）と、重なりの確認で読む枠の範囲（OVERLAP_STEPS）もここから作る。GAS（calendar-sync）は枠の dur をそのまま使い、dur の無い枠だけ 90 で読むので変更なし */
+const APO_MIN = 120;
+const APO_MIN_OLD = 90;   // dur の無い枠（2026-10-14 より前）の長さ。社長「既存のものはそのまま」
+const APO_LBL = APO_MIN % 60 === 0 ? APO_MIN / 60 + "時間" : APO_MIN % 60 === 30 ? Math.floor(APO_MIN / 60) + "時間半" : APO_MIN + "分";
+const durOf = s => (s && s.dur) || APO_MIN_OLD;                       // その枠（アポ）の長さ
+const recDur = r => { const sl = r && allSlots().find(s => s.recId === r.id); return sl ? durOf(sl) : APO_MIN; };   // その記録の商談の長さ（枠が無ければ新しい長さ）
+const spanFor = except => except && !except.draft ? recDur(except) : APO_MIN;   // 入れようとしている商談の長さ（リスケ・日時の直しは元の長さ、新規は APO_MIN）
+/* 商談と重なりうる、同じクローザーの枠の開始時刻（30分刻み。前は相手の長さが最大 APO_MIN なので −(APO_MIN−30) まで、後ろは APO_MIN−30 まで） */
+const OVERLAP_STEPS = [];
+for (let o = -(APO_MIN - 30); o <= APO_MIN - 30; o += 30) OVERLAP_STEPS.push(o);
+/* その枠（開始が off 分ずれ、長さ sd.dur）が、長さ my の商談と本当に重なるか（もう入っている1時間半の枠は、その長さで見る） */
+const stepClash = (off, sd, my) => off > -durOf(sd) && off < (my || APO_MIN);
+const apoEnd = s => new Date(s.when.getTime() + durOf(s) * 6e4);
 const notMe = (s, except) => !(except && s.recId === except.id);
 /* その30分の枠に、クローザー cid の商談がかかっているか（始まりの枠以外も） */
 const apoCovering = (d, cid, except) => allSlots().find(s => s.closer === cid && s.when && notMe(s, except) && s.when <= d && d < apoEnd(s)) || null;
 /* d から1時間半の商談を入れたら重なる商談 */
-const apoOverlap = (d, cid, except) => { const e = new Date(d.getTime() + APO_MIN * 6e4); return allSlots().find(s => s.closer === cid && s.when && notMe(s, except) && s.when < e && apoEnd(s) > d) || null; };
+const apoOverlap = (d, cid, except, L) => { const e = new Date(d.getTime() + (L || APO_MIN) * 6e4); return allSlots().find(s => s.closer === cid && s.when && notMe(s, except) && s.when < e && apoEnd(s) > d) || null; };
 /* d から1時間半のあいだに、Googleカレンダーの予定があるか */
-const gBusyRange = (d, cid) => { const b = busyMap[cid]; if (!b) return null; const e = new Date(d.getTime() + APO_MIN * 6e4); return (b.blocks || []).find(x => x.s < e && x.e > d) || null; };
+const gBusyRange = (d, cid, L) => { const b = busyMap[cid]; if (!b) return null; const e = new Date(d.getTime() + (L || APO_MIN) * 6e4); return (b.blocks || []).find(x => x.s < e && x.e > d) || null; };
 /* アポ可の枠（石川さんの「ブロック」など）。枠のカレンダーがつながって読めている人だけ。
    inAvail＝d から1時間半の商談がまるごと枠の中に入るか（社長の決定 2026-10-06：1時間半まるごと） */
 const availOf = cid => { const b = busyMap[cid]; return b && b.availStatus === "ok" ? b.avail || [] : null; };
-const inAvail = (d, cid) => { const a = availOf(cid); if (!a) return false; const e = new Date(d.getTime() + APO_MIN * 6e4); return a.some(w => w.s <= d && w.e >= e); };
+const inAvail = (d, cid, L) => { const a = availOf(cid); if (!a) return false; const e = new Date(d.getTime() + (L || APO_MIN) * 6e4); return a.some(w => w.s <= d && w.e >= e); };
 function availLegend(list) {
   const w = list.filter(c => availOf(c.id));
   if (!w.length) return "";
@@ -1163,9 +1180,9 @@ function availLegend(list) {
     (AVAIL_ONLY ? `<span><i class="lg-outav"></i>灰色＝枠の外（入れられない）</span>` : "");
 }
 /* 枠の外で入れられない（AVAIL_ONLY のときだけ。ふだんは緑が目安になるだけで、枠の外にも入れられる） */
-const outOfAvail = (d, cid) => AVAIL_ONLY && !!availOf(cid) && !inAvail(d, cid);
+const outOfAvail = (d, cid, L) => AVAIL_ONLY && !!availOf(cid) && !inAvail(d, cid, L);
 /* d から始める商談を、そのクローザーに入れられないか */
-const closerBusy = (d, cid, except) => !!apoOverlap(d, cid, except) || !!gBusyRange(d, cid) || outOfAvail(d, cid);
+const closerBusy = (d, cid, except) => { const L = spanFor(except); return !!apoOverlap(d, cid, except, L) || !!gBusyRange(d, cid, L) || outOfAvail(d, cid, L); };
 /* 「予定あり」でも承知のうえで入れる（社長 2026-10-12「基本はいれへんけど、どうしてもそこしか無理って時用に」）。
    hardBusy＝アプリの商談と重なる（これはどうしても入れられない：1人のクローザーが同時に2つの商談はできない）。
    softBlocked＝Googleカレンダーの予定・アポ可の枠の外だけで埋まっている（確認を1回はさめば入れられる） */
@@ -1235,7 +1252,7 @@ function timeCell(h, mi) {
 }
 /* 商談は1時間半の帯で見せる：始まりの枠に置いて、下の枠へ重ねて伸ばす（行の高さは固定）。
    何枠ぶんか（カレンダーの終わり 22:00 で切る）と、同じ列で時間が重なる商談を横に並べるための「レーン」 */
-const spanOf = s => Math.max(1, Math.min(Math.ceil((s.dur || APO_MIN) / 30), (SLOT_H1 * 60 - s.when.getHours() * 60 - s.when.getMinutes()) / 30));
+const spanOf = s => Math.max(1, Math.min(Math.ceil(durOf(s) / 30), (SLOT_H1 * 60 - s.when.getHours() * 60 - s.when.getMinutes()) / 30));
 function laneLayout(list) {
   /* 列の数は「時間がつながって重なっているまとまり」ごと（v58。社長「重ねてアポ入れたら、その日全部半分になる」＝前は日・列ごとに1つの数だった）。
      重なっていない帯は今までどおり全幅 */
@@ -1309,7 +1326,7 @@ function renderCal() {
         const b = document.createElement("button");
         b.className = "sl" + (mi ? " half" : "") + (past ? " past" : canStart ? " free" : " full") + (av ? " avail" : "") + (out ? " outav" : "") +
           (!past && !canStart && !list.length && !cover && !dcov && !gb && !out ? " nostart" : "");
-        b.setAttribute("aria-label", c.name + " " + hm(d) + (list.length ? " 商談あり" : cover ? " 商談中" : dcov ? " " + dealKind(dcov.deal) + "（" + dealShop(dcov.deal) + "）" : gb ? " ほかの予定あり" : past ? " 過ぎた枠" : out ? " アポ可の枠の外" : canStart ? (av ? " 空き・アポ可" : " 空き") : " ここからは1時間半とれない"));
+        b.setAttribute("aria-label", c.name + " " + hm(d) + (list.length ? " 商談あり" : cover ? " 商談中" : dcov ? " " + dealKind(dcov.deal) + "（" + dealShop(dcov.deal) + "）" : gb ? " ほかの予定あり" : past ? " 過ぎた枠" : out ? " アポ可の枠の外" : canStart ? (av ? " 空き・アポ可" : " 空き") : " ここからは" + APO_LBL + "とれない"));
         /* ほかの予定は、始まりの枠にだけ時間を書く */
         const gStart = gb && (gb.s >= d || +d === +new Date(new Date(day).setHours(SLOT_H0, 0, 0, 0)));
         /* 商談は始まりの枠から1時間半の帯。続きの枠（cover）は帯の下になるので何も書かない */
@@ -1336,7 +1353,7 @@ function renderCal() {
     $("wkSub").textContent = (off === 0 ? "今日" : off === 1 ? "明日" : off === -1 ? "昨日" : "") + "　アポ " + count + "件 ・ 空き " + free + "枠";
     $("calToday").hidden = +calDay === +calStartDay();
     $("calToday").textContent = +calStartDay() === +today() ? "今日へ" : "明日へ";
-    $("calDefs").textContent = "空いている枠を押すと、そのクローザーで、その時間から1時間半の商談を登録できます。商談を押すと詳細が出ます。";
+    $("calDefs").textContent = "空いている枠を押すと、そのクローザーで、その時間から" + APO_LBL + "の商談を登録できます。商談を押すと詳細が出ます。";
   } else {
     /* ---- 週表示：月〜土 ---- */
     const days = [0, 1, 2, 3, 4, 5].map(i => addDays(wkStart, i));
@@ -1405,7 +1422,7 @@ function renderCal() {
     $("wkSub").textContent = (wOff === 0 ? "今週" : wOff === 1 ? "来週" : wOff === -1 ? "先週" : "") + "　アポ " + count + "件 ・ 空き " + free + "枠";
     $("calToday").hidden = wOff === 0; $("calToday").textContent = "今週へ";
     $("calDefs").textContent = viewSel ? "今は" + viewSel.name + "さんの予定（見るだけ）を表示しています。斜線の時間が予定ありです。アポはここからは入れられません。"
-      : "枠を押すと、商談の詳細を見るか、空いていればその時間から1時間半の商談を登録できます。クローザー1人につき同じ時間は1件まで" +
+      : "枠を押すと、商談の詳細を見るか、空いていればその時間から" + APO_LBL + "の商談を登録できます。クローザー1人につき同じ時間は1件まで" +
       (calCloser === "all" ? "で、全員が埋まっている時間だけ「埋まり」になります。" : "。今は" + CNAME(calCloser) + "さんの予定だけ表示しています。");
   }
   document.body.classList.toggle("picking", pickMode);
@@ -1416,11 +1433,11 @@ function renderCal() {
 /* closerId：日表示の列から押したときだけ入る（その人で決まる） */
 /* ここから1時間半とれない理由 */
 function whyNot(d, cid, except) {
-  if (!cid || cid === "all" || cid === "auto") return "この時間からの1時間半は、クローザー全員が埋まっています";
+  if (!cid || cid === "all" || cid === "auto") return "この時間からの" + APO_LBL + "は、クローザー全員が埋まっています";
   const hit = apoOverlap(d, cid, except);
-  if (hit) return CNAME(cid) + "さんは " + hm(hit.when) + "〜" + hm(apoEnd(hit)) + " に商談があるので、ここからは1時間半とれません";
+  if (hit) return CNAME(cid) + "さんは " + hm(hit.when) + "〜" + hm(apoEnd(hit)) + " に商談があるので、ここからは" + APO_LBL + "とれません";
   const gb = gBusyRange(d, cid);
-  if (gb) return CNAME(cid) + "さんは " + hm(gb.s) + "〜" + hm(gb.e) + " にほかの予定があるので、ここからは1時間半とれません";
+  if (gb) return CNAME(cid) + "さんは " + hm(gb.s) + "〜" + hm(gb.e) + " にほかの予定があるので、ここからは" + APO_LBL + "とれません";
   return "この枠は埋まっています";
 }
 function slotTap(d, list, past, full, closerId) {
@@ -1455,7 +1472,7 @@ let fbGo = null;
 function confirmBusy(d, cid, except, go) {
   fbGo = go;
   const who = cid && cid !== "all" && cid !== "auto" ? CNAME(cid) + "さん" : "クローザー全員";
-  $("fbTarget").innerHTML = `<b>${md(d)} ${hm(d)}〜${hm(new Date(d.getTime() + APO_MIN * 6e4))}</b><small>${esc(whyNot(d, cid, except))}</small>` +
+  $("fbTarget").innerHTML = `<b>${md(d)} ${hm(d)}〜${hm(new Date(d.getTime() + spanFor(except) * 6e4))}</b><small>${esc(whyNot(d, cid, except))}</small>` +
     (cid && cid !== "all" && cid !== "auto" ? "" : `<small>おまかせで、商談と重なっていない人に入ります</small>`);
   $("fbTitle").textContent = who + "のこの時間は「予定あり」です";
   $("fbScrim").hidden = $("fbDlg").hidden = false;
@@ -1512,7 +1529,7 @@ function showApoDetail(d, list, past) {
     ${s.text ? `<div>${esc(s.text)}</div>` : ""}
     ${s.info ? `<div class="ad-info">${esc(s.info)}</div>` : ""}
     ${s.recId && (s.uid === U || isAdminMe() || s.closer === U) ? `<div class="ad-acts"><button type="button" class="ad-rs" data-rec="${esc(s.recId)}">日程を変える（リスケ）</button><button type="button" class="ad-cx" data-rec="${esc(s.recId)}">予定を取り消す</button></div>` : ""}</div>`).join("") +
-    (!past ? `<div class="ad-row"><small>この時間から1時間半とれるクローザー：${free.length ? free.map(c => esc(c.name)).join("・") : "なし"}</small></div>` : "");
+    (!past ? `<div class="ad-row"><small>この時間から${APO_LBL}とれるクローザー：${free.length ? free.map(c => esc(c.name)).join("・") : "なし"}</small></div>` : "");
   $("adNew").hidden = past || !slotOpen(d, null, calCloser);
   $("adScrim").hidden = $("apoDetail").hidden = false;
 }
@@ -1759,7 +1776,7 @@ function openDetail(r, cal) {
   if (w) {
     const mins = Math.round((w - now) / 6e4);
     const left = mins > 0 && mins < 24 * 60 ? `<span class="rd-left">あと${mins >= 60 ? Math.floor(mins / 60) + "時間" + (mins % 60 ? mins % 60 + "分" : "") : mins + "分"}</span>` : mins <= 0 && keepsLate(r) && !r.done ? `<span class="badge late">過ぎています</span>` : "";
-    rows.push([r.isTask ? "日時" : r.r === "アポ" ? "商談日時" : "かけ直す日時", `<b class="num">${dayWord(w)} ${md(w)} ${hm(w)}${r.r === "アポ" && !r.isTask ? "〜" + hm(new Date(w.getTime() + APO_MIN * 6e4)) : ""}</b>${left}`]);
+    rows.push([r.isTask ? "日時" : r.r === "アポ" ? "商談日時" : "かけ直す日時", `<b class="num">${dayWord(w)} ${md(w)} ${hm(w)}${r.r === "アポ" && !r.isTask ? "〜" + hm(new Date(w.getTime() + recDur(r) * 6e4)) : ""}</b>${left}`]);
   } else if (r.r === "アポ") rows.push(["面談日時", `<span class="badge late">日時未定</span>` + (r.src === "old" ? OLD_BADGE : "")]);
   if (r.isTask && m.shop && r.title) rows.push(["店名", esc(m.shop)]);
   if (r.r === "アポ" && m.closer) rows.push(["クローザー", `<i class="dot-c" style="background:${CCOL(m.closer)}"></i>${esc(CNAME(m.closer))}`]);
@@ -1884,7 +1901,7 @@ async function restoreCancel(kind, id, raw, sraw) {
         const when = tsd(sraw.when);
         for (const off of OVERLAP_STEPS) {
           const s = await tx.get(doc(db, "slots", slotIdOf(new Date(when.getTime() + off * 6e4), sraw.closer)));
-          if (s.exists() && s.data().recId !== id) throw new Error("TAKEN");
+          if (s.exists() && s.data().recId !== id && stepClash(off, s.data(), durOf(sraw))) throw new Error("TAKEN");
         }
       }
       if (kind === "del") {

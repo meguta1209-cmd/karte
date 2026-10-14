@@ -18,7 +18,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=BIZ+UDPGothic:wght@400;700&family=Roboto+Mono:wght@500;700&display=swap">
-<link rel="stylesheet" href="./style.css?v=60">
+<link rel="stylesheet" href="./style.css?v=61">
 <script>
 /* LINEの中のブラウザではGoogleログインが通らない（途中の情報を覚えておけない）。
    LINEは ?openExternalBrowser=1 を付けると Safari / Chrome で開き直してくれるので、自動で付け直す */
@@ -268,7 +268,7 @@
           <li>「特定のユーザーまたはグループと共有する」→「ユーザーやグループを追加」</li>
           <li><b>meguta1209@gmail.com</b> を入れて、権限を「<b>予定の表示（時間枠のみ、詳細は非表示）</b>」にして送信</li>
         </ol>
-        <p>チームに見えるのは「予定あり」と時間だけです。予定の名前や中身は見えません。共有から15分以内に反映されます。アプリで取ったアポは、このカレンダーに【商談】店名の招待として届きます（1時間半）。</p>
+        <p>チームに見えるのは「予定あり」と時間だけです。予定の名前や中身は見えません。共有から15分以内に反映されます。アプリで取ったアポは、このカレンダーに【商談】店名の招待として届きます（2時間）。</p>
       </div>
     </div>
 
@@ -461,7 +461,7 @@
 <div class="daysum ggd" id="gcalGuide" role="dialog" aria-modal="true" aria-labelledby="ggTitle" hidden>
   <div class="ds-head"><h3 id="ggTitle">📅 Googleカレンダーと連携しましょう</h3></div>
   <p class="gg-nag" id="ggNag">Googleカレンダーの共有がまだです。<br>共有が済むまで、アプリを開くたびにこのお知らせが出ます。</p>
-  <p class="ds-note">クローザーになると、あなたの予定の時間がチームのカレンダーに「予定あり」で出て、その時間にはアポが入らなくなります。アポは【商談】店名（1時間半）の招待で届きます。チームに見えるのは時間だけで、予定の名前は見えません。</p>
+  <p class="ds-note">クローザーになると、あなたの予定の時間がチームのカレンダーに「予定あり」で出て、その時間にはアポが入らなくなります。アポは【商談】店名（2時間）の招待で届きます。チームに見えるのは時間だけで、予定の名前は見えません。</p>
   <div class="gg-status" id="ggStatus"></div>
   <ol class="gg-steps" id="ggSteps">
     <li><b>パソコンで</b> <a href="https://calendar.google.com/calendar/u/0/r/settings" target="_blank" rel="noopener">Googleカレンダーの設定</a> を開く<small>スマホのカレンダーアプリには共有の設定がありません</small></li>
@@ -515,7 +515,7 @@
 <div class="scrim" id="invScrim" hidden></div>
 <div class="daysum invd" id="invDlg" role="dialog" aria-modal="true" aria-labelledby="invTitle" hidden>
   <div class="ds-head"><h3 id="invTitle">アポの招待はどちらに届けますか？</h3></div>
-  <p class="ds-note">アポが入ると、Googleカレンダーに【商談】店名（1時間半）の招待が届きます。届けるアカウントを選んでください。どれを選んでも、2つのカレンダーの予定の時間はどちらも空き確認に使います。あとから設定の「アポの招待の届け先」で変えられます。</p>
+  <p class="ds-note">アポが入ると、Googleカレンダーに【商談】店名（2時間）の招待が届きます。届けるアカウントを選んでください。どれを選んでも、2つのカレンダーの予定の時間はどちらも空き確認に使います。あとから設定の「アポの招待の届け先」で変えられます。</p>
   <div class="inv-opts" id="invOpts"></div>
   <div class="ds-foot"><button id="invLater">あとで決める（今は1つ目に届く）</button></div>
 </div>
@@ -607,7 +607,7 @@
 <div class="offline" id="offline" hidden>オフライン中：つながったら送ります</div>
 <div class="toast" id="toast"></div>
 
-<script src="./breaktimer.js?v=60"></script>
-<script type="module" src="./app.js?v=60"></script>
+<script src="./breaktimer.js?v=61"></script>
+<script type="module" src="./app.js?v=61"></script>
 </body>
 </html>
