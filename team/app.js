@@ -86,7 +86,7 @@ const PEOPLE_COLORS = ["#1E4E86","#11734B","#8A4B08","#6B3FA0","#A33A5B","#0B6E7
 /* クローザーの色。アポ可の枠が緑なので、緑は使わない（2026-10-06 社長「阪本さんと石川さんの予定の色が分かりにくい」。クローザーの緑が枠の緑とぶつかる） */
 const CLOSER_COLORS = ["#2F6DB5","#C0561A","#7B4DB8","#B83B6B","#0E7F8C","#8A6A12"];
 const KEYS = "1234567890qwertyuiop";
-const SLOT_H0 = 10, SLOT_H1 = 22;          // アポ枠 10:00〜22:00・30分ごと・日曜休み
+const SLOT_H0 = 9, SLOT_H1 = 22;           // アポ枠 9:00〜22:00・30分ごと・日曜休み（2026-10-15 社長「アポの入れれる時間9時からにして」で 10→9。休憩タイマー（breaktimer.js）は別）
 
 /* ---------- 小道具 ---------- */
 const $ = id => document.getElementById(id);
@@ -879,7 +879,7 @@ function checkClash() {
   if (!editing || editing.r !== "アポ" || !$("mWhen").value) { box.hidden = true; return; }
   const d = new Date($("mWhen").value);
   box.hidden = false;
-  if (!isSlotTime(d)) { box.className = "clash"; box.textContent = "アポの枠の外です（10:00〜22:00・30分ごと・日曜休み）"; return; }
+  if (!isSlotTime(d)) { box.className = "clash"; box.textContent = "アポの枠の外です（" + SLOT_H0 + ":00〜" + SLOT_H1 + ":00・30分ごと・日曜休み）"; return; }
   const free = freeClosers(d, editing);
   const L = spanFor(editing);   // この商談の長さ（新規＝APO_MIN、リスケ・日時の直し＝元の長さ）
   const span = md(d) + " " + hm(d) + "〜" + hm(new Date(d.getTime() + L * 6e4));
@@ -931,7 +931,7 @@ $("mSave").onclick = async () => {
       updateDoc(doc(db, "records", rec.id), {memo: keep}).catch(e => toast(errMsg(e)));
       closeMemo(); toast("メモを保存しました（キャンセルのまま）");
     } else if (rec.r === "アポ" && w) {
-      if (!isSlotTime(w)) { toast("アポの枠の外です（10:00〜22:00・30分ごと・日曜休み）"); return; }
+      if (!isSlotTime(w)) { toast("アポの枠の外です（" + SLOT_H0 + ":00〜" + SLOT_H1 + ":00・30分ごと・日曜休み）"); return; }
       const cl = await bookSlot(rec, m, w, remind);
       /* サーバーからの通知を待たずに、自分のカレンダーへすぐ出す */
       const sid = lastBookedSid || slotIdOf(w, cl);
@@ -1038,7 +1038,7 @@ async function recById(id) {
 async function saveResched(rec) {
   const w = $("mWhen").value ? new Date($("mWhen").value) : null;
   if (!w) { toast("新しい日時を選んでください"); return; }
-  if (!isSlotTime(w)) { toast("アポの枠の外です（10:00〜22:00・30分ごと・日曜休み）"); return; }
+  if (!isSlotTime(w)) { toast("アポの枠の外です（" + SLOT_H0 + ":00〜" + SLOT_H1 + ":00・30分ごと・日曜休み）"); return; }
   const old = rec.memo.when, oldC = rec.memo.closer;
   const oldSid = rec.slotId && String(rec.slotId).includes("_ov") ? rec.slotId : null;   // 重ねて入れた枠（_ov）なら、戻すときは同じ枠IDへ（重なりの確認なし。v54）
   const cid = rsCloserFixed(rec) ? oldC : selCloser;
@@ -1116,7 +1116,7 @@ const gBusyAt = (d, cid) => { const b = busyMap[cid]; if (!b) return null; const
 /* 外部の人のGoogleカレンダーの【商談】【契約】（busy/{uid}.deals。連携の係が題・時間・場所・説明欄を書く）。
    社長 2026-10-06「阪本さんの予定で、商談の予定があるところはアポの予定として表示して！表示内容は石川さんと同じで、押したらアポの内容が表示されるように」。
    アプリのアポと同じ帯で出す（アプリの記録ではないので見るだけ）。帯の置き方はアポと同じにするため、
-   その日の 10:00〜22:00 に切り、始まりの30分の枠（when）から終わりまでの長さ（dur）にする */
+   その日の SLOT_H0〜SLOT_H1 に切り、始まりの30分の枠（when）から終わりまでの長さ（dur）にする */
 const DEAL_HEAD = /^【(商談|契約)】\s*/;
 const dealShop = x => x.t.replace(DEAL_HEAD, "") || "（店名なし）";
 const dealKind = x => (x.t.match(DEAL_HEAD) || [, "商談"])[1];
