@@ -917,24 +917,34 @@ function checkClash() {
      テスター「赤のままだと入らないように見えて迷う」）。商談と重なるときは今までどおり赤 */
   const forced = editing.force === +d;
   const warn = t => { box.className = "clash warn"; box.textContent = span + " " + t + "（予定ありですが、確認済みのため入れられます）"; };
+  /* 赤い表示に「それでもこの時間で入れる」（社長 2026-10-15「このリスケ画面からはできないん？？」v64）：手で打った日時でも、チップと同じ確認（pickBlocked）を通せば黄色になって保存できる。
+     おまかせは Google の予定などで全員が埋まっているときだけ（商談で全員埋まりは出さない＝v63 のチップと同じ）。日時やクローザーを変えると、この表示ごと作り直し＝確認はやり直し */
+  const cidNow = selCloser === "auto" ? null : selCloser;
+  const red = (t, can) => {
+    box.className = "clash"; box.textContent = t;
+    if (!can) return;
+    const b = document.createElement("button"); b.type = "button"; b.className = "clash-force"; b.textContent = "それでもこの時間で入れる";
+    b.onclick = () => pickBlocked(d, cidNow, checkClash);
+    box.appendChild(b);
+  };
   if (selCloser === "auto") {
     if (!free.length) {
       if (forced && closerList().some(c => !hardBusy(d, c.id, editing))) { warn("おまかせ：商談と重なっていない人に入ります"); return; }
-      box.className = "clash"; box.textContent = "この時間からの" + APO_LBL + "は、クローザー全員が埋まっています"; return;
+      red("この時間からの" + APO_LBL + "は、クローザー全員が埋まっています", softBlocked(d, null, editing)); return;
     }
     box.className = "clash ok"; box.textContent = span + " 空いているクローザー：" + free.map(c => c.name).join("・"); return;
   }
   const hit = apoOverlap(d, selCloser, editing, L);
   if (hit && editing.over && editing.over.t === +d && editing.over.c === selCloser) { warn(CNAME(selCloser) + "さんの商談（" + (hit.shop || "店名なし") + " " + hm(hit.when) + "〜" + hm(apoEnd(hit)) + "）に重ねて入れます"); return; }
-  if (hit) { box.className = "clash"; box.textContent = CNAME(selCloser) + "さんは " + hm(hit.when) + "〜" + hm(apoEnd(hit)) + " に商談があります（" + nameOf(hit.uid) + "さんのアポ：" + (hit.shop || "店名なし") + "）。" + APO_LBL + "とれません" + others; return; }
+  if (hit) { red(CNAME(selCloser) + "さんは " + hm(hit.when) + "〜" + hm(apoEnd(hit)) + " に商談があります（" + nameOf(hit.uid) + "さんのアポ：" + (hit.shop || "店名なし") + "）。" + APO_LBL + "とれません" + others, true); return; }
   const gb = gBusyRange(d, selCloser, L);
   if (gb) {
     if (forced) { warn(CNAME(selCloser) + "さんは " + hm(gb.s) + "〜" + hm(gb.e) + " にほかの予定があります"); return; }
-    box.className = "clash"; box.textContent = CNAME(selCloser) + "さんは " + hm(gb.s) + "〜" + hm(gb.e) + " にほかの予定があります。" + APO_LBL + "とれません" + others; return;
+    red(CNAME(selCloser) + "さんは " + hm(gb.s) + "〜" + hm(gb.e) + " にほかの予定があります。" + APO_LBL + "とれません" + others, true); return;
   }
   if (outOfAvail(d, selCloser, L)) {
     if (forced) { warn(CNAME(selCloser) + "さんのアポ可の枠の外です"); return; }
-    box.className = "clash"; box.textContent = CNAME(selCloser) + "さんのアポ可の枠の外です（" + APO_LBL + "まるごと枠の中の時間だけ入れられます）" + others; return;
+    red(CNAME(selCloser) + "さんのアポ可の枠の外です（" + APO_LBL + "まるごと枠の中の時間だけ入れられます）" + others, true); return;
   }
   box.className = "clash ok"; box.textContent = span + " " + CNAME(selCloser) + "さん 空いています" + (availOf(selCloser) ? (inAvail(d, selCloser, L) ? "（アポ可の枠の中）" : "（アポ可の枠の外）") : "");
 }
