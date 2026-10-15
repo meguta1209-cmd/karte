@@ -728,7 +728,7 @@ img{max-width:100%;}
   #msheet .in{position:relative;}
   #msheet .m-undo{position:absolute; top:4px; right:0; margin:0;}
   /* 左の列は幅が狭いので、空いている枠のボタンは4つまで（1段に収める） */
-  #msheet #mQuick button:nth-child(n+5){display:none;}
+  #msheet #mQuick button.free:nth-child(n+5){display:none;}   /* 予定あり（.busy）の選択肢は隠さない（v63） */
 }
 /* KPI：最新にする */
 .kpi-top{display:flex; align-items:center; gap:10px;}
@@ -907,3 +907,5 @@ img{max-width:100%;}
 /* 昼休憩明け（オレンジ）と稼働終了（紫）の帯（v60）。架電再開（青）・休憩（緑）と見分けがつくように */
 .brkbar.lunch .in{background:#E65100; border-color:#BF360C;}
 .brkbar.end .in{background:#4A2F8A; border-color:#2E1A5E;}
+/* 入力シートの「予定あり」「商談あり」の選択肢（v63）：うすい字・点線で、空きと見分ける */
+.quick button.busy{color:var(--ink2); border-style:dashed; background:var(--card);}

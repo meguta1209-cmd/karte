@@ -609,10 +609,39 @@ function setQuick(kind) {
     const at = (off, h) => { const d = addDays(today(), off); d.setHours(h, 0, 0, 0); return d; };
     opts = [["1時間後", new Date(Date.now() + 36e5)], ["今日17時", at(0, 17)], ["明日10時", at(1, 10)], ["明日15時", at(1, 15)]];
   } else {
-    $("mQuickLbl").textContent = "空いている枠（近い順）";
+    $("mQuickLbl").textContent = "空いている枠（近い順）・うすい字＝予定あり（確認して入れる）";
     opts = freeSlots(new Date(Date.now() + 36e5), 6).map(d => [dayWord(d) + " " + hm(d), d]);
   }
-  opts.forEach(([l, d]) => { const b = document.createElement("button"); b.type = "button"; b.textContent = l; b.onclick = () => { $("mWhen").value = toLocal(d); checkClash(); }; q.appendChild(b); });
+  opts.forEach(([l, d]) => { const b = document.createElement("button"); b.type = "button"; b.className = "free"; b.textContent = l; b.onclick = () => { $("mWhen").value = toLocal(d); checkClash(); }; q.appendChild(b); });
+  /* 予定ありの枠も選べる（社長 2026-10-15「カレンダーからのリスケの時も、予定ある場合でも選択式で入れれるようにして」v63）：
+     空きのあとに、近い順で「（予定あり）」＝Googleの予定・枠の外、「（商談あり）」＝アプリの商談と重なる、を出す。押すと v52／v54 と同じ確認 */
+  if (kind === "アポ") blockedSlots(new Date(Date.now() + 36e5), 4).forEach(({d, hard}) => {
+    const b = document.createElement("button"); b.type = "button"; b.className = "busy"; b.textContent = dayWord(d) + " " + hm(d) + (hard ? "（商談あり）" : "（予定あり）");
+    b.onclick = () => pickBlocked(d, selCloser !== "auto" ? selCloser : null, () => { $("mWhen").value = toLocal(d); checkClash(); });
+    q.appendChild(b);
+  });
+}
+/* 予定ありの枠（近い順 n 件）。クローザーを選んでいれば その人の予定あり・商談あり、おまかせなら「全員がGoogleの予定などで埋まっている」時間だけ（商談で全員埋まりは出さない） */
+function blockedSlots(from, n) {
+  const out = []; let d = new Date(from); d.setSeconds(0, 0);
+  d.setMinutes(d.getMinutes() === 0 ? 0 : d.getMinutes() <= 30 ? 30 : 60, 0, 0);
+  const cid = selCloser !== "auto" ? selCloser : null;
+  for (let g = 0; out.length < n && g < 2000; g++, d = new Date(d.getTime() + 18e5)) {
+    if (!isSlotTime(d) || slotOpen(d, editing, selCloser)) continue;
+    const soft = softBlocked(d, cid, editing);
+    if (soft) out.push({d: new Date(d), hard: false});
+    else if (cid) out.push({d: new Date(d), hard: true});
+  }
+  return out;
+}
+/* 予定ありの枠を選んだときの確認（入力シートの選択肢・カレンダーの日切りで共通）。
+   Googleの予定・枠の外 → confirmBusy（黄色。editing.force）／アプリの商談と重なる → confirmOverlap（v54 の「重ねて入れる」。editing.over） */
+function pickBlocked(d, cid, go) {
+  if (!editing) return;
+  if (softBlocked(d, cid, editing)) { confirmBusy(d, cid, editing, () => { editing.force = +d; go(); }); return; }
+  const hit = cid ? apoOverlap(d, cid, editing, spanFor(editing)) : null;
+  if (!hit) { toast(whyNot(d, cid, editing)); return; }
+  confirmOverlap(d, cid, {memo: {shop: hit.shop}, uid: hit.uid}, () => { editing.over = {t: +d, c: cid}; go(); });
 }
 function openMemo(rec) {
   editing = rec; const m = rec.memo || {};
@@ -1045,7 +1074,9 @@ async function saveResched(rec) {
   /* カレンダーと同じく、Googleの予定・アポ可の枠も見て決める（おまかせは空いている人だけ） */
   /* カレンダーで「予定あり」の枠を確認のうえで選んだ（rec.force＝その日時）ときは、商談と重なる人だけ除く（v52） */
   const force = rec.force === +w;
-  const cands = cid === "auto" ? (force ? [...freeClosers(w, rec), ...closerList().filter(c => !hardBusy(w, c.id, rec))] : freeClosers(w, rec)).map(c => c.id)
+  /* 「重ねて入れる」でリスケ（v63）：確認した日時・クローザーと同じときだけ、_ov 付きの枠IDで動かす（重なりの確認なし。v54 の新規と同じ決まり） */
+  const over = !!(rec.over && rec.over.t === +w && cid !== "auto" && rec.over.c === cid);
+  const cands = over ? [cid] : cid === "auto" ? (force ? [...freeClosers(w, rec), ...closerList().filter(c => !hardBusy(w, c.id, rec))] : freeClosers(w, rec)).map(c => c.id)
     : (force ? hardBusy(w, cid, rec) : closerBusy(w, cid, rec)) ? [] : [cid];
   /* 日時もクローザーも今のまま（おまかせなら、空いている人の先頭＝今の人）なら何も書かない。
      前は「おまかせ」だとこの判定を通り抜けて同じ枠に書き直そうとし、管理者には「権限がありません」が出ていた（テスター 2026-10-09。
@@ -1054,7 +1085,7 @@ async function saveResched(rec) {
   if (!cands.length) { toast(whyNot(w, cid, rec)); return; }
   $("mSave").disabled = true;
   try {
-    const got = await moveApo(rec.id, w, cands);
+    const got = await moveApo(rec.id, w, cands, over ? slotIdOf(w, cid) + "_ov" + rec.id : null);
     closeMemo();
     toast("日程を変えました：" + md(old) + " " + hm(old) + " → " + md(w) + " " + hm(w) + "（クローザー " + CNAME(got.closer) + "）。招待も5分以内に変わります",
       "元に戻す", () => moveApo(rec.id, old, [oldC], oldSid).then(() => toast("元の日時に戻しました")).catch(e => toast(e && e.message === "FULL" ? "元の時間に別の商談が入ったため、戻せませんでした" : errMsg(e))), 10000);
@@ -1448,9 +1479,8 @@ function slotTap(d, list, past, full, closerId) {
     const blocked = cid ? closerBusy(d, cid, editing) : !slotOpen(d, editing, "all");
     const pick = () => { if (cid) selCloser = cid; $("mWhen").value = toLocal(d); finishPick(); setQuick("アポ"); checkClash(); };
     if (blocked) {
-      /* Googleの予定・枠の外だけで埋まっているなら、確認のうえで選べる（商談と重なるときは選べない） */
-      if (softBlocked(d, cid, editing)) confirmBusy(d, cid, editing, () => { if (editing) editing.force = +d; pick(); });
-      else toast(whyNot(d, cid, editing));
+      /* Googleの予定・枠の外だけで埋まっているなら確認のうえで選べる（v52）。商談と重なるときも、クローザーが決まっていれば「重ねて入れる」の確認で選べる（v63） */
+      pickBlocked(d, cid, pick);
       return;
     }
     pick(); return;
