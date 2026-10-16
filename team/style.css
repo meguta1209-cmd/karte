@@ -911,3 +911,35 @@ img{max-width:100%;}
 .quick button.busy{color:var(--ink2); border-style:dashed; background:var(--card);}
 /* 入力シートの赤い警告の中の「それでもこの時間で入れる」（v64） */
 .clash .clash-force{display:block; margin-top:6px; padding:5px 10px; border-radius:6px; border:1.5px solid var(--red); background:var(--card); color:var(--red); font-size:12.5px; font-weight:700;}
+/* ---------- 商談の結果（v66）：記録の詳細の欄・リマインドの「結果まだ」・KPI・中身の一覧 ---------- */
+.res-box{margin:2px 0 10px; padding:10px 12px; border:1px solid var(--rule); border-radius:10px; background:var(--card2);}
+.res-h{font-size:13.5px; font-weight:700; color:var(--ink);}
+.res-step{font-size:12px; font-weight:700; color:var(--ink2); margin:8px 0 4px;}
+.res-chips{display:flex; flex-wrap:wrap; gap:6px;}
+.res-chip{border:1px solid var(--rule2); background:var(--card); color:var(--ink); border-radius:999px; padding:6px 11px; font:inherit; font-size:13px; font-weight:700; min-height:34px; cursor:pointer;}
+.res-chip:disabled{cursor:default; opacity:.6;}
+.res-chip.on{background:var(--blue); border-color:var(--blue); color:var(--on-blue); opacity:1;}
+.res-chip.good.on{background:var(--ok); border-color:var(--ok);}
+.res-chip.bad.on{background:var(--red); border-color:var(--red);}
+.res-memo{width:100%; margin-top:8px; border:1px solid var(--rule2); border-radius:8px; padding:8px 10px; font:inherit; font-size:16px; background:var(--card); color:var(--ink); box-sizing:border-box;}
+.res-note{font-size:11.5px; color:var(--ink3); margin-top:6px; line-height:1.5;}
+.res-todo{margin:10px 0 6px; padding:10px 12px; border-radius:10px; background:var(--warn-soft); border:1px solid var(--warn); color:var(--warn);}
+.res-todo b{display:block; font-size:14px;}
+.res-todo small{display:block; font-size:11.5px; color:var(--ink2); margin-top:2px;}
+.res-list{margin-bottom:12px;}
+.res-by{margin-top:10px;}
+button.res-tile{text-align:left; font:inherit; color:inherit; cursor:pointer; border:1px solid var(--rule);}
+button.res-tile:hover{border-color:var(--rule2);}
+.res-kpi .res-n{border:0; background:none; font:inherit; color:var(--blue); font-weight:700; text-decoration:underline; text-underline-offset:2px; cursor:pointer; padding:2px 4px; min-width:28px;}
+.res-kpi .res-n.todo{color:var(--warn);}
+.res-kpi .res-0{color:var(--ink3);}
+.res-won-btn{margin-top:8px;}
+.rld{z-index:57;}
+.rl-list{max-height:60vh; overflow:auto; margin:4px -2px 0;}
+.rl-row{display:block; width:100%; text-align:left; border:0; border-bottom:1px solid var(--rule); background:none; color:var(--ink); font:inherit; padding:9px 4px; cursor:pointer;}
+.rl-row:hover{background:var(--card2);}
+.rl-row .rl-t{font-size:12px; color:var(--ink2); margin-right:6px;}
+.rl-row .rl-shop{font-size:14px;}
+.rl-row small{display:block; font-size:11.5px; color:var(--ink2); margin-top:2px;}
+.rl-row .rl-memo{color:var(--ink3); white-space:pre-wrap; overflow-wrap:anywhere;}
+.rpd-n{font-size:12px; color:var(--ink3); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}

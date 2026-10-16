@@ -191,6 +191,26 @@ const isAdminMe = () => !!(me && me.role === "admin");
 const isCloserOf = r => r.r === "アポ" && !!(r.memo && r.memo.closer === U);
 const canCancel = r => !r.isTask && (r.r === "アポ" || r.r === "再架電") && !r.canceled && (r.uid === U || isAdminMe() || isCloserOf(r));
 const canErase = r => r.uid === U || isAdminMe() || isCloserOf(r);
+/* ---------- 商談の結果（v66・2026-10-16 社長「アポの結果を入力してKPIに反映させる機能」「商談のじかんになったらその項目出るようにしよう」） ----------
+   2段：①前確（営業結果シートのC列「前確通過可否」と同じ10個）②商談の結果（K列「結果①」と同じ4個）。records.res に入れる：
+     res = {w: その結果を入れたときの商談日時, pre, deal, note, by, at}
+   日程を変えた（リスケ）あとは w が今の商談日時と違うので「まだ」に戻る（前の結果は数えない）。stats（アポ数などのKPI）には触らない。
+   入れられるのは、そのアポのクローザー・アポを取った人・管理者。商談の始まりの時刻から出す（始まる前は出さない） */
+const RES_PRE = ["OK", "NG（受注後買取）", "NG", "リスケ", "キャンセル", "再営", "返却", "オンライン前確", "前確認待ち", "留守"];
+const RES_DEAL = ["受注", "失注", "リスケ", "再営"];
+const RES_WAIT = ["OK", "前確認待ち", "オンライン前確"];   // この前確のあとは、まだ商談の結果が要る（ほかの前確の結果は、それで終わり）
+const resOf = r => { const x = r && r.res, w = r && r.memo && r.memo.when; if (!x || !w) return null; const xw = tsd(x.w); return xw && +xw === +w ? x : null; };
+const resDue = r => !!r && !r.isTask && r.r === "アポ" && !!(r.memo && r.memo.when) && r.memo.when <= new Date();
+const canResult = r => !!r && !r.isTask && r.r === "アポ" && (r.uid === U || isAdminMe() || isCloserOf(r));
+const resPending = r => { if (!resDue(r) || r.canceled) return false; const x = resOf(r); return !x || (!x.deal && (!x.pre || RES_WAIT.includes(x.pre))); };
+const resCanceled = r => !!r.canceled || (resOf(r) || {}).pre === "キャンセル";
+/* 実施した商談（社長 2026-10-16「実施されたもののみ商談数にする」）＝②商談の結果が 受注・失注・再営 のどれか。
+   ②がリスケ・前確で終わったもの（NG・留守・キャンセル・リスケなど）・取り消したもの・結果まだ は数えない */
+const RES_DONE = ["受注", "失注", "再営"];
+const resHeld = r => !r.canceled && RES_DONE.includes((resOf(r) || {}).deal);
+let apoRecent = [], apoRecentLoaded = false;   // 商談日が35日前からのアポ（リマインドの「商談の結果まだ」用）
+/* 自分の「結果まだ」：自分が取った・自分がクローザーのアポ（管理者は全員分も「チーム全員」で見られる） */
+const myResPending = () => apoRecent.filter(r => resPending(r) && (r.uid === U || isCloserOf(r))).sort((a, b) => b.memo.when - a.memo.when);
 /* 日時の無い記録の印：アポは「日時未定」、引っ越した再架電は「日時を入れる」（あとから入れられると分かるように） */
 const noDateBadge = r => r.r === "アポ" ? `<span class="badge late">日時未定</span>` : r.src === "old" && r.r === "再架電" ? `<span class="badge pend">日時を入れる</span>` : "";
 /* 自分の記録で、店名・電話・メモ・日時が何も無い → 押したら詳細ではなく入力画面を開く */
@@ -328,6 +348,13 @@ function startApp() {
     slots = s.docs.map(d => ({id: d.id, ...d.data(), when: tsd(d.data().when)}));
     if (curTab === "cal") renderCal(); if (!$("msheet").hidden) checkClash();
   }, onErr("カレンダー")));
+  /* 商談の結果（v66）：商談日が35日前からのアポ。r＝アポ と memo.when の範囲で読む（複合索引 records：r＋memo.when。
+     テスター指摘：r を付けないと再架電まで読んで8割むだ・無料枠の1日5万件に近づく） */
+  unsubs.push(onSnapshot(query(recs, where("r", "==", "アポ"), where("memo.when", ">=", Timestamp.fromDate(addDays(today(), -35)))), s => {
+    apoRecent = s.docs.map(recOf).filter(r => r.r === "アポ"); apoRecentLoaded = true;
+    updateRmDot(); if (curTab === "remind") renderRemind();
+    if (detailRec && !$("recDetail").hidden) { const x = apoRecent.find(r => r.id === detailRec.id); if (x) { detailRec.res = x.res; renderResBox(detailRec); } }
+  }, onErr("商談の結果")));
   startFeedback();
   pollTeam(); teamTimer = setInterval(() => { if (document.visibilityState === "visible") pollTeam(); }, 30000);
   notifTimer = setInterval(checkNotifs, 15000);
@@ -1662,7 +1689,7 @@ const itemLabel = r => r.isTask ? (r.title || r.r) : r.r;
 function todayMine() { const T = today(), E = addDays(T, 1); return visiblePending(pendMine).filter(r => r.memo.when >= T && r.memo.when < E).sort((a, b) => a.memo.when - b.memo.when); }
 function renderAfterPending() { renderNext(); if (curTab === "remind") renderRemind(); updateRmDot(); }
 function updateRmDot() {
-  const n = visiblePending(pendMine).filter(r => r.memo.when < addDays(today(), 1)).length;
+  const n = visiblePending(pendMine).filter(r => r.memo.when < addDays(today(), 1)).length + myResPending().length;   // ＋商談の結果まだ（v66）
   $("rmDot").hidden = !n; $("rmDot").textContent = n;
 }
 function renderNext() {
@@ -1680,7 +1707,7 @@ function renderNext() {
   if (r) box.innerHTML += `<span class="nu-go">詳細 ›</span>`;
   box.onclick = () => r ? openDetail(r) : showTab("remind");
 }
-setInterval(() => { if (started) renderNext(); }, 60000);
+setInterval(() => { if (started) { renderNext(); updateRmDot(); } }, 60000);   // 商談の時間が来たら、赤い丸の「結果まだ」も1分以内に増やす（v66）
 
 let rmF = "me";
 $("rmFilter").onclick = e => { const b = e.target.closest("button"); if (!b) return; rmF = b.dataset.f; $("rmFilter").querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", x === b)); renderRemind(); };
@@ -1689,6 +1716,7 @@ function renderRemind() {
   const list = visiblePending(rmF === "me" ? pendMine : pendTeam).sort((a, b) => a.memo.when - b.memo.when);
   const groups = [["過ぎている予定", list.filter(r => r.memo.when < now)], ["今日", list.filter(r => r.memo.when >= now && r.memo.when < tmr)], ["明日以降", list.filter(r => r.memo.when >= tmr)]];
   const body = $("rmBody"); body.innerHTML = "";
+  renderResTodo(body);   // 商談の結果まだ（v66）
   groups.forEach(([title, g]) => {
     const h = document.createElement("h2"); h.innerHTML = `${title} <span class="aside">${g.length}件</span>`; body.appendChild(h);
     const c = document.createElement("div"); c.className = "card";
@@ -1723,6 +1751,34 @@ function renderRemind() {
     body.appendChild(c);
   });
   if (rmF === "me") renderDone(body);
+}
+/* ---------- 商談の結果まだ（v66）：商談の始まりの時刻を過ぎて、結果が入っていないアポ。「自分の分」＝自分が取った・自分がクローザー、
+   「チーム全員」＝全員の分。新しい商談から。押すと記録の詳細（いちばん上に結果の欄） ---------- */
+function resStateText(r) {
+  const x = resOf(r);
+  if (!x || !x.pre) return "前確まだ";
+  return "前確 " + x.pre + "・商談の結果まだ";
+}
+function renderResTodo(body) {
+  const list = (rmF === "me" ? myResPending() : apoRecent.filter(resPending).sort((a, b) => b.memo.when - a.memo.when));
+  if (!list.length) return;
+  const bar = document.createElement("div"); bar.className = "res-todo";
+  bar.innerHTML = `<b>商談の結果まだ ${list.length}件</b><small>商談の時間になったアポです。押して①前確と②商談の結果を入れてください</small>`;
+  body.appendChild(bar);
+  const c = document.createElement("div"); c.className = "card res-list";
+  list.slice(0, 30).forEach(r => {
+    const row = document.createElement("div"); row.className = "rm tap res-row"; row.tabIndex = 0;
+    row.innerHTML = `<div class="time">${hm(r.memo.when)}<small>${md(r.memo.when)}</small></div>
+      <div class="info"><div class="shop">${esc(r.memo.shop || "（店名なし）")}<span class="badge late">結果まだ</span></div>
+      <div class="meta">獲得 ${esc(nameOf(r.uid))}${r.memo.closer ? " ・ クローザー " + esc(CNAME(r.memo.closer)) : ""}</div>
+      <div class="meta">${esc(resStateText(r))}</div></div>
+      <div class="btns">${canResult(r) ? `<button class="edit">結果を入れる</button>` : `<button class="edit">詳細</button>`}</div>`;
+    row.onclick = () => openDetail(r);
+    row.onkeydown = e => { if (e.key === "Enter") openDetail(r); };
+    c.appendChild(row);
+  });
+  if (list.length > 30) c.insertAdjacentHTML("beforeend", `<div class="empty">ほか ${list.length - 30}件（新しい順に30件まで）</div>`);
+  body.appendChild(c);
 }
 /* ---------- かけ済み（社長 2026-10-13「リマインド案件かけた後消えちゃうから残せるようにしてほしい」v59）----------
    「かけた」「完了」にした案件は pending/done の購読から外れて一覧から消えていた（記録タブの履歴には残っている）。
@@ -1830,6 +1886,7 @@ function openDetail(r, cal) {
     ? `<a class="rd-call" href="${telHref(m.tel)}"><span>☎</span><b class="num">${esc(m.tel)}</b><small>押すと電話をかける</small></a><button class="rd-copy" id="rdCopy">コピー</button>`
     : `<div class="rd-notel">電話番号は入っていません${mine ? "（「" + (r.isTask ? "編集" : "メモを編集") + "」から入れられます）" : ""}</div>`;
   $("rdBody").innerHTML = rows.map(([k, v]) => `<div class="rd-row"><span class="k">${k}</span><span class="v">${v}</span></div>`).join("");
+  renderResBox(r);   // 商談の結果（v66。商談の始まりの時刻から）
   const acts = [];
   if (r.isTask && mine && !r.done) acts.push(`<button class="primary" data-a="done">${r.r === "再架電" ? "かけた（結果を押す）" : "完了にする"}</button>`, `<button data-a="later">明日へ延期</button>`);
   if (!r.isTask && mine && r.r === "再架電" && !r.done && !r.canceled && w) acts.push(`<button class="primary" data-a="done">かけた（結果を押す）</button>`, `<button data-a="later">明日へ延期</button>`);
@@ -1859,6 +1916,58 @@ function openDetail(r, cal) {
     catch (_) { const s = getSelection(), rg = document.createRange(); rg.selectNodeContents($("rdTel").querySelector("b")); s.removeAllRanges(); s.addRange(rg); toast("選択しました。コピーしてください"); }
   };
 }
+/* ---------- 商談の結果の欄（v66）：記録の詳細のいちばん上。商談の始まりの時刻から、取り消していないアポにだけ出す ---------- */
+const RES_GOOD = ["OK", "受注"], RES_BAD = ["NG", "NG（受注後買取）", "キャンセル", "失注"];
+function resBoxHtml(r) {
+  if (!resDue(r) || r.canceled) return "";
+  const x = resOf(r) || {}, edit = canResult(r);
+  const chips = (list, cur, key) => `<div class="res-chips" data-k="${key}">` + list.map(v =>
+    `<button type="button" class="res-chip${v === cur ? " on" : ""}${RES_GOOD.includes(v) ? " good" : RES_BAD.includes(v) ? " bad" : ""}" data-v="${esc(v)}" aria-pressed="${v === cur}"${edit ? "" : " disabled"}>${esc(v)}</button>`).join("") + `</div>`;
+  const needDeal = !x.pre || RES_WAIT.includes(x.pre);
+  const at = tsd(x.at);
+  return `<div class="res-box" id="rdRes"><div class="res-h">商談の結果${resPending(r) ? ` <span class="badge late">結果まだ</span>` : ""}</div>
+    <div class="res-step">① 前確（商談の前の確認）</div>${chips(RES_PRE, x.pre, "pre")}
+    ${needDeal ? `<div class="res-step">② 商談の結果</div>${chips(RES_DEAL, x.deal, "deal")}` : `<div class="res-note">前確が「${esc(x.pre)}」なので、商談の結果は入れなくて大丈夫です</div>`}
+    ${edit ? `<input class="res-memo" id="rdResNote" maxlength="500" placeholder="理由・メモ（NG・失注の理由など。なくてもOK）" value="${esc(x.note || "")}">` : x.note ? `<div class="res-note">メモ：${esc(x.note)}</div>` : ""}
+    <div class="res-note">${edit ? "押すとすぐ保存されます（もう一度押すと外れます）。" : "入れられるのは、このアポのクローザー・アポを取った人・管理者です。"}${x.by ? `　最後に入れた人：${esc(nameOf(x.by))}${at ? "（" + md(at) + " " + hm(at) + "）" : ""}` : ""}</div></div>`;
+}
+function renderResBox(r) {
+  if (!r || detailRec !== r) return;   // 開いている詳細の分だけ
+  if (document.activeElement && document.activeElement.id === "rdResNote") return;   // メモを打っている途中は描き直さない
+  const old = $("rdRes"), html = resBoxHtml(r);
+  if (old) { if (html) old.outerHTML = html; else old.remove(); }
+  else if (html) $("rdBody").insertAdjacentHTML("afterbegin", html);
+}
+/* 保存。res はまるごと書く（w＝今の商談日時。入れた人・時刻も）。前確を「OK・前確認待ち・オンライン前確」以外にしたら商談の結果は外す */
+async function saveRes(r, patch) {
+  if (!canResult(r)) { toast("結果を入れられるのは、このアポのクローザー・アポを取った人・管理者だけです"); return false; }
+  const cur = resOf(r) || {};
+  const next = {pre: cur.pre || "", deal: cur.deal || "", note: cur.note || "", ...patch};
+  if (next.pre && !RES_WAIT.includes(next.pre)) next.deal = "";
+  const res = {w: Timestamp.fromDate(r.memo.when), pre: next.pre, deal: next.deal, note: next.note, by: U, at: serverTimestamp()};
+  const before = r.res;
+  r.res = {...res, at: Timestamp.now()};   // サーバーを待たずに画面へ
+  const x = apoRecent.find(a => a.id === r.id); if (x && x !== r) x.res = r.res;
+  renderResBox(r); updateRmDot(); if (curTab === "remind") renderRemind();
+  try { await updateDoc(doc(db, "records", r.id), {res}); resCache.clear(); return true; }
+  catch (e) { r.res = before; if (x && x !== r) x.res = before; renderResBox(r); toast(errMsg(e)); return false; }
+}
+$("rdBody").addEventListener("click", async e => {
+  const b = e.target.closest(".res-chip"); if (!b || b.disabled || !detailRec) return;
+  const r = detailRec, k = b.closest(".res-chips").dataset.k, v = b.dataset.v;
+  const cur = (resOf(r) || {})[k] || "", val = cur === v ? "" : v;
+  if (!(await saveRes(r, {[k]: val}))) return;
+  if (k === "pre" && val === "リスケ" && canResched(r))
+    toast("前確：リスケにしました。新しい日時が決まったら［日程を変える］で動かしてください", "日程を変える", () => { closeDetail({noBack: true}); openResched(r); }, 9000);
+  else if (k === "pre" && val === "キャンセル" && canCancel(r))
+    toast("前確：キャンセルにしました。カレンダーの枠を空けるときは［予定を取り消す］を押してください", "予定を取り消す", () => { closeDetail({noBack: true}); openCancel(r); }, 9000);
+  else toast(val ? (k === "pre" ? "前確：" : "商談の結果：") + val + " を保存しました" : "外しました");
+});
+$("rdBody").addEventListener("change", e => {
+  if (e.target.id !== "rdResNote" || !detailRec) return;
+  const v = e.target.value.trim(); if (v === ((resOf(detailRec) || {}).note || "")) return;
+  e.target.blur(); saveRes(detailRec, {note: v}).then(ok => { if (ok) toast("メモを保存しました"); });
+});
 /* 閉じる。カレンダーの同じ時間の一覧から開いた詳細なら、一覧に戻る（編集などへ進むときは noBack で戻らない）。
    戻るときの一覧は、その間に変わった枠があれば今の中身に差し替える */
 function closeDetail(opt) {
@@ -2101,7 +2210,7 @@ const statCache = {};
 /* 「↻ 最新にする」：とっておいた数字を捨てて読み直す（KPIは開いたとき・期間を変えたときにしか読まないため。社長の指示） */
 $("kpiRefresh").onclick = async () => {
   const b = $("kpiRefresh"); b.disabled = true;
-  Object.keys(statCache).forEach(k => delete statCache[k]);
+  Object.keys(statCache).forEach(k => delete statCache[k]); resCache.clear();
   try { await renderKpi(); toast("最新の数字にしました（" + hm(new Date()) + "）"); } finally { b.disabled = false; }
 };
 async function loadStats(a, b) {
@@ -2200,6 +2309,7 @@ async function renderKpi() {
       <td><b>${ph(s)}</b></td><td>${s.apo}</td><td>${s.apoRate.toFixed(1)}%</td><td>${s.ansRate.toFixed(1)}%</td><td>${s.connRate.toFixed(1)}%</td><td>${fmtMins(s.mins)}</td><td>${(s.n / wd).toFixed(0)}</td></tr>`).join("") +
     `<tr><td class="name">チーム合計</td><td>${tot.n}</td><td>${tot.ans}</td><td><b>${ph(tot)}</b></td><td>${tot.apo}</td><td>${tot.apoRate.toFixed(1)}%</td><td>${tot.ansRate.toFixed(1)}%</td><td>${tot.connRate.toFixed(1)}%</td><td>${fmtMins(tot.mins)}</td><td>${(tot.n / wd).toFixed(0)}</td></tr>`;
   $("mtable").querySelectorAll("tr.pick").forEach(tr => tr.onclick = () => { member = member === tr.dataset.u ? "all" : tr.dataset.u; $("member").value = member; renderKpi(); });
+  renderResKpi(a, b, seq);   // 商談の結果（v66。stats とは別に、アポの記録から数える）
 
   const who = u => member === "all" || u === member;
   let buckets = [];
@@ -2223,6 +2333,84 @@ async function renderKpi() {
   $("brk").innerHTML = keys.map(k => ({k, v: s.c[k] || 0})).sort((x, y) => y.v - x.v).map(({k, v}) =>
     `<div class="row">${resChip(k)}<div class="track"><i style="width:${v / maxC * 100}%"></i></div><span class="c">${v}</span><span class="p">${(v / total * 100).toFixed(1)}%</span></div>`).join("");
 }
+/* ---------- KPI：商談の結果（v66） ----------
+   期間（上のボタン）の商談日のアポを records から読む（memo.when の範囲。stats は使わない＝今までの数字は変わらない）。
+   数えるのは商談の時間が来たアポだけ。メンバーを選んでいれば、その人が取ったアポだけ */
+const resCache = new Map();   // 期間 → {at, list}。30秒とっておく（↻ 最新にする・結果を保存したときは捨てる）
+async function loadResApos(a, b) {
+  const key = +a + "~" + +b, c = resCache.get(key);
+  if (c && Date.now() - c.at < 30000) return c.list;
+  const s = await getDocs(query(collection(db, "records"), where("r", "==", "アポ"), where("memo.when", ">=", Timestamp.fromDate(a)), where("memo.when", "<", Timestamp.fromDate(b))));
+  const list = s.docs.map(recOf).filter(r => r.r === "アポ");
+  resCache.set(key, {at: Date.now(), list});
+  return list;
+}
+const resDeal = r => (resOf(r) || {}).deal || "", resPre = r => (resOf(r) || {}).pre || "";
+const RES_KINDS = [   // [キー, 名前, 数え方]
+  ["due", "商談の時間が来たアポ", r => true],
+  ["held", "実施", resHeld],
+  ["won", "受注", r => !r.canceled && resDeal(r) === "受注"],
+  ["lost", "失注", r => !r.canceled && resDeal(r) === "失注"],
+  ["again", "再営", r => !r.canceled && resDeal(r) === "再営"],
+  ["rs", "リスケ", r => !r.canceled && (resDeal(r) === "リスケ" || resPre(r) === "リスケ")],
+  ["cx", "キャンセル", resCanceled],
+  ["todo", "結果まだ", resPending]
+];
+const RES_KIND = Object.fromEntries(RES_KINDS.map(k => [k[0], k]));
+let resBy = "appo", resView = {list: [], label: ""};
+function resCount(list) { const c = {}; RES_KINDS.forEach(([k, , f]) => c[k] = list.filter(f).length); return c; }
+const resRate = c => c.held ? (c.won / c.held * 100).toFixed(1) : "–";
+async function renderResKpi(a, b, seq) {
+  let list;
+  try { list = await loadResApos(a, b); } catch (e) { if (seq === kpiSeq) $("resTiles").innerHTML = `<div class="empty">商談の結果を読み込めませんでした</div>`; return; }
+  if (seq !== kpiSeq) return;
+  const due = list.filter(r => resDue(r) && (member === "all" || r.uid === member));
+  const per = $("period").querySelector("[aria-pressed=true]"), pLbl = per ? per.textContent : "";
+  resView = {list: due, label: pLbl + (member !== "all" ? "・" + nameOf(member) + "が取ったアポ" : "")};
+  const c = resCount(due);
+  const tile = (k, v, u) => `<button type="button" class="card tile res-tile" data-k="${k}"><div class="k">${RES_KIND[k][1]}</div><div class="v">${v}<small>${u}</small></div></button>`;
+  $("resTiles").innerHTML = tile("due", c.due, "件") + tile("held", c.held, "件") + tile("won", c.won, "件") +
+    `<div class="card tile"><div class="k">受注率</div><div class="v">${resRate(c)}<small>${c.held ? "%" : ""}</small></div></div>` + tile("cx", c.cx, "件") + tile("todo", c.todo, "件");
+  $("resBy").querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", x.dataset.b === resBy));
+  const keyOf = r => resBy === "closer" ? (r.memo.closer || "none") : r.uid;
+  const nameOfG = g => resBy === "closer" ? (g === "none" ? "担当未定" : CNAME(g)) : nameOf(g);
+  const groups = [...new Set(due.map(keyOf))].map(g => ({g, c: resCount(due.filter(r => keyOf(r) === g))}))
+    .sort((x, y) => y.c.won - x.c.won || y.c.held - x.c.held || y.c.due - x.c.due);
+  const cell = (g, k, v) => v ? `<button type="button" class="res-n${k === "todo" ? " todo" : ""}" data-g="${esc(g)}" data-k="${k}">${v}</button>` : `<span class="res-0">0</span>`;
+  const KEYS = ["due", "held", "won", "lost", "again", "rs", "cx"];
+  const row = (g, name, c) => `<tr><td class="name">${esc(name)}</td>${KEYS.map(k => `<td>${cell(g, k, c[k])}</td>`).join("")}<td><b>${resRate(c)}${c.held ? "%" : ""}</b></td><td>${cell(g, "todo", c.todo)}</td></tr>`;
+  $("resTable").innerHTML = `<tr><th>${resBy === "closer" ? "クローザー" : "アポインター"}</th><th>時間が来た</th><th>実施</th><th>受注</th><th>失注</th><th>再営</th><th>リスケ</th><th>キャンセル</th><th>受注率</th><th>結果まだ</th></tr>` +
+    (groups.length ? groups.map(x => row(x.g, nameOfG(x.g), x.c)).join("") + row("*", "チーム合計", c) : `<tr><td colspan="10" class="empty">この期間に商談の時間が来たアポはありません</td></tr>`);
+}
+/* 中身の一覧（数字・タイルを押す／［受注した案件の一覧］） */
+function openResList(k, g) {
+  const keyOf = r => resBy === "closer" ? (r.memo.closer || "none") : r.uid;
+  const f = RES_KIND[k][2];
+  const list = resView.list.filter(r => (!g || g === "*" || keyOf(r) === g) && f(r)).sort((x, y) => y.memo.when - x.memo.when);
+  const who = g && g !== "*" ? "・" + (resBy === "closer" ? "クローザー " + (g === "none" ? "担当未定" : CNAME(g)) : "アポインター " + nameOf(g)) : "";
+  $("rlTitle").textContent = `${RES_KIND[k][1]} ${list.length}件`;
+  $("rlNote").textContent = (resView.label || "") + who + "　押すと記録の詳細が開きます";
+  $("rlList").innerHTML = list.length ? list.map(r => {
+    const x = resOf(r) || {}, memo = x.note || r.memo.text || "";
+    const st = r.canceled ? "取り消し" : [x.pre && "前確 " + x.pre, x.deal && "商談 " + x.deal].filter(Boolean).join("・") || "結果まだ";
+    return `<button type="button" class="rl-row" data-id="${esc(r.id)}"><span class="rl-t num">${md(r.memo.when)} ${hm(r.memo.when)}</span>
+      <b class="rl-shop">${esc(r.memo.shop || "（店名なし）")}</b>
+      <small>アポ ${esc(nameOf(r.uid))} ・ クローザー ${esc(r.memo.closer ? CNAME(r.memo.closer) : "−")} ・ ${esc(st)}</small>
+      ${memo ? `<small class="rl-memo">${esc(memo)}</small>` : ""}</button>`;
+  }).join("") : `<div class="empty">ありません</div>`;
+  $("rlScrim").hidden = $("rlDlg").hidden = false;
+}
+function closeResList() { $("rlScrim").hidden = $("rlDlg").hidden = true; }
+$("rlClose").onclick = closeResList; $("rlScrim").onclick = closeResList;
+document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("rlDlg").hidden) closeResList(); });
+$("rlList").addEventListener("click", e => {
+  const b = e.target.closest(".rl-row"); if (!b) return;
+  const r = resView.list.find(x => x.id === b.dataset.id); closeResList(); if (r) openDetail(r);
+});
+$("resTiles").addEventListener("click", e => { const t = e.target.closest(".res-tile"); if (t) openResList(t.dataset.k, "*"); });
+$("resTable").addEventListener("click", e => { const t = e.target.closest(".res-n"); if (t) openResList(t.dataset.k, t.dataset.g); });
+$("resBy").onclick = e => { const b = e.target.closest("button"); if (!b) return; resBy = b.dataset.b; renderKpi(); };
+$("resWonBtn").onclick = () => openResList("won", "*");
 function niceMax(v) { if (v <= 5) return 5; const p = Math.pow(10, Math.floor(Math.log10(v))); for (const m of [1, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10]) if (m * p >= v) return m * p; return 10 * p; }
 function drawChart(bk) {
   const W = 520, H = 190, L = 30, R = 6, T = 10, B = 22;
@@ -2281,8 +2469,19 @@ const DEFAULT_REPORT = {
     {label: "寶田",   goal: 5,  match: ["寶田", "寳田"]}
   ],
   carry: [{from: "2026-10-09", to: "2026-10-10", label: "渡邊", n: 2}],   // 繰り越し（元の日→足す日、人、件数）
-  weekAdj: {"2026-10-05": -1}                                             // 週の補正（週の始まりの日 → 足し引き）
+  weekAdj: {"2026-10-05": -1},                                            // 週の補正（週の始まりの日 → 足し引き）
+  /* 商談の欄（v66）：週・月の受注の目標（0＝まだ決まっていない→「○/○」）と、クローザーごとの日報の名前・月の目標（無ければ名字・DEAL_GOAL） */
+  dealWeekGoal: 0, dealMonthGoal: 0, dealPeople: []
 };
+const DEAL_GOAL = 30;   // クローザーの月の受注の目標（社長の仮の数 2026-10-16。設定で人ごとに変えられる）
+const surnameOf = n => { n = String(n || "").trim(); const sp = n.split(/[\s　]+/); return sp.length > 1 ? sp[0] : n.length >= 3 ? n.slice(0, 2) : n; };   // 「石川裕都」→「石川」（違えば設定で直す）
+/* 日報の商談の欄に出るクローザー（今の商談の担当・カレンダーと同じ並び）と、その日報の名前・目標 */
+function dealRows() {
+  return closerList().filter(c => c.id !== "none").map(c => {
+    const o = REPORT.dealPeople.find(p => p.uid === c.id);
+    return {uid: c.id, name: c.name, label: (o && o.label) || surnameOf(c.name), goal: o ? o.goal : DEAL_GOAL};
+  });
+}
 let REPORT = DEFAULT_REPORT, reportLoaded = false;
 const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
 /* Firestore から読んだ設定を、壊れていても使える形に */
@@ -2293,7 +2492,9 @@ function normReport(d) {
   const carry = Array.isArray(d.carry) ? d.carry.filter(c => c && DAY_RE.test(c.from || "") && DAY_RE.test(c.to || "") && c.label && +c.n)
     .map(c => ({from: c.from, to: c.to, label: String(c.label), n: +c.n})) : [];
   const weekAdj = {}; Object.entries(d.weekAdj || {}).forEach(([k, v]) => { if (DAY_RE.test(k) && +v) weekAdj[k] = +v; });
-  return {weekGoal: +d.weekGoal > 0 ? +d.weekGoal : DEFAULT_REPORT.weekGoal, people, carry, weekAdj};
+  const dealPeople = Array.isArray(d.dealPeople) ? d.dealPeople.filter(p => p && p.uid).map(p => ({uid: String(p.uid), label: String(p.label || ""), goal: Math.max(0, Math.round(+p.goal || 0))})) : [];
+  return {weekGoal: +d.weekGoal > 0 ? +d.weekGoal : DEFAULT_REPORT.weekGoal, people, carry, weekAdj,
+    dealWeekGoal: Math.max(0, Math.round(+d.dealWeekGoal || 0)), dealMonthGoal: Math.max(0, Math.round(+d.dealMonthGoal || 0)), dealPeople};
 }
 /* 日報の1人に当たるアプリのメンバー（外した人も含む。外部の人は除く） */
 function reportUids(p) {
@@ -2325,13 +2526,37 @@ async function buildReport(dayKey) {
   const mo = D.getMonth() + 1;
   const text = [`【${mo}月度】`, `${mo}月${D.getDate()}日（${WD[D.getDay()]}）`, "■獲得アポ数", ...rows.map(r => `${r.label} ${r.day}`),
     "■週間目標", `${week}/${wg}`, `達成率:${pct0}%`, "■全体目標", `${monthTot}/${goalTot}`, `達成率:${pct1}%`,
-    "■個人コミット", ...rows.map(r => `${r.label}${r.month}/${r.goal}`)].join("\n");
+    "■個人コミット", ...rows.map(r => `${r.label}${r.month}/${r.goal}`), ...(await dealReportLines(D, dayKey, m0, inWeek))].join("\n");
   const carries = REPORT.carry.filter(c => c.to === dayKey || c.from === dayKey);
   const notes = [`週＝${md(w0)}〜${md(D)}（日曜は入れない）`];
   if (carries.length) notes.push("繰り越し：" + carries.map(c => `${c.label} ${c.to === dayKey ? "+" : "−"}${c.n}（${md(new Date((c.to === dayKey ? c.from : c.to) + "T00:00"))}${c.to === dayKey ? "の分を足す" : "へ回す"}）`).join("・"));
   if (weekAdj) notes.push(`週の補正 ${weekAdj > 0 ? "+" : ""}${weekAdj}`);
   if (missing.length) notes.push(`アプリにいない人は0（${missing.join("・")}）`);
+  if (dealTodo) notes.push(`商談の結果まだ ${dealTodo}件（${mo}月1日〜この日の商談。入れると商談数・獲得件数に入ります）`);
   return {text, note: notes.join("　")};
+}
+/* 日報の後半：商談の欄（v66）。区切りの線のあとに続ける（空行は入れない）。
+   商談数＝その日の実施した商談（②が 受注・失注・再営）、獲得件数＝その日の②が受注。週・全体＝その週・月の受注の合計／目標（0なら ○/○）。
+   個人コミット＝その月の1日からその日までのその人の受注／目標。商談日で数える */
+let dealTodo = 0;
+async function dealReportLines(D, dayKey, m0, inWeek) {
+  resCache.clear();   // 日報はいつも最新の結果で
+  let apos;
+  /* 読めなかったときは後半だけあきらめて、前半（獲得アポ数〜個人コミット）はそのまま出す（テスター指摘） */
+  try { apos = await loadResApos(m0, addDays(D, 1)); }
+  catch (e) { console.error("日報の商談の欄", e); dealTodo = 0; return ["-----------------------", "■商談数/獲得件数（読み込めませんでした。閉じてもう一度開いてください）"]; }
+  const dayOf = r => dk(r.memo.when), won = r => !r.canceled && resDeal(r) === "受注";
+  dealTodo = apos.filter(r => dayOf(r) <= dayKey && resPending(r)).length;
+  const people = dealRows().map(p => {
+    const mine = apos.filter(r => r.memo.closer === p.uid);
+    return {...p, held: mine.filter(r => dayOf(r) === dayKey && resHeld(r)).length, won: mine.filter(r => dayOf(r) === dayKey && won(r)).length, month: mine.filter(won).length};
+  });
+  const wWon = apos.filter(r => inWeek(dayOf(r)) && won(r)).length, mWon = apos.filter(won).length;
+  const wg = REPORT.dealWeekGoal, mg = REPORT.dealMonthGoal;
+  return ["-----------------------", "■商談数/獲得件数", ...people.map(p => `${p.label} ${p.held}/${p.won}`),
+    "■週間目標", wg ? `${wWon}/${wg}` : "○/○", wg ? `達成率:${Math.round(wWon / wg * 100)}%` : "達成率:○%",
+    "■全体目標", mg ? `${mWon}/${mg}` : "○/○", mg ? `達成率:${(mWon / mg * 100).toFixed(1)}%` : "達成率:○%",
+    "■個人コミット", ...people.map(p => `${p.label}${p.month}/${p.goal}`)];
 }
 let repSeq = 0;
 function openReport() {
@@ -2378,6 +2603,11 @@ function openReportEdit() {
   $("rpePeople").innerHTML = REPORT.people.map(peopleRow).join("");
   $("rpeCarry").innerHTML = REPORT.carry.map(carryRow).join("");
   $("rpeWeekAdj").innerHTML = Object.entries(REPORT.weekAdj).sort().map(([k, v]) => weekRow(k, v)).join("");
+  /* 商談の欄（v66） */
+  $("rpeDW").value = REPORT.dealWeekGoal || ""; $("rpeDM").value = REPORT.dealMonthGoal || "";
+  const dr = dealRows();
+  $("rpeDeal").innerHTML = dr.length ? dr.map(p => `<div class="rpe-row rpd-row" data-uid="${esc(p.uid)}"><input class="rpd-l" maxlength="10" value="${esc(p.label)}" aria-label="日報の名前">${numIn("rpd-g", p.goal, 'min="0" aria-label="月の目標（受注）"')}<span class="rpd-n">${esc(p.name)}</span><span></span></div>`).join("")
+    : `<p class="rep-hint">商談の担当（クローザー）がいません</p>`;
   syncNameList();
   $("rpeScrim").hidden = $("rpeDlg").hidden = false;
 }
@@ -2425,8 +2655,12 @@ $("rpeSave").onclick = () => {
     if (!n) continue;   // 0 は無いのと同じ
     weekAdj[k] = (weekAdj[k] || 0) + n;
   }
+  /* 商談の欄（v66）。今の画面に出ていないクローザー（外した人など）の分も消さずに残す */
+  const dealWeekGoal = Math.max(0, Math.round(+$("rpeDW").value || 0)), dealMonthGoal = Math.max(0, Math.round(+$("rpeDM").value || 0));
+  const shown = [...$("rpeDeal").querySelectorAll(".rpd-row")].map(r => ({uid: r.dataset.uid, label: r.querySelector(".rpd-l").value.trim(), goal: Math.max(0, Math.round(+r.querySelector(".rpd-g").value || 0))}));
+  const dealPeople = shown.concat(REPORT.dealPeople.filter(p => !shown.some(s => s.uid === p.uid)));
   const b = $("rpeSave"); b.disabled = true;
-  setDoc(doc(db, "config", "report"), {weekGoal, people, carry, weekAdj, updatedAt: serverTimestamp(), updatedBy: U})
+  setDoc(doc(db, "config", "report"), {weekGoal, people, carry, weekAdj, dealWeekGoal, dealMonthGoal, dealPeople, updatedAt: serverTimestamp(), updatedBy: U})
     .then(() => { toast("日報の設定を保存しました"); closeReportEdit(); })   // 開いている日報は config/report の購読が作り直す
     .catch(e => toast(errMsg(e))).finally(() => { b.disabled = false; });
 };

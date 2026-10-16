@@ -18,7 +18,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=BIZ+UDPGothic:wght@400;700&family=Roboto+Mono:wght@500;700&display=swap">
-<link rel="stylesheet" href="./style.css?v=65">
+<link rel="stylesheet" href="./style.css?v=66">
 <script>
 /* LINEの中のブラウザではGoogleログインが通らない（途中の情報を覚えておけない）。
    LINEは ?openExternalBrowser=1 を付けると Safari / Chrome で開き直してくれるので、自動で付け直す */
@@ -202,6 +202,13 @@
     <div class="tiles" id="tiles"></div>
     <h2>メンバー別 <span class="aside">行を押すとその人だけ表示</span></h2>
     <div class="card tbl-wrap"><table class="kpi" id="mtable"></table></div>
+    <!-- 商談の結果（v66・2026-10-16 社長）。上の期間とメンバーに合わせ、商談日で数える。数字を押すと中身の一覧 -->
+    <h2>商談の結果 <span class="aside">商談日で数える・数字を押すと案件の一覧</span></h2>
+    <div class="tiles" id="resTiles"></div>
+    <div class="seg res-by" id="resBy"><button type="button" data-b="appo" aria-pressed="true">アポインター別</button><button type="button" data-b="closer" aria-pressed="false">クローザー別</button></div>
+    <div class="card tbl-wrap"><table class="kpi res-kpi" id="resTable"></table></div>
+    <button type="button" class="btn-plain res-won-btn" id="resWonBtn">📋 受注した案件の一覧</button>
+    <p class="defs">実施＝②商談の結果が「受注」「失注」「再営」のアポ（②がリスケ・前確で終わったもの・取り消したもの・結果まだは入らない）。受注率＝受注÷実施。リスケ＝前確か②がリスケ。キャンセル＝アプリで取り消したか前確がキャンセル。結果まだ＝商談の時間が来て、結果が入っていないアポ。メンバーを選ぶと、その人が取ったアポだけ。上の「アポ」などの数字とは別に数えます（今までの数字は変わりません）。</p>
     <h2 id="chartTitle">日別の架電数</h2>
     <div class="card chart" id="chart"></div>
     <h2>結果の内訳</h2>
@@ -551,7 +558,23 @@
   <div class="rpe-head rpw-head"><span>週の始まり</span><span>足し引き</span><span></span></div>
   <div id="rpeWeekAdj"></div>
   <button type="button" class="btn-plain rpe-add" id="rpeAddW">＋ 週の補正を足す</button>
+  <!-- 商談の欄（v66・2026-10-16 社長「いつも作ってくれてるKPIの項目も追加して。これ明日から商談の方も入れたい」） -->
+  <h4>商談の欄（日報の後半） <span class="aside">獲得件数＝商談の結果が「受注」の数</span></h4>
+  <p class="rep-hint">商談数＝実施した商談（②商談の結果が 受注・失注・再営）。週間目標・全体目標は受注の件数で、0 か空なら「○/○」のまま出ます。クローザーは名簿の「商談の担当」の人が、カレンダーと同じ並びで出ます。</p>
+  <div class="fld"><label for="rpeDW">週間目標（受注・毎週同じ件数）</label><input id="rpeDW" type="number" inputmode="numeric" min="0"></div>
+  <div class="fld"><label for="rpeDM">全体目標（受注・その月の件数）</label><input id="rpeDM" type="number" inputmode="numeric" min="0"></div>
+  <div class="rpe-head"><span>日報の名前</span><span>月の目標</span><span>名簿の名前</span><span></span></div>
+  <div id="rpeDeal"></div>
   <div class="ds-foot"><button id="rpeCancel" type="button">やめる</button><button id="rpeSave" type="button" class="primary">保存</button></div>
+</div>
+
+<!-- 商談の結果の中身の一覧（v66）：KPIの数字を押すと開く。行を押すと記録の詳細 -->
+<div class="scrim" id="rlScrim" hidden></div>
+<div class="daysum rld" id="rlDlg" role="dialog" aria-modal="true" aria-labelledby="rlTitle" hidden>
+  <div class="ds-head"><h3 id="rlTitle"></h3></div>
+  <p class="ds-note" id="rlNote"></p>
+  <div class="rl-list" id="rlList"></div>
+  <div class="ds-foot"><button id="rlClose" class="primary">閉じる</button></div>
 </div>
 
 <!-- 結果ボタンの意味 -->
@@ -607,7 +630,7 @@
 <div class="offline" id="offline" hidden>オフライン中：つながったら送ります</div>
 <div class="toast" id="toast"></div>
 
-<script src="./breaktimer.js?v=65"></script>
-<script type="module" src="./app.js?v=65"></script>
+<script src="./breaktimer.js?v=66"></script>
+<script type="module" src="./app.js?v=66"></script>
 </body>
 </html>
