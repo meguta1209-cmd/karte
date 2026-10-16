@@ -196,7 +196,10 @@ const canErase = r => r.uid === U || isAdminMe() || isCloserOf(r);
      res = {w: その結果を入れたときの商談日時, pre, deal, note, by, at}
    日程を変えた（リスケ）あとは w が今の商談日時と違うので「まだ」に戻る（前の結果は数えない）。stats（アポ数などのKPI）には触らない。
    入れられるのは、そのアポのクローザー・アポを取った人・管理者。商談の始まりの時刻から出す（始まる前は出さない） */
-const RES_PRE = ["OK", "NG（受注後買取）", "NG", "リスケ", "キャンセル", "再営", "返却", "オンライン前確", "前確認待ち", "留守"];
+const RES_PRE = ["OK", "NG（受注後買取）", "NG", "リスケ", "キャンセル", "再営", "返却", "オンライン前確", "前確認待ち", "留守"];   // ルールで受け付ける値（前に入れた値も読めるように残す）
+/* 画面に出す前確の選択肢（社長 2026-10-16「前確の項目減らしてよくて、OKか、リスケか、キャンセルか留守かでいいよ！」）。
+   ほかの値で入っているアポは、その値もボタンで出す（押すと外れる） */
+const RES_PRE_SHOW = ["OK", "リスケ", "キャンセル", "留守"];
 const RES_DEAL = ["受注", "失注", "リスケ", "再営"];
 const RES_WAIT = ["OK", "前確認待ち", "オンライン前確"];   // この前確のあとは、まだ商談の結果が要る（ほかの前確の結果は、それで終わり）
 const resOf = r => { const x = r && r.res, w = r && r.memo && r.memo.when; if (!x || !w) return null; const xw = tsd(x.w); return xw && +xw === +w ? x : null; };
@@ -279,7 +282,10 @@ onAuthStateChanged(auth, u => {
 
 /* 役職（表示と、KPIの表に出すかどうかだけに使う。権限は role で別） */
 const JOBS = ["プレイヤー", "事務", "管理職"];
-const isPlayer = m => !m || (!isExt(m) && (!m.job || m.job === "プレイヤー"));   // まだ役職が無い人はプレイヤー扱い
+/* クローザーのみ（v67・2026-10-16 社長「俺の設定画面で、テレアポもするのか、クローザーのみか選べる形で」）：役職とは別の印 closerOnly（管理者だけが付けられる）。
+   クローザーで closerOnly の人は、テレアポの側（KPIの表・選べるメンバー・チームの人数・取った人の選択肢）に出さない。クローザーとしては全部に出す */
+const isCloserOnly = m => !!(m && m.closer && m.closerOnly);
+const isPlayer = m => !m || (!isExt(m) && !isCloserOnly(m) && (!m.job || m.job === "プレイヤー"));   // まだ役職が無い人はプレイヤー扱い
 let regJob = "プレイヤー";
 $("regJob").onclick = e => {
   const b = e.target.closest("button"); if (!b) return;
@@ -388,7 +394,7 @@ function renderMe() {
   if (!me) return;
   $("meAv").textContent = (me.name || "?")[0]; $("meAv").style.background = colorOf(U);
   $("meName").textContent = me.name + (me.role === "admin" ? "（管理者）" : "");
-  const act = Object.values(members).filter(m => m.status === "active" && !isExt(m)).length;
+  const act = Object.values(members).filter(m => m.status === "active" && !isExt(m) && !isCloserOnly(m)).length;   // テレアポのチームの人数（クローザーのみの人は入れない）
   $("teamName").textContent = "チーム " + (act || 1) + "人";
   $("todayLbl").textContent = md(today());
   $("myMail").textContent = auth.currentUser ? auth.currentUser.email : "";
@@ -708,7 +714,7 @@ function openMemo(rec) {
   if (rs) setTimeout(() => $("mWhen").focus(), 50);
 }
 function fillBy() {
-  const list = Object.entries(members).filter(([, m]) => m.status === "active" && !isExt(m)).sort((a, b) => (a[1].name || "").localeCompare(b[1].name || "", "ja"));
+  const list = Object.entries(members).filter(([, m]) => m.status === "active" && !isExt(m) && !isCloserOnly(m)).sort((a, b) => (a[1].name || "").localeCompare(b[1].name || "", "ja"));
   $("mBy").innerHTML = list.map(([id, m]) => `<option value="${esc(id)}"${id === U ? " selected" : ""}>${esc(m.name)}${id === U ? "（自分）" : ""}</option>`).join("");
 }
 $("mPre").onchange = () => {
@@ -1923,10 +1929,12 @@ function resBoxHtml(r) {
   const x = resOf(r) || {}, edit = canResult(r);
   const chips = (list, cur, key) => `<div class="res-chips" data-k="${key}">` + list.map(v =>
     `<button type="button" class="res-chip${v === cur ? " on" : ""}${RES_GOOD.includes(v) ? " good" : RES_BAD.includes(v) ? " bad" : ""}" data-v="${esc(v)}" aria-pressed="${v === cur}"${edit ? "" : " disabled"}>${esc(v)}</button>`).join("") + `</div>`;
-  const needDeal = !x.pre || RES_WAIT.includes(x.pre);
+  /* ②を出すのは：前確がまだ・OKなど待ちの値・留守（前確で連絡がつかなくても、商談をしたなら入れられるように。留守のままなら「結果まだ」には数えない） */
+  const needDeal = !x.pre || RES_WAIT.includes(x.pre) || x.pre === "留守";
+  const preList = RES_PRE_SHOW.concat(x.pre && !RES_PRE_SHOW.includes(x.pre) ? [x.pre] : []);
   const at = tsd(x.at);
   return `<div class="res-box" id="rdRes"><div class="res-h">商談の結果${resPending(r) ? ` <span class="badge late">結果まだ</span>` : ""}</div>
-    <div class="res-step">① 前確（商談の前の確認）</div>${chips(RES_PRE, x.pre, "pre")}
+    <div class="res-step">① 前確（商談の前の確認）</div>${chips(preList, x.pre, "pre")}
     ${needDeal ? `<div class="res-step">② 商談の結果</div>${chips(RES_DEAL, x.deal, "deal")}` : `<div class="res-note">前確が「${esc(x.pre)}」なので、商談の結果は入れなくて大丈夫です</div>`}
     ${edit ? `<input class="res-memo" id="rdResNote" maxlength="500" placeholder="理由・メモ（NG・失注の理由など。なくてもOK）" value="${esc(x.note || "")}">` : x.note ? `<div class="res-note">メモ：${esc(x.note)}</div>` : ""}
     <div class="res-note">${edit ? "押すとすぐ保存されます（もう一度押すと外れます）。" : "入れられるのは、このアポのクローザー・アポを取った人・管理者です。"}${x.by ? `　最後に入れた人：${esc(nameOf(x.by))}${at ? "（" + md(at) + " " + hm(at) + "）" : ""}` : ""}</div></div>`;
@@ -1938,12 +1946,12 @@ function renderResBox(r) {
   if (old) { if (html) old.outerHTML = html; else old.remove(); }
   else if (html) $("rdBody").insertAdjacentHTML("afterbegin", html);
 }
-/* 保存。res はまるごと書く（w＝今の商談日時。入れた人・時刻も）。前確を「OK・前確認待ち・オンライン前確」以外にしたら商談の結果は外す */
+/* 保存。res はまるごと書く（w＝今の商談日時。入れた人・時刻も）。前確を「OK・前確認待ち・オンライン前確・留守」以外（リスケ・キャンセルなど）にしたら商談の結果は外す */
 async function saveRes(r, patch) {
   if (!canResult(r)) { toast("結果を入れられるのは、このアポのクローザー・アポを取った人・管理者だけです"); return false; }
   const cur = resOf(r) || {};
   const next = {pre: cur.pre || "", deal: cur.deal || "", note: cur.note || "", ...patch};
-  if (next.pre && !RES_WAIT.includes(next.pre)) next.deal = "";
+  if (next.pre && !RES_WAIT.includes(next.pre) && next.pre !== "留守") next.deal = "";   // 留守のときは②を残す（そのあと商談をしたことがある）
   const res = {w: Timestamp.fromDate(r.memo.when), pre: next.pre, deal: next.deal, note: next.note, by: U, at: serverTimestamp()};
   const before = r.res;
   r.res = {...res, at: Timestamp.now()};   // サーバーを待たずに画面へ
@@ -3132,6 +3140,7 @@ function renderAdmin() {
     <div class="t">${esc(m.name)}${m.role === "admin" ? "（管理者）" : ""}${m.status === "removed" ? ` <span class="badge pend">外した人</span>` : ""}<small>${esc(m.email)}${m.closer ? (busyMap[id] ? (linkedSt(busyMap[id].status) ? " ・ Googleカレンダー連携中" + (busyMap[id].status === "partial" ? "（2つ目は未共有）" : "") : " ・ Googleカレンダー未共有") : "") : ""}</small>
       ${m.status === "active" ? `<select class="job-sel" data-id="${esc(id)}" aria-label="${esc(m.name)}さんの役職">${m.job ? "" : `<option value="" selected>役職を選ぶ</option>`}${JOBS.map(j => `<option${m.job === j ? " selected" : ""}>${j}</option>`).join("")}</select>` : (m.job ? `<span class="badge job">${esc(m.job)}</span>` : "")}</div>
     <div class="acts2">${m.status === "active" ? `<button data-a="closer" data-id="${esc(id)}" aria-pressed="${!!m.closer}" class="${m.closer ? "ok" : ""}">${m.closer ? "クローザー" : "クローザーにする"}</button>` : ""}
+    ${m.status === "active" && m.closer ? `<button data-a="cOnly" data-id="${esc(id)}" aria-pressed="${!!m.closerOnly}" class="${m.closerOnly ? "ok" : ""}" title="押すと切り替わります">${m.closerOnly ? "クローザーのみ" : "テレアポもする"}</button>` : ""}
     ${m.role !== "admin" ? (m.status === "active" ? `<button class="ng" data-a="rm" data-id="${esc(id)}">外す</button>` : `<button data-a="back" data-id="${esc(id)}">戻す</button>`) : ""}</div></div>`).join("");
 }
 /* 外部クローザーの行（名簿）：ログインなしの印・招待のアドレス・カレンダーの状態。編集と外す／戻す */
@@ -3141,8 +3150,110 @@ function extRow(id, m) {
   const av = m.gcalAvail ? " ・ 枠：" + availState(m.gcalAvail, g) : "";
   return `<div class="row mrow"><div class="avatar" style="background:var(--ink3);width:28px;height:28px;font-size:12px">${esc((m.name || "?")[0])}</div>
     <div class="t">${esc(m.name)} <em class="ext-tag">外部・${m.closer ? "商談の担当" : "見るだけ"}</em>${m.status === "removed" ? ` <span class="badge pend">外した人</span>` : ""}<small>${m.closer ? "招待" : "アドレス"}：${esc(m.email || "")} ・ ${esc(cal)}${esc(av)}</small></div>
-    <div class="acts2">${m.status === "active" ? `<button data-a="extEdit" data-id="${esc(id)}">編集</button><button class="ng" data-a="rm" data-id="${esc(id)}">外す</button>` : `<button data-a="back" data-id="${esc(id)}">戻す</button>`}</div></div>`;
+    <div class="acts2">${m.status === "active" ? `<button data-a="extEdit" data-id="${esc(id)}">編集</button>${m.closer ? `<button data-a="extSwitch" data-id="${esc(id)}">登録したメンバーに切り替える</button>` : ""}<button class="ng" data-a="rm" data-id="${esc(id)}">外す</button>` : `<button data-a="back" data-id="${esc(id)}">戻す</button>`}</div></div>`;
 }
+/* ---------- 外部の人を、アプリに登録したメンバーに切り替える（v67・2026-10-16 社長「茂木さんを、外部じゃなくてアプリに入ってもらいたい」） ----------
+   本人がGoogleでログインして登録（承認待ち）したあと、管理者がこのボタンで1回で切り替える（writeBatch＝全部できるか、何もしないか）：
+   ・登録した人：承認・クローザー・役職プレイヤー・クローザーのみ（選べる）・並び順は社内のクローザーのあと（closerOrder 1000＝外部のときと同じ位置）
+     予定を見るカレンダー（gcalEmail）・アポ可の枠（gcalAvail）が空なら外部の人のものを引き継ぐ（別のアドレスで登録しても、招待の届け先と予定ありの読み取りが今のまま）
+   ・取り消していないアポ：記録の担当（memo.closer）と枠（番号に人が入っている）を新しい人へ付け替える。取り消したアポは記録だけなので外部の人のまま
+   ・日報の商談の欄の名前・目標（config/report の dealPeople）も引き継ぐ。外部の人は「外した人」にする（記録は消さない）
+   招待は、連携の係が届け先のアドレスを比べて、同じなら作り直さずに説明だけ書き換える（二重に届かない・予定が消えない） */
+let swFrom = null, swPlan = null;
+async function openSwitch(extId) {
+  const ext = members[extId]; if (!ext || !isExt(ext)) return;
+  swFrom = extId; swPlan = null;
+  const sameMail = m => [ext.email, ext.gcalEmail].filter(Boolean).map(s => s.toLowerCase()).includes(String(m.email || "").toLowerCase());
+  const cands = Object.entries(members).filter(([id, m]) => id !== extId && !isExt(m) && m.role !== "admin" && (m.status === "pending" || m.status === "active"))
+    .sort((a, b) => sameMail(b[1]) - sameMail(a[1]) || (a[1].status === "pending" ? 0 : 1) - (b[1].status === "pending" ? 0 : 1) || (a[1].name || "").localeCompare(b[1].name || "", "ja"));
+  $("swTitle").textContent = ext.name + "さん（外部）を、登録したメンバーに切り替える";
+  $("swTo").innerHTML = cands.length ? cands.map(([id, m]) => `<option value="${esc(id)}">${esc(m.name)}（${m.status === "pending" ? "承認待ち" : "メンバー"}・${esc(m.email || "")}）${sameMail(m) ? " ← 同じアドレス" : ""}</option>`).join("")
+    : `<option value="">（登録した人がいません。先に本人にログインして登録してもらってください）</option>`;
+  $("swOnly").checked = true;
+  $("swGo").disabled = true; $("swPlan").textContent = "付け替えるアポを数えています…";
+  $("swScrim").hidden = $("swDlg").hidden = false;
+  try {
+    const plan = await loadSwitchPlan(extId);
+    if (swFrom !== extId) return;
+    swPlan = plan;
+    drawSwitch();
+  } catch (e) { $("swPlan").textContent = "読み込めませんでした：" + errMsg(e); }
+}
+/* 予定を見るカレンダーを引き継ぐか（新しい人の gcalEmail が空で、外部の人の gcalEmail がログインのアドレスと違うとき） */
+const swKeepCal = (ext, to) => !!(to && !to.gcalEmail && ext.gcalEmail && String(ext.gcalEmail).toLowerCase() !== String(to.email || "").toLowerCase());
+/* 招待の届け先（連携の係の inviteEmails_ と同じ決め方）。外部＝email か gcalEmail。メンバー＝1つ目（gcalEmail か email）・2つ目（gcalInvite しだい） */
+const lc = s => String(s || "").trim().toLowerCase();
+function swInvites(ext, to) {
+  const a1 = swKeepCal(ext, to) ? ext.gcalEmail : (to.gcalEmail || to.email), a2 = to.gcalEmail2;
+  const list = to.gcalInvite === "2" && a2 ? [a2] : to.gcalInvite === "both" && a2 ? [a1, a2] : [a1];
+  return {from: lc(ext.email || ext.gcalEmail), to: list.map(lc).filter((e, i, l) => e && l.indexOf(e) === i).join(",")};
+}
+/* 外部の人のアポ（記録・枠）を読む。開いたときと、［本当に切り替える］の直前にもう一度（その間に入ったアポも付け替えるため。テスター指摘） */
+async function loadSwitchPlan(extId) {
+  const [rs, ss] = await Promise.all([
+    getDocs(query(collection(db, "records"), where("memo.closer", "==", extId))),
+    getDocs(query(collection(db, "slots"), where("closer", "==", extId)))]);
+  return {recs: rs.docs.map(d => ({id: d.id, ...d.data()})), slots: ss.docs.map(d => ({id: d.id, ...d.data()}))};
+}
+function drawSwitch() {
+  const ext = members[swFrom], to = members[$("swTo").value];
+  if (!swPlan || !ext) return;
+  const live = swPlan.recs.filter(r => !r.canceled), cx = swPlan.recs.length - live.length;
+  const keepCal = swKeepCal(ext, to), inv = to ? swInvites(ext, to) : null;
+  $("swPlan").innerHTML = !to ? "切り替える先を選んでください" : [
+    `<b>${esc(to.name)}さん</b>を承認して、クローザーにします（役職：プレイヤー・${$("swOnly").checked ? "クローザーのみ" : "テレアポもする"}・並びは社内のクローザーのあと）。`,
+    `アポの担当を付け替え：<b>${live.length}件</b>（カレンダーの枠 ${swPlan.slots.length}件を作り直し）${cx ? `。取り消したアポ ${cx}件は記録だけなので、${esc(ext.name)}さん（外部）のままです` : ""}`,
+    (keepCal ? `予定を見るカレンダーは、今の ${esc(ext.gcalEmail)} を引き継ぎます（${esc(to.email)} ではなく。本人があとから設定で変えられます）。` : "") +
+      (inv.from === inv.to ? `招待の届け先は今と同じアドレスなので、二重に届いたり、予定が消えたりしません`
+        : `<b>招待の届け先が変わります</b>：${esc(inv.from)} に取り消し、${esc(inv.to)} に新しい招待が、アポ${live.length}件分届きます（連携の係が5分以内に作り直します）`),
+    `${esc(ext.name)}さん（外部）は「外した人」になります（記録は消えません）。`].map(s => `<div>・${s}</div>`).join("");
+  $("swGo").disabled = !to;
+}
+function closeSwitch() { $("swScrim").hidden = $("swDlg").hidden = true; swFrom = null; swPlan = null; }
+$("swClose").onclick = closeSwitch; $("swScrim").onclick = closeSwitch;
+$("swTo").onchange = drawSwitch; $("swOnly").onchange = drawSwitch;
+document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("swDlg").hidden) closeSwitch(); });
+$("swGo").onclick = async () => {
+  const from = swFrom, toId = $("swTo").value, ext = members[from], to = members[toId];
+  if (!from || !to || !swPlan || !isAdminMe()) return;
+  const b = $("swGo");
+  if (!b.dataset.arm) { b.dataset.arm = "1"; b.textContent = "本当に切り替える"; setTimeout(() => { delete b.dataset.arm; b.textContent = "切り替える"; }, 4000); return; }
+  b.disabled = true;
+  try {
+    const plan = await loadSwitchPlan(from);   // 開いてからの間に入ったアポも付け替える
+    /* 新しい枠の番号：日_時刻_新しい人（重ねて入れた枠は、前の番号の「_ov記録ID」を付けたまま。v54 の決まり。テスター指摘） */
+    const newSid = s => { const w = tsd(s.when); if (!w) return null; const i = String(s.id).indexOf("_ov"); return slotIdOf(w, toId) + (i >= 0 ? String(s.id).slice(i) : ""); };
+    /* 新しい人に同じ番号の枠がもうあれば、上書きしないように止める（登録したての人なら無い） */
+    const mine = await getDocs(query(collection(db, "slots"), where("closer", "==", toId)));
+    const taken = new Set(mine.docs.map(d => d.id));
+    const clash = plan.slots.find(s => { const n = newSid(s); return n && taken.has(n); });
+    if (clash) { toast(`${to.name}さんには ${clash.day} ${clash.time} の商談がもうあるので、切り替えを止めました（何も変わっていません）`, 9000); b.disabled = false; return; }
+    const batch = writeBatch(db);
+    const upd = {status: "active", closer: true, calView: false, job: "プレイヤー", closerOnly: $("swOnly").checked, closerOrder: 1000};
+    if (!to.gcalEmail && ext.gcalEmail && String(ext.gcalEmail).toLowerCase() !== String(to.email || "").toLowerCase()) upd.gcalEmail = ext.gcalEmail;
+    if (!to.gcalAvail && ext.gcalAvail) upd.gcalAvail = ext.gcalAvail;
+    batch.update(doc(db, "members", toId), upd);
+    const moved = {};   // 前の枠ID → 新しい枠ID
+    plan.slots.forEach(s => {
+      const nid = newSid(s); if (!nid) return;
+      const {id, ...data} = s;
+      batch.set(doc(db, "slots", nid), {...data, closer: toId});
+      batch.delete(doc(db, "slots", id));
+      moved[id] = nid;
+    });
+    let n = 0;
+    plan.recs.filter(r => !r.canceled).forEach(r => {
+      batch.update(doc(db, "records", r.id), {"memo.closer": toId, slotId: r.slotId ? (moved[r.slotId] || r.slotId) : null});
+      n++;
+    });
+    const dp = REPORT.dealPeople.find(p => p.uid === from);
+    if (dp && !REPORT.dealPeople.some(p => p.uid === toId)) batch.set(doc(db, "config", "report"), {dealPeople: REPORT.dealPeople.map(p => p.uid === from ? {...p, uid: toId} : p)}, {merge: true});
+    batch.update(doc(db, "members", from), {status: "removed"});
+    await batch.commit();
+    closeSwitch();
+    toast(`${to.name}さんに切り替えました（アポ ${n}件を付け替え）。カレンダーの予定ありは15分以内に読み直されます`, 8000);
+  } catch (e) { toast("切り替えられませんでした（何も変わっていません）：" + errMsg(e), 9000); b.disabled = false; delete b.dataset.arm; b.textContent = "切り替える"; }
+};
 let extEditing = null;
 function openExt(id) {
   extEditing = id || null;
@@ -3196,8 +3307,12 @@ document.addEventListener("click", e => {
   if (a === "rej" && arm("本当に却下")) deleteDoc(ref).then(() => toast("却下しました")).catch(er => toast(errMsg(er)));
   if (a === "rm" && arm("本当に外す")) updateDoc(ref, {status: "removed"}).then(() => toast(m.name + "さんを外しました")).catch(er => toast(errMsg(er)));
   if (a === "back") updateDoc(ref, {status: "active"}).then(() => toast(m.name + "さんを戻しました")).catch(er => toast(errMsg(er)));
-  if (a === "closer") updateDoc(ref, {closer: !m.closer}).catch(er => toast(errMsg(er)));
+  if (a === "closer") updateDoc(ref, m.closer ? {closer: false, closerOnly: false} : {closer: true}).catch(er => toast(errMsg(er)));   // クローザーをやめたら「クローザーのみ」も外す（どこにも出なくならないように）
+  /* テレアポもする ⇄ クローザーのみ（v67）。管理者だけ（本人は変えられない＝ルール） */
+  if (a === "cOnly") updateDoc(ref, {closerOnly: !m.closerOnly})
+    .then(() => toast(m.name + "さんを「" + (m.closerOnly ? "テレアポもする" : "クローザーのみ（テレアポのKPI・人数に出さない）") + "」にしました")).catch(er => toast(errMsg(er)));
   if (a === "extEdit") openExt(id);
+  if (a === "extSwitch") openSwitch(id);
 });
 
 /* 結果の項目の編集（管理者） */
