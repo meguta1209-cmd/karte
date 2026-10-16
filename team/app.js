@@ -209,16 +209,16 @@ const RES_PRE = ["OK", "NG（受注後買取）", "NG", "リスケ", "キャン�
 /* 画面に出す前確の選択肢（社長 2026-10-16「前確の項目減らしてよくて、OKか、リスケか、キャンセルか留守かでいいよ！」）。
    ほかの値で入っているアポは、その値もボタンで出す（押すと外れる） */
 const RES_PRE_SHOW = ["OK", "リスケ", "キャンセル", "留守"];
-const RES_DEAL = ["受注", "失注", "リスケ", "再営"];
+const RES_DEAL = ["受注", "成約予定", "失注", "リスケ", "再営"];   // 成約予定（v73・社長「商談結果の項目に成約予定を追加して」）＝商談はした・まだ受注ではない
 const RES_WAIT = ["OK", "前確認待ち", "オンライン前確"];   // この前確のあとは、まだ商談の結果が要る（ほかの前確の結果は、それで終わり）
 const resOf = r => { const x = r && r.res, w = r && r.memo && r.memo.when; if (!x || !w) return null; const xw = tsd(x.w); return xw && +xw === +w ? x : null; };
 const resDue = r => !!r && !r.isTask && r.r === "アポ" && !!(r.memo && r.memo.when) && r.memo.when <= new Date();
 const canResult = r => !!r && !r.isTask && r.r === "アポ" && (r.uid === U || isAdminMe() || isCloserOf(r));
 const resPending = r => { if (!resDue(r) || r.canceled) return false; const x = resOf(r); return !x || (!x.deal && (!x.pre || RES_WAIT.includes(x.pre))); };
 const resCanceled = r => !!r.canceled || (resOf(r) || {}).pre === "キャンセル";
-/* 実施した商談（社長 2026-10-16「実施されたもののみ商談数にする」）＝②商談の結果が 受注・失注・再営 のどれか。
+/* 実施した商談（社長 2026-10-16「実施されたもののみ商談数にする」）＝②商談の結果が 受注・成約予定・失注・再営 のどれか（成約予定は v73。受注には数えない）。
    ②がリスケ・前確で終わったもの（NG・留守・キャンセル・リスケなど）・取り消したもの・結果まだ は数えない */
-const RES_DONE = ["受注", "失注", "再営"];
+const RES_DONE = ["受注", "成約予定", "失注", "再営"];
 const resHeld = r => !r.canceled && RES_DONE.includes((resOf(r) || {}).deal);
 let apoRecent = [], apoRecentLoaded = false;   // 商談日が35日前からのアポ（リマインドの「商談の結果まだ」用）
 /* 自分の「結果まだ」：自分が取った・自分がクローザーのアポ（管理者は全員分も「チーム全員」で見られる） */
@@ -1052,6 +1052,9 @@ async function bookSlot(rec, m, when, remind) {
     /* 長さ：新しいアポは APO_MIN。もう枠があるアポ（日時を直す）は、その枠の長さをそのまま（社長 2026-10-14「既存のものはそのまま」） */
     let myDur = APO_MIN;
     if (rec.slotId) { const os = await tx.get(doc(db, "slots", rec.slotId)); if (os.exists()) myDur = durOf(os.data()); }
+    /* アポを取った本人が「メモを編集」で日時を直したときも、前確を新しい日時へ（v73。読むのは書く前に） */
+    const curRec = rec.draft ? null : await tx.get(recRef);
+    const cr = curRec && curRec.exists() ? carryRes(curRec.data(), when) : null;
     chosenDur = myDur;
     let chosen = null;
     if (over) chosen = {c: selCloser, sref: doc(db, "slots", slotIdOf(when, selCloser) + "_ov" + rec.id)};
@@ -1081,7 +1084,7 @@ async function bookSlot(rec, m, when, remind) {
       tx.set(recRef, {uid: U, r: "アポ", t: Timestamp.fromDate(t), day: dk(t), hour: t.getHours(), mb: mbOf(t), memo, undated: false, pending: true, done: false, slotId: chosen.sref.id});
       tx.set(doc(db, "stats", dk(t)), statInc(U, "アポ", t.getHours(), 1, mbOf(t)), {merge: true});
     } else {
-      tx.update(recRef, {memo, undated: false, pending: true, slotId: chosen.sref.id, ...(rec.canceled ? {canceled: false} : {})});   // キャンセルしたアポに日時を入れ直したら、もう一度アポとして入る
+      tx.update(recRef, {memo, undated: false, pending: true, slotId: chosen.sref.id, ...(rec.canceled ? {canceled: false} : {}), ...(cr ? {res: cr} : {})});   // キャンセルしたアポに日時を入れ直したら、もう一度アポとして入る
     }
     chosenId = chosen.c;
   });
@@ -1148,6 +1151,19 @@ async function saveResched(rec) {
       e && e.message === "GONE" ? "このアポは消されています" : e && e.message === "CANCELED" ? "このアポは取り消されています" : errMsg(e));
   } finally { $("mSave").disabled = false; }
 }
+/* 日程を変えたときの前確の引き継ぎ（v73・2026-10-16 社長「前確の結果引き継いで」）。raw＝書く前の記録（Firestore のそのままの形）。
+   前の日時の結果（res.w＝前の商談日時）に①前確があれば、新しい日時に付け替える（前確・メモ・入れた人・時刻はそのまま）。②商談の結果は前の日時の分なので外す。
+   前確が「リスケ」「キャンセル」のときは付け替えない（リスケ＝その結果として日時を動かした・キャンセルのまま動かす＝取り消しをやめた → 新しい日時で前確をやり直す）。
+   日時が変わらない（クローザーだけ替える・メモだけ直す）ときは何もしない（今の結果がそのまま有効）。戻り値＝書く res か null（null＝res は書かない＝前の日時の結果は外れる）。
+   ルール onlyReschedKeys の resCarried と同じ決まり */
+const RES_DROP_ON_MOVE = ["リスケ", "キャンセル"];
+function carryRes(raw, when) {
+  const x = raw && raw.res, w0 = raw && raw.memo ? tsd(raw.memo.when) : null;
+  if (!x || !w0 || !x.w || +tsd(x.w) !== +w0 || +w0 === +when) return null;
+  if (!x.pre || RES_DROP_ON_MOVE.includes(x.pre)) return null;
+  if (RES_DONE.includes(x.deal)) return null;   // 商談が済んだ結果（受注・成約予定・失注・再営）があるアポは付け替えない＝今まで通り（時刻の直し間違いを［元に戻す］で戻せるように。テスター 2026-10-16）
+  return {w: Timestamp.fromDate(when), pre: x.pre, deal: "", note: x.note || "", by: x.by || "", at: x.at || null};
+}
 /* アポを when へ動かす（cands の中で、重なる商談が無い最初のクローザー）。記録・枠をトランザクションで書く。戻り値 {closer, sid} */
 async function moveApo(recId, when, cands, forceSid) {
   const recRef = doc(db, "records", recId);
@@ -1177,7 +1193,8 @@ async function moveApo(recId, when, cands, forceSid) {
     const sid = forceSid || slotIdOf(when, chosen);
     if (oldS && oldS.exists() && raw.slotId !== sid) tx.delete(oldRef);
     tx.set(doc(db, "slots", sid), {...base, day: dk(when), time: hm(when), when: Timestamp.fromDate(when), closer: chosen});
-    tx.update(recRef, {"memo.when": Timestamp.fromDate(when), "memo.closer": chosen, slotId: sid, pending: true});
+    const cr = carryRes(raw, when);   // 前確を新しい日時へ（v73）
+    tx.update(recRef, {"memo.when": Timestamp.fromDate(when), "memo.closer": chosen, slotId: sid, pending: true, ...(cr ? {res: cr} : {})});
     out = {closer: chosen, sid, base};
   });
   /* サーバーからの通知を待たずに、自分のカレンダーへすぐ出す */
@@ -1933,7 +1950,7 @@ function openDetail(r, cal) {
   };
 }
 /* ---------- 商談の結果の欄（v66）：記録の詳細のいちばん上。商談の始まりの時刻から、取り消していないアポにだけ出す ---------- */
-const RES_GOOD = ["OK", "受注"], RES_BAD = ["NG", "NG（受注後買取）", "キャンセル", "失注"];
+const RES_GOOD = ["OK", "受注", "成約予定"], RES_BAD = ["NG", "NG（受注後買取）", "キャンセル", "失注"];
 /* ①前確は、アポに日時が入った時からいつでも出す（前確は商談の前にするので。社長 2026-10-16「前確の結果ボタンはずっと出してほしい」v70）。
    ②商談の結果は今まで通り、商談の始まりの時刻から */
 function resBoxHtml(r) {
@@ -2419,6 +2436,7 @@ const RES_KINDS = [   // [キー, 名前, 数え方]
   ["due", "商談の時間が来たアポ", r => true],
   ["held", "実施", resHeld],
   ["won", "受注", r => !r.canceled && resDeal(r) === "受注"],
+  ["plan", "成約予定", r => !r.canceled && resDeal(r) === "成約予定"],
   ["lost", "失注", r => !r.canceled && resDeal(r) === "失注"],
   ["again", "再営", r => !r.canceled && resDeal(r) === "再営"],
   ["rs", "リスケ", r => !r.canceled && (resDeal(r) === "リスケ" || resPre(r) === "リスケ")],
@@ -2432,7 +2450,7 @@ const resRate = c => c.held ? (c.won / c.held * 100).toFixed(1) : "–";
 /* ---------- KPI：クローザー（v68・2026-10-16 社長「今月・今週・今日・昨日・期間指定のテレアポインターと同じ内容で…上の方でクローザーとテレアポを選べるようにして」） ----------
    テレアポと同じ作り：期間のボタン・メンバー（クローザー）・数字のタイル（前期比つき）・人ごとの表・日別（時間帯別）のグラフ・結果の内訳。
    数え方は v66 のまま（商談数＝実施＝②が受注・失注・再営。RES_KINDS）。商談日で数える。stats は読まない */
-const RES_CHIP = {won: ["受注", "#1F7256", "#FFFFFF"], lost: ["失注", "#B8392C", "#FFFFFF"], again: ["再営", "#1E4E86", "#FFFFFF"],
+const RES_CHIP = {won: ["受注", "#1F7256", "#FFFFFF"], plan: ["成約予定", "#D6EFE2", "#145A43"], lost: ["失注", "#B8392C", "#FFFFFF"], again: ["再営", "#1E4E86", "#FFFFFF"],
   rs: ["リスケ", "#FBEFD2", "#8A5A00"], cx: ["キャンセル", "#E8EAED", "#3C4043"], todo: ["結果まだ", "#FFF3CD", "#8A5A00"]};
 const resChipK = k => { const c = RES_CHIP[k]; return `<span class="res" style="background:${c[1]};color:${c[2]}">${c[0]}</span>`; };
 /* 「外部」の1行（v71・2026-10-16 社長「石川、茂木以外のアポは全部外部としてまとめたい…アプリ上でわかったらいい」）。
@@ -2460,7 +2478,7 @@ async function renderCloserKpi(a, b, pa, days, seq) {
   resView = {list: due, label: (per ? per.textContent : "") + (member !== "all" ? "・クローザー " + groupName(member) : "")};
   const c = resCount(due), p = resCount(pdue), pr = p.held ? p.won / p.held * 100 : 0, cr = c.held ? c.won / c.held * 100 : 0;
   const tile = (k, lbl, v, u, d) => `<button type="button" class="card tile res-tile" data-k="${k}"><div class="k">${lbl}</div><div class="v">${v}<small>${u}</small></div>${d}</button>`;
-  $("resTiles").innerHTML = tile("held", "商談数（実施）", c.held, "件", delta(c.held, p.held)) + tile("won", "受注", c.won, "件", delta(c.won, p.won)) +
+  $("resTiles").innerHTML = tile("held", "商談数（実施）", c.held, "件", delta(c.held, p.held)) + tile("won", "受注", c.won, "件", delta(c.won, p.won)) + tile("plan", "成約予定", c.plan, "件", delta(c.plan, p.plan)) +
     `<div class="card tile"><div class="k">受注率</div><div class="v">${resRate(c)}<small>${c.held ? "%" : ""}</small></div>${c.held || p.held ? delta(cr, pr, "%") : `<span class="d flat">&nbsp;</span>`}</div>` +
     tile("lost", "失注", c.lost, "件", delta(c.lost, p.lost, "", true)) + tile("cx", "キャンセル", c.cx, "件", delta(c.cx, p.cx, "", true)) + tile("todo", "結果まだ", c.todo, "件", `<span class="d flat">&nbsp;</span>`);
   /* 人ごとの表：今の社内のクローザー全員（0件の人も）＋「外部」（それ以外のクローザーのアポ。0件でも出す・いちばん下）。各行を足すとチーム合計 */
@@ -2469,9 +2487,9 @@ async function renderCloserKpi(a, b, pa, days, seq) {
     .sort((x, y) => y.c.won - x.c.won || y.c.held - x.c.held || y.c.due - x.c.due)
     .concat([{g: EXT_G, c: resCount(all.filter(r => grp(r) === EXT_G))}]);
   const cell = (g, k, v) => v ? `<button type="button" class="res-n${k === "todo" ? " todo" : ""}" data-g="${esc(g)}" data-k="${k}">${v}</button>` : `<span class="res-0">0</span>`;
-  const KEYS = ["held", "won", "lost", "rs", "cx"];
+  const KEYS = ["held", "won", "plan", "lost", "rs", "cx"];
   const tot = resCount(all);
-  $("resTable").innerHTML = `<tr><th>クローザー</th><th>商談数</th><th>受注</th><th>失注</th><th>リスケ</th><th>キャンセル</th><th>受注率</th><th>結果まだ</th></tr>` +
+  $("resTable").innerHTML = `<tr><th>クローザー</th><th>商談数</th><th>受注</th><th>成約予定</th><th>失注</th><th>リスケ</th><th>キャンセル</th><th>受注率</th><th>結果まだ</th></tr>` +
     rows.map(x => `<tr class="pick${x.g === U ? " me" : ""}" data-u="${esc(x.g)}" style="${member !== "all" && member !== x.g ? "opacity:.45" : ""}"><td class="name">${esc(groupName(x.g))}</td>${KEYS.map(k => `<td>${cell(x.g, k, x.c[k])}</td>`).join("")}<td><b>${resRate(x.c)}${x.c.held ? "%" : ""}</b></td><td>${cell(x.g, "todo", x.c.todo)}</td></tr>`).join("") +
     `<tr><td class="name">チーム合計</td>${KEYS.map(k => `<td>${cell("*", k, tot[k])}</td>`).join("")}<td><b>${resRate(tot)}${tot.held ? "%" : ""}</b></td><td>${cell("*", "todo", tot.todo)}</td></tr>`;
   /* 名前を押すとその人だけ（テレアポの表と同じ）。数字を押したときは一覧（resTable の click） */
@@ -2489,7 +2507,7 @@ async function renderCloserKpi(a, b, pa, days, seq) {
   drawChart(buckets, {int: true});
   /* 結果の内訳（商談の時間が来たアポの中で） */
   $("brkTitle").textContent = "商談の結果の内訳";
-  const keys = ["won", "lost", "again", "rs", "cx", "todo"], total = Math.max(1, c.due), maxC = Math.max(1, ...keys.map(k => c[k]));
+  const keys = ["won", "plan", "lost", "again", "rs", "cx", "todo"], total = Math.max(1, c.due), maxC = Math.max(1, ...keys.map(k => c[k]));
   $("brk").innerHTML = keys.map(k => ({k, v: c[k]})).sort((x, y) => y.v - x.v).map(({k, v}) =>
     `<div class="row res-brk" data-k="${k}">${resChipK(k)}<div class="track"><i style="width:${v / maxC * 100}%"></i></div><span class="c">${v}</span><span class="p">${(v / total * 100).toFixed(1)}%</span></div>`).join("") +
     `<div class="brk-note">商談の時間が来たアポ ${c.due}件の中の内訳です（前確の留守などで終わったものは、ここには出ません）</div>`;
