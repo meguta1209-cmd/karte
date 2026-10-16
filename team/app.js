@@ -192,7 +192,13 @@ const isAdminMe = () => !!(me && me.role === "admin");
 /* 予定を取り消せる人：アポを取った本人・管理者・そのアポのクローザー本人。
    「キャンセル」も「記録ごと消す」も3人とも使える（クローザーも記録ごと消せる＝社長の決定 2026-10-02「②でお願い」） */
 const isCloserOf = r => r.r === "アポ" && !!(r.memo && r.memo.closer === U);
-const canCancel = r => !r.isTask && (r.r === "アポ" || r.r === "再架電") && !r.canceled && (r.uid === U || isAdminMe() || isCloserOf(r));
+/* 営業結果シートにだけあった前の案件（v72・2026-10-16 社長「営業結果シートにだけの案件を外部として表示させたい」）。
+   records に src:"sheet"・uid:""（アポを取った人の名前は apName の文字だけ）・memo.closer:"ext"・枠なし で入っている。KPIの［クローザー］の「外部」に数えるためだけ。
+   テレアポの数（stats）・カレンダーの枠・招待・営業結果シートには無い。取り消し・記録ごと消す（stats を減らす）・日程を変える・前確の予定は出さない。リマインドにも出さない */
+const isSheetRec = r => !!r && r.src === "sheet";
+const SHEET_BADGE = `<span class="badge pre">営業結果シートだけ</span>`;
+const apName = r => isSheetRec(r) ? (r.apName || "") : nameOf(r.uid);
+const canCancel = r => !r.isTask && (r.r === "アポ" || r.r === "再架電") && !r.canceled && !isSheetRec(r) && (r.uid === U || isAdminMe() || isCloserOf(r));
 const canErase = r => r.uid === U || isAdminMe() || isCloserOf(r);
 /* ---------- 商談の結果（v66・2026-10-16 社長「アポの結果を入力してKPIに反映させる機能」「商談のじかんになったらその項目出るようにしよう」） ----------
    2段：①前確（営業結果シートのC列「前確通過可否」と同じ10個）②商談の結果（K列「結果①」と同じ4個）。records.res に入れる：
@@ -1091,7 +1097,7 @@ let lastBookedSid = null, lastBookedDur = 0;   // bookSlot が最後に書いた
    ・使えるのは、取った本人・管理者・そのアポのクローザー（クローザーは自分を担当のまま動かすだけ）
    ・前は「消して入れ直す」しかなく、KPIが減ったりシートに取り消しの行が残ったりしていた
    ============================================================ */
-const canResched = r => !r.isTask && r.r === "アポ" && !r.canceled && !!(r.memo && r.memo.when) && r.memo.closer !== EXT_G && (r.uid === U || isAdminMe() || isCloserOf(r));   // 担当を「外部」にしたアポ（KPIだけの印）は動かさない（v71）
+const canResched = r => !r.isTask && r.r === "アポ" && !r.canceled && !!(r.memo && r.memo.when) && r.memo.closer !== EXT_G && !isSheetRec(r) && (r.uid === U || isAdminMe() || isCloserOf(r));   // 担当を「外部」にしたアポ（KPIだけの印）は動かさない（v71）。営業結果シートだけの案件も（v72。枠を作ると招待が飛ぶため）
 /* 2026-10-16 社長の決定A（石川さん「クローザー本人だと、ほかのクローザーに渡せない」）：そのアポのクローザーも、ほかのクローザーに渡せる（ルール onlyReschedKeys も同時に変更。v65）。
    前は「取った本人・管理者」だけだった。関数は残し、いつも false */
 const rsCloserFixed = r => false;
@@ -1769,7 +1775,7 @@ function resStateText(r) {
   return "前確 " + x.pre + "・商談の結果まだ";
 }
 function renderResTodo(body) {
-  const list = (rmF === "me" ? myResPending() : apoRecent.filter(resPending).sort((a, b) => b.memo.when - a.memo.when));
+  const list = (rmF === "me" ? myResPending() : apoRecent.filter(r => resPending(r) && !isSheetRec(r)).sort((a, b) => b.memo.when - a.memo.when));   // 営業結果シートだけの案件は出さない（v72）
   if (!list.length) return;
   const bar = document.createElement("div"); bar.className = "res-todo";
   bar.innerHTML = `<b>商談の結果まだ ${list.length}件</b><small>商談の時間になったアポです。押して①前確と②商談の結果を入れてください</small>`;
@@ -1888,9 +1894,10 @@ function openDetail(r, cal) {
   if (r.isTask && m.shop && r.title) rows.push(["店名", esc(m.shop)]);
   if (r.r === "アポ" && m.closer) rows.push(["クローザー", `<i class="dot-c" style="background:${CCOL(m.closer)}"></i>${esc(CNAME(m.closer))}` + extCtlHtml(r)]);
   if (r.isTask) rows.push(["担当", esc(nameOf(r.uid)) + (r.by && r.by !== r.uid ? `<small>作成 ${esc(nameOf(r.by))}</small>` : "")]);
+  else if (isSheetRec(r)) rows.push(["獲得", esc(apName(r) || "−") + " " + SHEET_BADGE + `<small>KPIのクローザーの「外部」に数えるだけ（テレアポの数・カレンダーには入りません）</small>`]);
   else rows.push([r.r === "アポ" ? "獲得" : "担当", esc(nameOf(r.uid)) + (r.pre ? " " + PRE_BADGE + `<small>KPIに数えない${r.enteredBy && r.enteredBy !== r.uid ? "・入力 " + esc(nameOf(r.enteredBy)) : ""}</small>` : `<small>${md(r.t)} ${hm(r.t)}</small>`)]);
   rows.push(["メモ", m.text ? `<span class="rd-memo">${esc(m.text)}</span>` : `<span class="rd-none">なし</span>`]);
-  if (!r.isTask && r.r === "アポ") rows.push(["カレンダーの説明", m.info ? `<span class="rd-memo">${esc(m.info)}</span>` : `<span class="rd-none">なし（「メモを編集」から貼り付けると、クローザーのカレンダーに入ります）</span>`]);
+  if (!r.isTask && r.r === "アポ" && !isSheetRec(r)) rows.push(["カレンダーの説明", m.info ? `<span class="rd-memo">${esc(m.info)}</span>` : `<span class="rd-none">なし（「メモを編集」から貼り付けると、クローザーのカレンダーに入ります）</span>`]);
   $("rdTel").innerHTML = m.tel
     ? `<a class="rd-call" href="${telHref(m.tel)}"><span>☎</span><b class="num">${esc(m.tel)}</b><small>押すと電話をかける</small></a><button class="rd-copy" id="rdCopy">コピー</button>`
     : `<div class="rd-notel">電話番号は入っていません${mine ? "（「" + (r.isTask ? "編集" : "メモを編集") + "」から入れられます）" : ""}</div>`;
@@ -1901,7 +1908,7 @@ function openDetail(r, cal) {
   if (!r.isTask && mine && r.r === "再架電" && !r.done && !r.canceled && w) acts.push(`<button class="primary" data-a="done">かけた（結果を押す）</button>`, `<button data-a="later">明日へ延期</button>`);
   /* アポからは、前確の予定をそのまま作れる */
   if (canResched(r)) acts.push(`<button data-a="rs">日程を変える（リスケ）</button>`);
-  if (!r.isTask && r.r === "アポ" && !r.canceled) acts.push(`<button data-a="prec">＋ 前確の予定を作る</button>`);
+  if (!r.isTask && r.r === "アポ" && !r.canceled && !isSheetRec(r)) acts.push(`<button data-a="prec">＋ 前確の予定を作る</button>`);
   /* 予定を取り消す（キャンセル／入れ間違いで消す）：取った本人・管理者・そのアポのクローザー */
   if (canCancel(r)) acts.push(`<button class="cx-btn" data-a="cx">予定を取り消す</button>`);
   $("rdActs").innerHTML = acts.join(""); $("rdActs").hidden = !acts.length;
@@ -2499,7 +2506,7 @@ function openResList(k, g) {
     const st = r.canceled ? "取り消し" : [x.pre && "前確 " + x.pre, x.deal && "商談 " + x.deal].filter(Boolean).join("・") || "結果まだ";
     return `<button type="button" class="rl-row" data-id="${esc(r.id)}"><span class="rl-t num">${md(r.memo.when)} ${hm(r.memo.when)}</span>
       <b class="rl-shop">${esc(r.memo.shop || "（店名なし）")}</b>
-      <small>アポ ${esc(nameOf(r.uid))} ・ クローザー ${esc(r.memo.closer ? CNAME(r.memo.closer) : "−")} ・ ${esc(st)}</small>
+      <small>アポ ${esc(apName(r))} ・ クローザー ${esc(r.memo.closer ? CNAME(r.memo.closer) : "−")} ・ ${esc(st)}${isSheetRec(r) ? " ・ 営業結果シートだけ" : ""}</small>
       ${memo ? `<small class="rl-memo">${esc(memo)}</small>` : ""}</button>`;
   }).join("") : `<div class="empty">ありません</div>`;
   $("rlScrim").hidden = $("rlDlg").hidden = false;
