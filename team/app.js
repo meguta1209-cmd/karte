@@ -1924,8 +1924,11 @@ function openDetail(r, cal) {
 }
 /* ---------- 商談の結果の欄（v66）：記録の詳細のいちばん上。商談の始まりの時刻から、取り消していないアポにだけ出す ---------- */
 const RES_GOOD = ["OK", "受注"], RES_BAD = ["NG", "NG（受注後買取）", "キャンセル", "失注"];
+/* ①前確は、アポに日時が入った時からいつでも出す（前確は商談の前にするので。社長 2026-10-16「前確の結果ボタンはずっと出してほしい」v70）。
+   ②商談の結果は今まで通り、商談の始まりの時刻から */
 function resBoxHtml(r) {
-  if (!resDue(r) || r.canceled) return "";
+  if (!r || r.isTask || r.r !== "アポ" || !(r.memo && r.memo.when) || r.canceled) return "";
+  const due = resDue(r);
   const x = resOf(r) || {}, edit = canResult(r);
   const chips = (list, cur, key) => `<div class="res-chips" data-k="${key}">` + list.map(v =>
     `<button type="button" class="res-chip${v === cur ? " on" : ""}${RES_GOOD.includes(v) ? " good" : RES_BAD.includes(v) ? " bad" : ""}" data-v="${esc(v)}" aria-pressed="${v === cur}"${edit ? "" : " disabled"}>${esc(v)}</button>`).join("") + `</div>`;
@@ -1933,9 +1936,11 @@ function resBoxHtml(r) {
   const needDeal = !x.pre || RES_WAIT.includes(x.pre) || x.pre === "留守";
   const preList = RES_PRE_SHOW.concat(x.pre && !RES_PRE_SHOW.includes(x.pre) ? [x.pre] : []);
   const at = tsd(x.at);
-  return `<div class="res-box" id="rdRes"><div class="res-h">商談の結果${resPending(r) ? ` <span class="badge late">結果まだ</span>` : ""}</div>
+  return `<div class="res-box" id="rdRes"><div class="res-h">${due ? "商談の結果" : "前確の結果"}${resPending(r) ? ` <span class="badge late">結果まだ</span>` : ""}</div>
     <div class="res-step">① 前確（商談の前の確認）</div>${chips(preList, x.pre, "pre")}
-    ${needDeal ? `<div class="res-step">② 商談の結果</div>${chips(RES_DEAL, x.deal, "deal")}` : `<div class="res-note">前確が「${esc(x.pre)}」なので、商談の結果は入れなくて大丈夫です</div>`}
+    ${!needDeal ? `<div class="res-note">前確が「${esc(x.pre)}」なので、商談の結果は入れなくて大丈夫です</div>`
+      : due ? `<div class="res-step">② 商談の結果</div>${chips(RES_DEAL, x.deal, "deal")}`
+      : `<div class="res-note">② 商談の結果は、商談の始まりの時刻（${md(r.memo.when)} ${hm(r.memo.when)}）から入れられます</div>`}
     ${edit ? `<input class="res-memo" id="rdResNote" maxlength="500" placeholder="理由・メモ（NG・失注の理由など。なくてもOK）" value="${esc(x.note || "")}">` : x.note ? `<div class="res-note">メモ：${esc(x.note)}</div>` : ""}
     <div class="res-note">${edit ? "押すとすぐ保存されます（もう一度押すと外れます）。" : "入れられるのは、このアポのクローザー・アポを取った人・管理者です。"}${x.by ? `　最後に入れた人：${esc(nameOf(x.by))}${at ? "（" + md(at) + " " + hm(at) + "）" : ""}` : ""}</div></div>`;
 }
