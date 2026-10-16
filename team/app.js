@@ -2195,6 +2195,14 @@ $("tryNow").onclick = () => { const r = nextMine(); if (r) showAlert(r, "now", t
    KPI（stats/{日} だけを読む）
    ============================================================ */
 let period = "today", member = "all";
+/* テレアポ／クローザー（v68）。この端末で最後に選んだ方 */
+let kpiSide = lsGet("team-kpiSide", "tele") === "closer" ? "closer" : "tele";
+$("kpiSide").onclick = e => {
+  const b = e.target.closest("button"); if (!b || b.dataset.s === kpiSide) return;
+  kpiSide = b.dataset.s; lsSet("team-kpiSide", kpiSide);
+  member = "all"; $("member").value = "all";   // 選べる人が違う（テレアポ＝プレイヤー、クローザー＝クローザー）ので全員に戻す
+  renderKpi();
+};
 $("period").onclick = e => {
   const b = e.target.closest("button"); if (!b) return;
   period = b.dataset.p; $("period").querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", x === b));
@@ -2272,17 +2280,23 @@ function fmtMins(mins) {
   return (h ? h + "時間" : "") + (m ? m + "分" : "");
 }
 const workDays = (a, b) => { let n = 0; for (let d = new Date(a); d < b; d = addDays(d, 1)) if (d.getDay() !== 0) n++; return Math.max(n, 1); };
-function delta(cur, prev, unit) {
+function delta(cur, prev, unit, worse) {   // worse＝増えるほど悪い数字（失注・キャンセル。v68）：色を逆に（増えたら赤、減ったら緑）
   const d = cur - prev;
   const dec = unit === "%" || unit === "件/時" || unit === "時間";
   if (Math.abs(d) < (dec ? 0.05 : 0.5)) return `<span class="d flat">前期比 ±0</span>`;
   const s = (d > 0 ? "▲" : "▼") + (unit === "%" ? Math.abs(d).toFixed(1) + "pt" : dec ? Math.abs(d).toFixed(1) + (unit === "時間" ? "h" : "") : Math.round(Math.abs(d)));
-  return `<span class="d ${d > 0 ? "up" : "down"}">前期比 ${s}</span>`;
+  return `<span class="d ${(d > 0) !== !!worse ? "up" : "down"}">前期比 ${s}</span>`;
 }
 let kpiSeq = 0;
 async function renderKpi() {
   const seq = ++kpiSeq;
   const [a, b] = range(), days = Math.round((b - a) / 864e5), pa = addDays(a, -days);
+  /* テレアポ／クローザー（v68）。クローザーを選んでいるときは stats を読まない（記録の商談の結果だけ） */
+  $("kpiSide").querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", x.dataset.s === kpiSide));
+  $("kpiTele").hidden = $("defsTele").hidden = kpiSide !== "tele";
+  $("kpiCloser").hidden = $("defsCloser").hidden = kpiSide !== "closer";
+  if (kpiSide === "closer") { renderCloserKpi(a, b, pa, days, seq); return; }
+  $("brkTitle").textContent = "結果の内訳";
   const ids = Object.keys(members).filter(id => members[id].status === "active" || members[id].status === "removed");
   const sel = $("member"), cur = sel.value || member;
   /* 表の行を押して絞れるのも、選択肢に出る人（有効なプレイヤー）だけ。ほかの人の行は押せない（テスターの指摘） */
@@ -2317,7 +2331,6 @@ async function renderKpi() {
       <td><b>${ph(s)}</b></td><td>${s.apo}</td><td>${s.apoRate.toFixed(1)}%</td><td>${s.ansRate.toFixed(1)}%</td><td>${s.connRate.toFixed(1)}%</td><td>${fmtMins(s.mins)}</td><td>${(s.n / wd).toFixed(0)}</td></tr>`).join("") +
     `<tr><td class="name">チーム合計</td><td>${tot.n}</td><td>${tot.ans}</td><td><b>${ph(tot)}</b></td><td>${tot.apo}</td><td>${tot.apoRate.toFixed(1)}%</td><td>${tot.ansRate.toFixed(1)}%</td><td>${tot.connRate.toFixed(1)}%</td><td>${fmtMins(tot.mins)}</td><td>${(tot.n / wd).toFixed(0)}</td></tr>`;
   $("mtable").querySelectorAll("tr.pick").forEach(tr => tr.onclick = () => { member = member === tr.dataset.u ? "all" : tr.dataset.u; $("member").value = member; renderKpi(); });
-  renderResKpi(a, b, seq);   // 商談の結果（v66。stats とは別に、アポの記録から数える）
 
   const who = u => member === "all" || u === member;
   let buckets = [];
@@ -2365,38 +2378,71 @@ const RES_KINDS = [   // [キー, 名前, 数え方]
   ["todo", "結果まだ", resPending]
 ];
 const RES_KIND = Object.fromEntries(RES_KINDS.map(k => [k[0], k]));
-let resBy = "appo", resView = {list: [], label: ""};
+let resView = {list: [], label: ""};
 function resCount(list) { const c = {}; RES_KINDS.forEach(([k, , f]) => c[k] = list.filter(f).length); return c; }
 const resRate = c => c.held ? (c.won / c.held * 100).toFixed(1) : "–";
-async function renderResKpi(a, b, seq) {
-  let list;
-  try { list = await loadResApos(a, b); } catch (e) { if (seq === kpiSeq) $("resTiles").innerHTML = `<div class="empty">商談の結果を読み込めませんでした</div>`; return; }
+/* ---------- KPI：クローザー（v68・2026-10-16 社長「今月・今週・今日・昨日・期間指定のテレアポインターと同じ内容で…上の方でクローザーとテレアポを選べるようにして」） ----------
+   テレアポと同じ作り：期間のボタン・メンバー（クローザー）・数字のタイル（前期比つき）・人ごとの表・日別（時間帯別）のグラフ・結果の内訳。
+   数え方は v66 のまま（商談数＝実施＝②が受注・失注・再営。RES_KINDS）。商談日で数える。stats は読まない */
+const RES_CHIP = {won: ["受注", "#1F7256", "#FFFFFF"], lost: ["失注", "#B8392C", "#FFFFFF"], again: ["再営", "#1E4E86", "#FFFFFF"],
+  rs: ["リスケ", "#FBEFD2", "#8A5A00"], cx: ["キャンセル", "#E8EAED", "#3C4043"], todo: ["結果まだ", "#FFF3CD", "#8A5A00"]};
+const resChipK = k => { const c = RES_CHIP[k]; return `<span class="res" style="background:${c[1]};color:${c[2]}">${c[0]}</span>`; };
+async function renderCloserKpi(a, b, pa, days, seq) {
+  const cls = closerList().filter(c => c.id !== "none");
+  const sel = $("member"), cur = member;
+  sel.innerHTML = `<option value="all">クローザー：全員</option>` + cls.map(c => `<option value="${esc(c.id)}">クローザー：${esc(c.name)}${c.id === U ? "（自分）" : ""}</option>`).join("");
+  sel.value = [...sel.options].some(o => o.value === cur) ? cur : "all"; member = sel.value;
+  let list, plist;
+  try { [list, plist] = await Promise.all([loadResApos(a, b), loadResApos(pa, a)]); }
+  catch (e) { if (seq === kpiSeq) $("resTiles").innerHTML = `<div class="empty">読み込めませんでした</div>`; return; }
   if (seq !== kpiSeq) return;
-  const due = list.filter(r => resDue(r) && (member === "all" || r.uid === member));
-  const per = $("period").querySelector("[aria-pressed=true]"), pLbl = per ? per.textContent : "";
-  resView = {list: due, label: pLbl + (member !== "all" ? "・" + nameOf(member) + "が取ったアポ" : "")};
-  const c = resCount(due);
-  const tile = (k, v, u) => `<button type="button" class="card tile res-tile" data-k="${k}"><div class="k">${RES_KIND[k][1]}</div><div class="v">${v}<small>${u}</small></div></button>`;
-  $("resTiles").innerHTML = tile("due", c.due, "件") + tile("held", c.held, "件") + tile("won", c.won, "件") +
-    `<div class="card tile"><div class="k">受注率</div><div class="v">${resRate(c)}<small>${c.held ? "%" : ""}</small></div></div>` + tile("cx", c.cx, "件") + tile("todo", c.todo, "件");
-  $("resBy").querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", x.dataset.b === resBy));
-  const keyOf = r => resBy === "closer" ? (r.memo.closer || "none") : r.uid;
-  const nameOfG = g => resBy === "closer" ? (g === "none" ? "担当未定" : CNAME(g)) : nameOf(g);
-  const groups = [...new Set(due.map(keyOf))].map(g => ({g, c: resCount(due.filter(r => keyOf(r) === g))}))
-    .sort((x, y) => y.c.won - x.c.won || y.c.held - x.c.held || y.c.due - x.c.due);
+  $("kpiAt").textContent = hm(new Date()) + " 時点";
+  const pick = l => l.filter(r => resDue(r) && (member === "all" || r.memo.closer === member));
+  const due = pick(list), pdue = pick(plist);
+  const per = $("period").querySelector("[aria-pressed=true]");
+  resView = {list: due, label: (per ? per.textContent : "") + (member !== "all" ? "・クローザー " + CNAME(member) : "")};
+  const c = resCount(due), p = resCount(pdue), pr = p.held ? p.won / p.held * 100 : 0, cr = c.held ? c.won / c.held * 100 : 0;
+  const tile = (k, lbl, v, u, d) => `<button type="button" class="card tile res-tile" data-k="${k}"><div class="k">${lbl}</div><div class="v">${v}<small>${u}</small></div>${d}</button>`;
+  $("resTiles").innerHTML = tile("held", "商談数（実施）", c.held, "件", delta(c.held, p.held)) + tile("won", "受注", c.won, "件", delta(c.won, p.won)) +
+    `<div class="card tile"><div class="k">受注率</div><div class="v">${resRate(c)}<small>${c.held ? "%" : ""}</small></div>${c.held || p.held ? delta(cr, pr, "%") : `<span class="d flat">&nbsp;</span>`}</div>` +
+    tile("lost", "失注", c.lost, "件", delta(c.lost, p.lost, "", true)) + tile("cx", "キャンセル", c.cx, "件", delta(c.cx, p.cx, "", true)) + tile("todo", "結果まだ", c.todo, "件", `<span class="d flat">&nbsp;</span>`);
+  /* 人ごとの表：今のクローザー全員（0件の人も）＋期間に担当があった人（外した人など） */
+  const all = list.filter(r => resDue(r));
+  const ids = [...new Set(cls.map(x => x.id).concat(all.map(r => r.memo.closer || "none")))];
+  const rows = ids.map(g => ({g, c: resCount(all.filter(r => (r.memo.closer || "none") === g))}))
+    .filter(x => cls.some(y => y.id === x.g) || x.c.due).sort((x, y) => y.c.won - x.c.won || y.c.held - x.c.held || y.c.due - x.c.due);
   const cell = (g, k, v) => v ? `<button type="button" class="res-n${k === "todo" ? " todo" : ""}" data-g="${esc(g)}" data-k="${k}">${v}</button>` : `<span class="res-0">0</span>`;
-  const KEYS = ["due", "held", "won", "lost", "again", "rs", "cx"];
-  const row = (g, name, c) => `<tr><td class="name">${esc(name)}</td>${KEYS.map(k => `<td>${cell(g, k, c[k])}</td>`).join("")}<td><b>${resRate(c)}${c.held ? "%" : ""}</b></td><td>${cell(g, "todo", c.todo)}</td></tr>`;
-  $("resTable").innerHTML = `<tr><th>${resBy === "closer" ? "クローザー" : "アポインター"}</th><th>時間が来た</th><th>実施</th><th>受注</th><th>失注</th><th>再営</th><th>リスケ</th><th>キャンセル</th><th>受注率</th><th>結果まだ</th></tr>` +
-    (groups.length ? groups.map(x => row(x.g, nameOfG(x.g), x.c)).join("") + row("*", "チーム合計", c) : `<tr><td colspan="10" class="empty">この期間に商談の時間が来たアポはありません</td></tr>`);
+  const KEYS = ["held", "won", "lost", "rs", "cx"];
+  const tot = resCount(all);
+  $("resTable").innerHTML = `<tr><th>クローザー</th><th>商談数</th><th>受注</th><th>失注</th><th>リスケ</th><th>キャンセル</th><th>受注率</th><th>結果まだ</th></tr>` +
+    rows.map(x => `<tr class="pick${x.g === U ? " me" : ""}" data-u="${esc(x.g)}" style="${member !== "all" && member !== x.g ? "opacity:.45" : ""}"><td class="name">${esc(x.g === "none" ? "担当未定" : CNAME(x.g))}</td>${KEYS.map(k => `<td>${cell(x.g, k, x.c[k])}</td>`).join("")}<td><b>${resRate(x.c)}${x.c.held ? "%" : ""}</b></td><td>${cell(x.g, "todo", x.c.todo)}</td></tr>`).join("") +
+    `<tr><td class="name">チーム合計</td>${KEYS.map(k => `<td>${cell("*", k, tot[k])}</td>`).join("")}<td><b>${resRate(tot)}${tot.held ? "%" : ""}</b></td><td>${cell("*", "todo", tot.todo)}</td></tr>`;
+  /* 名前を押すとその人だけ（テレアポの表と同じ）。数字を押したときは一覧（resTable の click） */
+  $("resTable").querySelectorAll("tr.pick td.name").forEach(td => td.onclick = () => { const g = td.parentElement.dataset.u; if (!cls.some(x => x.id === g)) return; member = member === g ? "all" : g; $("member").value = member; renderKpi(); });
+  /* グラフ：1日なら時間帯別、ほかは日別の商談数（受注も添える） */
+  const held = due.filter(resHeld), won = due.filter(r => !r.canceled && resDeal(r) === "受注");
+  const buckets = [];
+  if (days <= 1) {
+    $("chartTitle").textContent = "時間帯別の商談数";
+    for (let h = 9; h < 22; h++) buckets.push({lbl: h + "時", tip: h + ":00〜", n: held.filter(r => r.memo.when.getHours() === h).length, apo: won.filter(r => r.memo.when.getHours() === h).length, nLbl: "商談", apoLbl: "受注"});
+  } else {
+    $("chartTitle").textContent = "日別の商談数";
+    for (let d = new Date(a); d < b; d = addDays(d, 1)) { const k = dk(d); buckets.push({lbl: (d.getMonth() + 1) + "/" + d.getDate(), tip: md(d), n: held.filter(r => dk(r.memo.when) === k).length, apo: won.filter(r => dk(r.memo.when) === k).length, nLbl: "商談", apoLbl: "受注"}); }
+  }
+  drawChart(buckets, {int: true});
+  /* 結果の内訳（商談の時間が来たアポの中で） */
+  $("brkTitle").textContent = "商談の結果の内訳";
+  const keys = ["won", "lost", "again", "rs", "cx", "todo"], total = Math.max(1, c.due), maxC = Math.max(1, ...keys.map(k => c[k]));
+  $("brk").innerHTML = keys.map(k => ({k, v: c[k]})).sort((x, y) => y.v - x.v).map(({k, v}) =>
+    `<div class="row res-brk" data-k="${k}">${resChipK(k)}<div class="track"><i style="width:${v / maxC * 100}%"></i></div><span class="c">${v}</span><span class="p">${(v / total * 100).toFixed(1)}%</span></div>`).join("") +
+    `<div class="brk-note">商談の時間が来たアポ ${c.due}件の中の内訳です（前確の留守などで終わったものは、ここには出ません）</div>`;
 }
-/* 中身の一覧（数字・タイルを押す／［受注した案件の一覧］） */
+/* 中身の一覧（数字・タイル・内訳を押す／［受注した案件の一覧］）。g＝クローザー（"*"＝全員） */
 function openResList(k, g) {
-  const keyOf = r => resBy === "closer" ? (r.memo.closer || "none") : r.uid;
   const f = RES_KIND[k][2];
-  const list = resView.list.filter(r => (!g || g === "*" || keyOf(r) === g) && f(r)).sort((x, y) => y.memo.when - x.memo.when);
-  const who = g && g !== "*" ? "・" + (resBy === "closer" ? "クローザー " + (g === "none" ? "担当未定" : CNAME(g)) : "アポインター " + nameOf(g)) : "";
-  $("rlTitle").textContent = `${RES_KIND[k][1]} ${list.length}件`;
+  const list = resView.list.filter(r => (!g || g === "*" || (r.memo.closer || "none") === g) && f(r)).sort((x, y) => y.memo.when - x.memo.when);
+  const who = g && g !== "*" ? "・クローザー " + (g === "none" ? "担当未定" : CNAME(g)) : "";
+  $("rlTitle").textContent = `${k === "held" ? "商談（実施）" : RES_KIND[k][1]} ${list.length}件`;
   $("rlNote").textContent = (resView.label || "") + who + "　押すと記録の詳細が開きます";
   $("rlList").innerHTML = list.length ? list.map(r => {
     const x = resOf(r) || {}, memo = x.note || r.memo.text || "";
@@ -2417,12 +2463,12 @@ $("rlList").addEventListener("click", e => {
 });
 $("resTiles").addEventListener("click", e => { const t = e.target.closest(".res-tile"); if (t) openResList(t.dataset.k, "*"); });
 $("resTable").addEventListener("click", e => { const t = e.target.closest(".res-n"); if (t) openResList(t.dataset.k, t.dataset.g); });
-$("resBy").onclick = e => { const b = e.target.closest("button"); if (!b) return; resBy = b.dataset.b; renderKpi(); };
+$("brk").addEventListener("click", e => { const t = kpiSide === "closer" && e.target.closest(".res-brk"); if (t) openResList(t.dataset.k, "*"); });
 $("resWonBtn").onclick = () => openResList("won", "*");
 function niceMax(v) { if (v <= 5) return 5; const p = Math.pow(10, Math.floor(Math.log10(v))); for (const m of [1, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10]) if (m * p >= v) return m * p; return 10 * p; }
-function drawChart(bk) {
+function drawChart(bk, opt) {   // opt.int＝目盛りを整数に（件数の小さいクローザーのKPI。v68）
   const W = 520, H = 190, L = 30, R = 6, T = 10, B = 22;
-  const vals = bk.map(x => x.n), top = niceMax(Math.max(1, ...vals));
+  const vals = bk.map(x => x.n), top = opt && opt.int ? Math.max(4, Math.ceil(Math.max(1, ...vals) / 4) * 4) : niceMax(Math.max(1, ...vals));
   const n = bk.length, slot = (W - L - R) / n, bw = Math.max(2, Math.min(28, slot - 2));
   const y = v => T + (H - T - B) * (1 - v / top);
   let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc($("chartTitle").textContent)}">`;
@@ -2440,7 +2486,7 @@ function drawChart(bk) {
   const show = e => {
     const r = e.target.closest(".hit"); if (!r) { tip.hidden = true; return; }
     const i = +r.dataset.i, x = bk[i], bb = svg.getBoundingClientRect(), sc = bb.width / W;
-    tip.innerHTML = `${x.tip}　架電 <b>${x.n}</b>` + (x.apo != null ? `　アポ <b>${x.apo}</b>` : "") + (x.perHour != null ? `<br>1時間あたり <b>${x.perHour.toFixed(1)}</b>` : "");
+    tip.innerHTML = `${x.tip}　${x.nLbl || "架電"} <b>${x.n}</b>` + (x.apo != null ? `　${x.apoLbl || "アポ"} <b>${x.apo}</b>` : "") + (x.perHour != null ? `<br>1時間あたり <b>${x.perHour.toFixed(1)}</b>` : "");   // クローザーのKPIは「商談」「受注」（v68）
     tip.style.left = Math.min(Math.max((L + slot * i + slot / 2) * sc + 12, 90), bb.width - 60) + "px"; tip.style.top = (y(vals[i]) * sc + 4) + "px"; tip.hidden = false;
   };
   svg.addEventListener("pointermove", show); svg.addEventListener("pointerdown", show); svg.addEventListener("pointerleave", () => tip.hidden = true);

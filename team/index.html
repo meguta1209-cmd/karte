@@ -18,7 +18,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=BIZ+UDPGothic:wght@400;700&family=Roboto+Mono:wght@500;700&display=swap">
-<link rel="stylesheet" href="./style.css?v=67">
+<link rel="stylesheet" href="./style.css?v=68">
 <script>
 /* LINEの中のブラウザではGoogleログインが通らない（途中の情報を覚えておけない）。
    LINEは ?openExternalBrowser=1 を付けると Safari / Chrome で開き直してくれるので、自動で付け直す */
@@ -183,6 +183,8 @@
   <!-- KPI -->
   <section id="v-kpi" hidden>
     <div class="kpi-top"><h1 class="screen">KPI</h1><span class="kpi-at" id="kpiAt"></span><button class="kpi-refresh" id="kpiRefresh" type="button">↻ 最新にする</button></div>
+    <!-- テレアポ／クローザーの切り替え（v68・2026-10-16 社長「上の方でクローザーとテレアポを選べるようにして」）。最後に選んだ方をこの端末で覚える -->
+    <div class="seg kpi-side" id="kpiSide" role="tablist" aria-label="KPIの種類"><button type="button" data-s="tele" aria-pressed="true">テレアポ</button><button type="button" data-s="closer" aria-pressed="false">クローザー</button></div>
     <!-- 毎日の日報（LINE WORKSに貼る文）をコピー。今は管理者だけに出す（v51・2026-10-10 社長） -->
     <div class="rep-bar" id="repBar" hidden><button class="rep-btn" id="repBtn" type="button">📋 日報をコピー</button><span class="aside">獲得アポ数・週間目標・全体目標・個人コミットの文を作ります</span></div>
     <div class="filters">
@@ -199,21 +201,25 @@
       </div>
       <select class="member" id="member" aria-label="メンバー"></select>
     </div>
-    <div class="tiles" id="tiles"></div>
-    <h2>メンバー別 <span class="aside">行を押すとその人だけ表示</span></h2>
-    <div class="card tbl-wrap"><table class="kpi" id="mtable"></table></div>
-    <!-- 商談の結果（v66・2026-10-16 社長）。上の期間とメンバーに合わせ、商談日で数える。数字を押すと中身の一覧 -->
-    <h2>商談の結果 <span class="aside">商談日で数える・数字を押すと案件の一覧</span></h2>
-    <div class="tiles" id="resTiles"></div>
-    <div class="seg res-by" id="resBy"><button type="button" data-b="appo" aria-pressed="true">アポインター別</button><button type="button" data-b="closer" aria-pressed="false">クローザー別</button></div>
-    <div class="card tbl-wrap"><table class="kpi res-kpi" id="resTable"></table></div>
-    <button type="button" class="btn-plain res-won-btn" id="resWonBtn">📋 受注した案件の一覧</button>
-    <p class="defs">実施＝②商談の結果が「受注」「失注」「再営」のアポ（②がリスケ・前確で終わったもの・取り消したもの・結果まだは入らない）。受注率＝受注÷実施。リスケ＝前確か②がリスケ。キャンセル＝アプリで取り消したか前確がキャンセル。結果まだ＝商談の時間が来て、結果が入っていないアポ。メンバーを選ぶと、その人が取ったアポだけ。上の「アポ」などの数字とは別に数えます（今までの数字は変わりません）。</p>
+    <!-- テレアポ（今までのKPIそのまま） -->
+    <div id="kpiTele">
+      <div class="tiles" id="tiles"></div>
+      <h2>メンバー別 <span class="aside">行を押すとその人だけ表示</span></h2>
+      <div class="card tbl-wrap"><table class="kpi" id="mtable"></table></div>
+    </div>
+    <!-- クローザー（v68）：テレアポと同じ作り。商談日で数える。数字を押すと案件の一覧 -->
+    <div id="kpiCloser" hidden>
+      <div class="tiles" id="resTiles"></div>
+      <h2>クローザー別 <span class="aside">行を押すとその人だけ・数字を押すと案件の一覧</span></h2>
+      <div class="card tbl-wrap"><table class="kpi res-kpi" id="resTable"></table></div>
+      <button type="button" class="btn-plain res-won-btn" id="resWonBtn">📋 受注した案件の一覧</button>
+    </div>
     <h2 id="chartTitle">日別の架電数</h2>
     <div class="card chart" id="chart"></div>
-    <h2>結果の内訳</h2>
+    <h2 id="brkTitle">結果の内訳</h2>
     <div class="card brk" id="brk"></div>
-    <details class="defs-box"><summary>数字の意味</summary><p class="defs">対応数（電話に出てもらった数）＝架電から「留守」「繋がらない」「使われてない」を引いた数。対応率＝対応数÷架電。アポ率＝アポ÷架電。接続率（オーナーと話せた率）＝（アポ＋オーナー断り＋NG）÷架電。1時間あたり＝架電÷稼働時間。稼働時間＝電話をかけた10分の枠の合計（休憩など、かけていない時間は入らない。10分の枠の情報が無い古い記録は、かけた時間帯を1時間として数える）。前期比＝同じ日数だけさかのぼった期間との差。</p></details>
+    <details class="defs-box" id="defsTele"><summary>数字の意味</summary><p class="defs">対応数（電話に出てもらった数）＝架電から「留守」「繋がらない」「使われてない」を引いた数。対応率＝対応数÷架電。アポ率＝アポ÷架電。接続率（オーナーと話せた率）＝（アポ＋オーナー断り＋NG）÷架電。1時間あたり＝架電÷稼働時間。稼働時間＝電話をかけた10分の枠の合計（休憩など、かけていない時間は入らない。10分の枠の情報が無い古い記録は、かけた時間帯を1時間として数える）。前期比＝同じ日数だけさかのぼった期間との差。</p></details>
+    <details class="defs-box" id="defsCloser" hidden><summary>数字の意味</summary><p class="defs">商談の日（商談日時）で数えます。商談数＝実施した商談（②商談の結果が「受注」「失注」「再営」）。②がリスケ・前確で終わったもの（リスケ・キャンセル・留守など）・取り消したもの・結果まだは商談数に入りません。受注率＝受注÷商談数。リスケ＝前確か②がリスケ。キャンセル＝アプリで取り消したか前確がキャンセル。結果まだ＝商談の時間が来て、結果が入っていないアポ。前期比＝同じ日数だけさかのぼった期間との差。テレアポの数字（アポ数など）とは別に数えます。</p></details>
   </section>
 
   <!-- リマインド -->
@@ -641,7 +647,7 @@
 <div class="offline" id="offline" hidden>オフライン中：つながったら送ります</div>
 <div class="toast" id="toast"></div>
 
-<script src="./breaktimer.js?v=67"></script>
-<script type="module" src="./app.js?v=67"></script>
+<script src="./breaktimer.js?v=68"></script>
+<script type="module" src="./app.js?v=68"></script>
 </body>
 </html>
