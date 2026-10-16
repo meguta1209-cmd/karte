@@ -18,7 +18,17 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=BIZ+UDPGothic:wght@400;700&family=Roboto+Mono:wght@500;700&display=swap">
-<link rel="stylesheet" href="./style.css?v=68">
+<script>
+/* テーマカラー・画面の明るさ（v69）。この端末に覚えた分を、画面を描く前に付ける（ちらつかないように）。キーは app.js の THEME_KEY と同じ */
+(function () {
+  try {
+    var t = JSON.parse(localStorage.getItem("kekka-theme@" + location.pathname) || "{}"), r = document.documentElement;
+    if (t.a && t.a !== "navy") r.setAttribute("data-accent", t.a);
+    if (t.m === "light" || t.m === "dark") r.setAttribute("data-theme", t.m);
+  } catch (e) {}
+})();
+</script>
+<link rel="stylesheet" href="./style.css?v=69">
 <script>
 /* LINEの中のブラウザではGoogleログインが通らない（途中の情報を覚えておけない）。
    LINEは ?openExternalBrowser=1 を付けると Safari / Chrome で開き直してくれるので、自動で付け直す */
@@ -251,6 +261,15 @@
       <p class="defs">このリンクを送って、各自Googleでログイン → 名前を登録してもらいます。承認するまでは中身は見えません。</p>
       <h2>結果の項目</h2>
       <div class="card set"><div class="row"><div class="t">項目を編集<small id="itemsNote"></small></div><button class="chip-btn" id="editItems">編集</button></div></div>
+    </div>
+
+    <!-- テーマカラー（v69）。この端末だけ。結果の色・クローザーの色・予定ありなどの意味のある色は変わらない -->
+    <h2>テーマカラー <span class="aside">この端末だけに覚えます</span></h2>
+    <div class="card set theme-card">
+      <div class="theme-sw" id="themeSw" role="radiogroup" aria-label="テーマカラー"></div>
+      <div class="row"><div class="t">画面の明るさ<small>自動＝スマホ・パソコンの設定に合わせる</small></div>
+        <div class="seg" id="themeMode"><button type="button" data-m="auto">自動</button><button type="button" data-m="light">明るい</button><button type="button" data-m="dark">暗い</button></div></div>
+      <p class="defs theme-note">変わるのはボタン・タブなどのアプリの色だけです。結果の色分け（留守・アポなど）・クローザーの色・予定ありの斜線・休憩の帯の色は、そのままです。</p>
     </div>
 
     <h2>自分のアカウント</h2>
@@ -647,7 +666,7 @@
 <div class="offline" id="offline" hidden>オフライン中：つながったら送ります</div>
 <div class="toast" id="toast"></div>
 
-<script src="./breaktimer.js?v=68"></script>
-<script type="module" src="./app.js?v=68"></script>
+<script src="./breaktimer.js?v=69"></script>
+<script type="module" src="./app.js?v=69"></script>
 </body>
 </html>

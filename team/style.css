@@ -961,3 +961,35 @@ button.res-tile:hover{border-color:var(--rule2);}
 .brk .res-brk:hover{background:var(--card2);}
 .brk-note{padding:6px 12px 8px; font-size:11.5px; color:var(--ink3);}
 .res-kpi td.name{cursor:pointer;}
+/* ---------- テーマカラー（v69・2026-10-16 社長「アプリ内のテーマカラー設定機能つけて」） ----------
+   変わるのは「アプリの色」（--blue・--blue-soft・--bar＝ボタン・タブ・選んだ印・今日の印・グラフの棒など）と、画面の地の色（--paper をうっすら）だけ。
+   結果の色分け・クローザーの色・予定ありの斜線・休憩タイマーの帯・OK（緑）・赤・注意（黄）は変えない。<html data-accent="…">。紺は何も付けない（いつもの色）。
+   色選び（社長「一番見やすい組み合わせにして」）：クローザーの6色（CLOSER_COLORS）・アポ可の緑とカレンダーで見分けられるよう、
+   色の差 ΔE（CIE76）がクローザーのどの色とも 27 以上（明るい画面）・25 以上（暗い画面）、アポ可の緑とも 25 以上になる色にした（scratchpad/colordist.ps1）。
+   最初の青緑・紫・ワインはクローザーの色と ΔE 10〜15 で近かったので、藍・オリーブ・プラムに替え、茶はこげ茶（くすんだ茶）にした。
+   文字の読みやすさ：明るい画面は白い文字と --blue が 5.9:1 以上、暗い画面は #0C141E の文字と --blue が 7.8:1 以上 */
+:root[data-accent="indigo"]{--blue:#2C2F78; --blue-soft:#E1E2F3; --bar:#5F63B5; --paper:#E3E4F2;}
+:root[data-accent="olive"]{--blue:#556B2F; --blue-soft:#E6EBD8; --bar:#7A8C45; --paper:#E6EBDA;}
+:root[data-accent="plum"]{--blue:#6B2D6E; --blue-soft:#F1DEF1; --bar:#9C5A9F; --paper:#F0E0F0;}
+:root[data-accent="brown"]{--blue:#5E4636; --blue-soft:#ECE4DC; --bar:#8A7160; --paper:#EEE7E0;}
+:root[data-accent="charcoal"]{--blue:#37474F; --blue-soft:#E1E6E9; --bar:#6F8590; --paper:#E0E4E7;}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"])[data-accent="indigo"]{--blue:#9AA3F0; --blue-soft:#1D1F3F; --bar:#7C83D6; --paper:#0D0E1B;}
+  :root:not([data-theme="light"])[data-accent="olive"]{--blue:#B5C77A; --blue-soft:#252B13; --bar:#98AB5B; --paper:#10130A;}
+  :root:not([data-theme="light"])[data-accent="plum"]{--blue:#D9A0DB; --blue-soft:#321A33; --bar:#BC80BE; --paper:#150B15;}
+  :root:not([data-theme="light"])[data-accent="brown"]{--blue:#CDB49E; --blue-soft:#2C231C; --bar:#AD957F; --paper:#13100D;}
+  :root:not([data-theme="light"])[data-accent="charcoal"]{--blue:#B5C3CB; --blue-soft:#222B30; --bar:#8FA2AC; --paper:#0F1315;}
+}
+:root[data-theme="dark"][data-accent="indigo"]{--blue:#9AA3F0; --blue-soft:#1D1F3F; --bar:#7C83D6; --paper:#0D0E1B;}
+:root[data-theme="dark"][data-accent="olive"]{--blue:#B5C77A; --blue-soft:#252B13; --bar:#98AB5B; --paper:#10130A;}
+:root[data-theme="dark"][data-accent="plum"]{--blue:#D9A0DB; --blue-soft:#321A33; --bar:#BC80BE; --paper:#150B15;}
+:root[data-theme="dark"][data-accent="brown"]{--blue:#CDB49E; --blue-soft:#2C231C; --bar:#AD957F; --paper:#13100D;}
+:root[data-theme="dark"][data-accent="charcoal"]{--blue:#B5C3CB; --blue-soft:#222B30; --bar:#8FA2AC; --paper:#0F1315;}
+/* 設定の「テーマカラー」 */
+.theme-sw{display:grid; grid-template-columns:repeat(3, 1fr); gap:8px; padding:12px 14px;}
+.theme-sw button{display:flex; align-items:center; gap:8px; border:1px solid var(--rule); background:var(--card); color:var(--ink); border-radius:10px; padding:8px 10px; font:inherit; font-size:13px; font-weight:700; cursor:pointer; text-align:left;}
+.theme-sw button i{flex:none; width:22px; height:22px; border-radius:50%; box-shadow:inset 0 0 0 1px rgba(0,0,0,.15);}
+.theme-sw button[aria-checked="true"]{border:2px solid var(--blue); padding:7px 9px; background:var(--blue-soft);}
+.theme-sw button[aria-checked="true"]::after{content:"✓"; margin-left:auto; color:var(--blue);}
+#themeMode{flex:0 0 auto;}
+@media (max-width:420px){ .theme-sw{grid-template-columns:repeat(2, 1fr);} }

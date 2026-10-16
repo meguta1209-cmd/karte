@@ -2722,6 +2722,34 @@ $("rpeSave").onclick = () => {
 /* ============================================================
    設定（自分・管理者）
    ============================================================ */
+/* ---------- テーマカラー・画面の明るさ（v69・2026-10-16 社長「アプリ内のテーマカラー設定機能つけて」） ----------
+   この端末に覚える（名簿には持たせない＝ルールの変更なし）。index.html の頭の小さなスクリプトが、描く前に同じキーで付ける。
+   色の中身は style.css の [data-accent]。変わるのはアプリの色（--blue など）だけ */
+const THEME_KEY = "kekka-theme@" + location.pathname;
+const THEMES = [["navy", "紺（いつもの）", "#1E4E86"], ["indigo", "藍", "#2C2F78"], ["olive", "オリーブ", "#556B2F"], ["plum", "プラム", "#6B2D6E"], ["brown", "こげ茶", "#5E4636"], ["charcoal", "墨", "#37474F"]];   // クローザーの色と見分けやすい色（style.css の説明）
+function themeNow() { try { const t = JSON.parse(localStorage.getItem(THEME_KEY) || "{}"); return {a: THEMES.some(x => x[0] === t.a) ? t.a : "navy", m: ["light", "dark"].includes(t.m) ? t.m : "auto"}; } catch (_) { return {a: "navy", m: "auto"}; } }
+let themeCur = {a: "navy", m: "auto"};   // いまの選択（覚えられない端末でも、色と明るさを別々に選べるように）
+function applyTheme(t) {
+  themeCur = t;
+  const r = document.documentElement;
+  if (t.a === "navy") r.removeAttribute("data-accent"); else r.setAttribute("data-accent", t.a);
+  if (t.m === "auto") r.removeAttribute("data-theme"); else r.setAttribute("data-theme", t.m);
+  /* スマホの上の帯の色＝画面の地の色。いつもの（紺・自動）ならもとの2つに戻し、ほかは今の地の色にそろえる */
+  const paper = getComputedStyle(r).getPropertyValue("--paper").trim();
+  document.querySelectorAll('meta[name="theme-color"]').forEach(mt => mt.setAttribute("content", t.a === "navy" && t.m === "auto" ? (mt.media.includes("dark") ? "#0C141E" : "#E9EEF4") : paper || "#E9EEF4"));
+  try { localStorage.setItem(THEME_KEY, JSON.stringify(t)); } catch (_) {}
+  renderTheme(t);   // 覚えられなかった端末でも、選んだ色に✓（テスター指摘）
+}
+function renderTheme(t) {
+  t = t || themeNow();
+  $("themeSw").innerHTML = THEMES.map(([k, name, c]) => `<button type="button" role="radio" data-a="${k}" aria-checked="${t.a === k}"><i style="background:${c}"></i>${esc(name)}</button>`).join("");
+  $("themeMode").querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", b.dataset.m === t.m));
+}
+$("themeSw").onclick = e => { const b = e.target.closest("button"); if (b) applyTheme({...themeCur, a: b.dataset.a}); };
+$("themeMode").onclick = e => { const b = e.target.closest("button"); if (b) applyTheme({...themeCur, m: b.dataset.m}); };
+applyTheme(themeNow());   // 初めに1回（スマホの上の帯の色も合わせる）
+/* 開いたまま端末が明るい⇄暗いに切り替わったら、上の帯の色を合わせ直す（自動のとき。テスター指摘） */
+try { matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { if (themeCur.m === "auto") applyTheme(themeCur); }); } catch (_) {}
 $("saveName").onclick = () => {
   const n = $("myName").value.trim(); if (!n) { toast("名前を入れてください"); return; }
   updateDoc(doc(db, "members", U), {name: n}).then(() => toast("名前を保存しました")).catch(e => toast(errMsg(e)));
