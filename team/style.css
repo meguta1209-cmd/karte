@@ -534,6 +534,11 @@ img{max-width:100%;}
 .rd-row .k{color:var(--ink2); font-size:12.5px; font-weight:700; padding-top:1px;}
 .rd-row .v small{margin-left:6px; color:var(--ink2); font-size:12px;}
 .rd-row .v b{font-size:15px;}
+/* 担当を「外部」にする（v71・管理者だけ） */
+.rd-ext{margin-left:8px; border:1px solid var(--rule2); background:var(--card); color:var(--blue); border-radius:8px; padding:3px 10px; font:inherit; font-size:12.5px; font-weight:700; cursor:pointer;}
+.rd-ext-to{margin-left:8px; font:inherit; font-size:13px; padding:3px 4px; border-radius:6px; border:1px solid var(--rule2); background:var(--card); color:var(--ink);}
+.rd-ext-to + .rd-ext{margin-left:4px;}
+.rd-row .v small.rd-ext-n{display:block; margin:4px 0 0;}
 .rd-left{display:inline-block; white-space:nowrap; margin-left:8px; font-size:12px; font-weight:700; color:var(--warn); background:var(--warn-soft); padding:0 7px; border-radius:4px;}
 .rd-memo{white-space:pre-wrap; overflow-wrap:anywhere;}
 .rd-none{color:var(--ink3);}

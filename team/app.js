@@ -176,7 +176,10 @@ function viewList() {
     .sort((a, b) => (a[1].name || "").localeCompare(b[1].name || "", "ja"))
     .map(([id, m]) => ({id, name: m.name, color: "#9AA0A6", ext: true, view: true}));
 }
-const CNAME = id =>(closerList().find(c => c.id === id) || {name: id === "none" ? "担当未定" : nameOf(id)}).name;
+/* 「外部」（v71）：KPIの［クローザー］で、今の社内のクローザー以外のアポをまとめる行のキー。管理者が記録の担当を「外部」にしたときの memo.closer の値にも使う
+   （名簿の ID は uid か ext_… なので重ならない） */
+const EXT_G = "ext";
+const CNAME = id => id === EXT_G ? "外部" : (closerList().find(c => c.id === id) || {name: id === "none" ? "担当未定" : nameOf(id)}).name;
 const CCOL = id => (closerList().find(c => c.id === id) || {color: "#5F6368"}).color;
 const OLD_BADGE = `<span class="badge old">前のカウンター</span>`;   // 前のカウンターから引っ越した記録の印
 /* 10月より前（アプリを使う前）に取った案件。カレンダーには普通の商談と同じに入れるが、KPIに数えないので
@@ -1088,7 +1091,7 @@ let lastBookedSid = null, lastBookedDur = 0;   // bookSlot が最後に書いた
    ・使えるのは、取った本人・管理者・そのアポのクローザー（クローザーは自分を担当のまま動かすだけ）
    ・前は「消して入れ直す」しかなく、KPIが減ったりシートに取り消しの行が残ったりしていた
    ============================================================ */
-const canResched = r => !r.isTask && r.r === "アポ" && !r.canceled && !!(r.memo && r.memo.when) && (r.uid === U || isAdminMe() || isCloserOf(r));
+const canResched = r => !r.isTask && r.r === "アポ" && !r.canceled && !!(r.memo && r.memo.when) && r.memo.closer !== EXT_G && (r.uid === U || isAdminMe() || isCloserOf(r));   // 担当を「外部」にしたアポ（KPIだけの印）は動かさない（v71）
 /* 2026-10-16 社長の決定A（石川さん「クローザー本人だと、ほかのクローザーに渡せない」）：そのアポのクローザーも、ほかのクローザーに渡せる（ルール onlyReschedKeys も同時に変更。v65）。
    前は「取った本人・管理者」だけだった。関数は残し、いつも false */
 const rsCloserFixed = r => false;
@@ -1883,7 +1886,7 @@ function openDetail(r, cal) {
     rows.push([r.isTask ? "日時" : r.r === "アポ" ? "商談日時" : "かけ直す日時", `<b class="num">${dayWord(w)} ${md(w)} ${hm(w)}${r.r === "アポ" && !r.isTask ? "〜" + hm(new Date(w.getTime() + recDur(r) * 6e4)) : ""}</b>${left}`]);
   } else if (r.r === "アポ") rows.push(["面談日時", `<span class="badge late">日時未定</span>` + (r.src === "old" ? OLD_BADGE : "")]);
   if (r.isTask && m.shop && r.title) rows.push(["店名", esc(m.shop)]);
-  if (r.r === "アポ" && m.closer) rows.push(["クローザー", `<i class="dot-c" style="background:${CCOL(m.closer)}"></i>${esc(CNAME(m.closer))}`]);
+  if (r.r === "アポ" && m.closer) rows.push(["クローザー", `<i class="dot-c" style="background:${CCOL(m.closer)}"></i>${esc(CNAME(m.closer))}` + extCtlHtml(r)]);
   if (r.isTask) rows.push(["担当", esc(nameOf(r.uid)) + (r.by && r.by !== r.uid ? `<small>作成 ${esc(nameOf(r.by))}</small>` : "")]);
   else rows.push([r.r === "アポ" ? "獲得" : "担当", esc(nameOf(r.uid)) + (r.pre ? " " + PRE_BADGE + `<small>KPIに数えない${r.enteredBy && r.enteredBy !== r.uid ? "・入力 " + esc(nameOf(r.enteredBy)) : ""}</small>` : `<small>${md(r.t)} ${hm(r.t)}</small>`)]);
   rows.push(["メモ", m.text ? `<span class="rd-memo">${esc(m.text)}</span>` : `<span class="rd-none">なし</span>`]);
@@ -1908,7 +1911,7 @@ function openDetail(r, cal) {
   const at = cal && cal.at;
   /* 重ねて入れる（社長 2026-10-12「今既存で入ってるやつを押したら、同じ時間にアポの追加ができる機能を」）：
      ほかのクローザーが空いていなくても、この商談のクローザーに、同じ時間でもう1件を確認のうえで重ねられる */
-  const ovC = !r.isTask && r.r === "アポ" && !r.canceled && r.memo && r.memo.closer && r.memo.closer !== "auto" ? r.memo.closer : null;
+  const ovC = !r.isTask && r.r === "アポ" && !r.canceled && r.memo && r.memo.closer && r.memo.closer !== "auto" && r.memo.closer !== EXT_G ? r.memo.closer : null;
   const open = at && !cal.past && slotOpen(at, null, calCloser);
   $("rdNew").hidden = !(at && !cal.past && (open || ovC));
   $("rdNew").onclick = () => {
@@ -1999,6 +2002,39 @@ $("rdActs").onclick = e => {
   if (b.dataset.a === "cx") openCancel(r);
   if (b.dataset.a === "rs") openResched(r);
 };
+/* 担当を「外部」にする（v71・2026-10-16 社長「前のやつをそこに入れて数字合わせたい」「一旦案件洗い出して選別したい」）：
+   管理者だけ・商談の時間が過ぎた、取り消していないアポ。KPIの［クローザー］で「外部」の行に数えるためだけの印で、記録の memo.closer だけ書く
+   （ルールは今の onlyReschedKeys の管理者の枝のまま）。カレンダーの枠（slots）・連携の係・営業結果シート・KPIシートは枠のクローザーを見るので変わらない
+   （社長「そのほかの連携等の機能は要らない」）。戻すときは社内のクローザーを選ぶ（初めは枠のIDから分かる元の担当） */
+const canSetExt = r => isAdminMe() && !r.isTask && r.r === "アポ" && !r.canceled && resDue(r);
+const slotCloserOf = r => { const x = String(r.slotId || "").match(/^\d{4}-\d{2}-\d{2}_\d{4}_(.+?)(?:_ov.*)?$/); return x ? x[1] : ""; };
+function extCtlHtml(r) {
+  if (!canSetExt(r)) return "";
+  if (r.memo.closer !== EXT_G) return ` <button type="button" class="rd-ext" id="rdExt">外部にする</button><small class="rd-ext-n">KPIの数え方だけ変わります（カレンダー・招待・シートはそのまま）</small>`;
+  /* 元の担当が今の社内のクローザーでない（外した外部の人・クローザーをやめた人）ときは、選択肢の先頭に「元の担当（○○）」。
+     元の担当が分からないときは「戻す先を選ぶ」から（うっかり先頭の人の担当にしないため。テスター 2026-10-16） */
+  const cls = closerList().filter(c => c.id !== "none" && !c.ext), was = slotCloserOf(r);
+  const opts = (was && was !== EXT_G && !cls.some(c => c.id === was) ? [{id: was, name: "元の担当（" + CNAME(was) + "）"}] : []).concat(cls);
+  if (!opts.length) return "";
+  const known = opts.some(c => c.id === was);
+  return ` <select class="rd-ext-to" id="rdExtTo" aria-label="戻す先のクローザー">${known ? "" : `<option value="" selected disabled>戻す先を選ぶ</option>`}${opts.map(c => `<option value="${esc(c.id)}"${c.id === was ? " selected" : ""}>${esc(c.name)}</option>`).join("")}</select><button type="button" class="rd-ext" id="rdExtBack">に戻す</button>`;
+}
+async function setCloserExt(r, to) {
+  const before = r.memo.closer;
+  if (!to || to === before) return;
+  try { await updateDoc(doc(db, "records", r.id), {"memo.closer": to}); }
+  catch (e) { toast(errMsg(e)); return; }
+  r.memo.closer = to; resCache.clear();
+  const x = apoRecent.find(a => a.id === r.id); if (x && x !== r && x.memo) x.memo.closer = to;
+  if (detailRec === r && !$("recDetail").hidden) openDetail(r, detailBack ? {back: detailBack} : undefined);
+  if (curTab === "kpi") renderKpi();
+  toast(to === EXT_G ? "担当を「外部」にしました（KPIのクローザーで「外部」に数えます）" : "担当を " + CNAME(to) + " に戻しました", "元に戻す", () => setCloserExt(r, before), 6000);
+}
+$("rdBody").addEventListener("click", e => {
+  const r = detailRec; if (!r) return;
+  if (e.target.id === "rdExt") setCloserExt(r, EXT_G);
+  if (e.target.id === "rdExtBack" && $("rdExtTo")) setCloserExt(r, $("rdExtTo").value);
+});
 
 /* ============================================================
    予定を取り消す（社長の指示 2026-10-02「既に入ってる予定を削除する機能」）
@@ -2392,38 +2428,47 @@ const resRate = c => c.held ? (c.won / c.held * 100).toFixed(1) : "–";
 const RES_CHIP = {won: ["受注", "#1F7256", "#FFFFFF"], lost: ["失注", "#B8392C", "#FFFFFF"], again: ["再営", "#1E4E86", "#FFFFFF"],
   rs: ["リスケ", "#FBEFD2", "#8A5A00"], cx: ["キャンセル", "#E8EAED", "#3C4043"], todo: ["結果まだ", "#FFF3CD", "#8A5A00"]};
 const resChipK = k => { const c = RES_CHIP[k]; return `<span class="res" style="background:${c[1]};color:${c[2]}">${c[0]}</span>`; };
+/* 「外部」の1行（v71・2026-10-16 社長「石川、茂木以外のアポは全部外部としてまとめたい…アプリ上でわかったらいい」）。
+   今の社内のクローザー（有効・closer:true・外部の人でない）は1人ずつ。それ以外のクローザー（外部の人・外した人・担当が空）のアポは「外部」にまとめる。
+   見せ方だけ（記録・名簿・カレンダー連携・アポを入れるときのクローザーの選択肢は変えない）。人が増えても名前では決め打ちしない */
+function closerGroupOf() {   // 記録 → 行のキー（社内のクローザーの uid か EXT_G）
+  const ids = new Set(closerList().filter(c => c.id !== "none" && !c.ext).map(c => c.id));
+  return r => { const c = r.memo && r.memo.closer; return c && ids.has(c) ? c : EXT_G; };
+}
+const groupName = g => g === EXT_G ? "外部" : CNAME(g);
 async function renderCloserKpi(a, b, pa, days, seq) {
-  const cls = closerList().filter(c => c.id !== "none");
+  const cls = closerList().filter(c => c.id !== "none" && !c.ext), grp = closerGroupOf();
   const sel = $("member"), cur = member;
-  sel.innerHTML = `<option value="all">クローザー：全員</option>` + cls.map(c => `<option value="${esc(c.id)}">クローザー：${esc(c.name)}${c.id === U ? "（自分）" : ""}</option>`).join("");
+  sel.innerHTML = `<option value="all">クローザー：全員</option>` + cls.map(c => `<option value="${esc(c.id)}">クローザー：${esc(c.name)}${c.id === U ? "（自分）" : ""}</option>`).join("") +
+    `<option value="${EXT_G}">クローザー：外部</option>`;
   sel.value = [...sel.options].some(o => o.value === cur) ? cur : "all"; member = sel.value;
   let list, plist;
   try { [list, plist] = await Promise.all([loadResApos(a, b), loadResApos(pa, a)]); }
   catch (e) { if (seq === kpiSeq) $("resTiles").innerHTML = `<div class="empty">読み込めませんでした</div>`; return; }
   if (seq !== kpiSeq) return;
   $("kpiAt").textContent = hm(new Date()) + " 時点";
-  const pick = l => l.filter(r => resDue(r) && (member === "all" || r.memo.closer === member));
+  const pick = l => l.filter(r => resDue(r) && (member === "all" || grp(r) === member));
   const due = pick(list), pdue = pick(plist);
   const per = $("period").querySelector("[aria-pressed=true]");
-  resView = {list: due, label: (per ? per.textContent : "") + (member !== "all" ? "・クローザー " + CNAME(member) : "")};
+  resView = {list: due, label: (per ? per.textContent : "") + (member !== "all" ? "・クローザー " + groupName(member) : "")};
   const c = resCount(due), p = resCount(pdue), pr = p.held ? p.won / p.held * 100 : 0, cr = c.held ? c.won / c.held * 100 : 0;
   const tile = (k, lbl, v, u, d) => `<button type="button" class="card tile res-tile" data-k="${k}"><div class="k">${lbl}</div><div class="v">${v}<small>${u}</small></div>${d}</button>`;
   $("resTiles").innerHTML = tile("held", "商談数（実施）", c.held, "件", delta(c.held, p.held)) + tile("won", "受注", c.won, "件", delta(c.won, p.won)) +
     `<div class="card tile"><div class="k">受注率</div><div class="v">${resRate(c)}<small>${c.held ? "%" : ""}</small></div>${c.held || p.held ? delta(cr, pr, "%") : `<span class="d flat">&nbsp;</span>`}</div>` +
     tile("lost", "失注", c.lost, "件", delta(c.lost, p.lost, "", true)) + tile("cx", "キャンセル", c.cx, "件", delta(c.cx, p.cx, "", true)) + tile("todo", "結果まだ", c.todo, "件", `<span class="d flat">&nbsp;</span>`);
-  /* 人ごとの表：今のクローザー全員（0件の人も）＋期間に担当があった人（外した人など） */
+  /* 人ごとの表：今の社内のクローザー全員（0件の人も）＋「外部」（それ以外のクローザーのアポ。0件でも出す・いちばん下）。各行を足すとチーム合計 */
   const all = list.filter(r => resDue(r));
-  const ids = [...new Set(cls.map(x => x.id).concat(all.map(r => r.memo.closer || "none")))];
-  const rows = ids.map(g => ({g, c: resCount(all.filter(r => (r.memo.closer || "none") === g))}))
-    .filter(x => cls.some(y => y.id === x.g) || x.c.due).sort((x, y) => y.c.won - x.c.won || y.c.held - x.c.held || y.c.due - x.c.due);
+  const rows = cls.map(x => ({g: x.id, c: resCount(all.filter(r => grp(r) === x.id))}))
+    .sort((x, y) => y.c.won - x.c.won || y.c.held - x.c.held || y.c.due - x.c.due)
+    .concat([{g: EXT_G, c: resCount(all.filter(r => grp(r) === EXT_G))}]);
   const cell = (g, k, v) => v ? `<button type="button" class="res-n${k === "todo" ? " todo" : ""}" data-g="${esc(g)}" data-k="${k}">${v}</button>` : `<span class="res-0">0</span>`;
   const KEYS = ["held", "won", "lost", "rs", "cx"];
   const tot = resCount(all);
   $("resTable").innerHTML = `<tr><th>クローザー</th><th>商談数</th><th>受注</th><th>失注</th><th>リスケ</th><th>キャンセル</th><th>受注率</th><th>結果まだ</th></tr>` +
-    rows.map(x => `<tr class="pick${x.g === U ? " me" : ""}" data-u="${esc(x.g)}" style="${member !== "all" && member !== x.g ? "opacity:.45" : ""}"><td class="name">${esc(x.g === "none" ? "担当未定" : CNAME(x.g))}</td>${KEYS.map(k => `<td>${cell(x.g, k, x.c[k])}</td>`).join("")}<td><b>${resRate(x.c)}${x.c.held ? "%" : ""}</b></td><td>${cell(x.g, "todo", x.c.todo)}</td></tr>`).join("") +
+    rows.map(x => `<tr class="pick${x.g === U ? " me" : ""}" data-u="${esc(x.g)}" style="${member !== "all" && member !== x.g ? "opacity:.45" : ""}"><td class="name">${esc(groupName(x.g))}</td>${KEYS.map(k => `<td>${cell(x.g, k, x.c[k])}</td>`).join("")}<td><b>${resRate(x.c)}${x.c.held ? "%" : ""}</b></td><td>${cell(x.g, "todo", x.c.todo)}</td></tr>`).join("") +
     `<tr><td class="name">チーム合計</td>${KEYS.map(k => `<td>${cell("*", k, tot[k])}</td>`).join("")}<td><b>${resRate(tot)}${tot.held ? "%" : ""}</b></td><td>${cell("*", "todo", tot.todo)}</td></tr>`;
   /* 名前を押すとその人だけ（テレアポの表と同じ）。数字を押したときは一覧（resTable の click） */
-  $("resTable").querySelectorAll("tr.pick td.name").forEach(td => td.onclick = () => { const g = td.parentElement.dataset.u; if (!cls.some(x => x.id === g)) return; member = member === g ? "all" : g; $("member").value = member; renderKpi(); });
+  $("resTable").querySelectorAll("tr.pick td.name").forEach(td => td.onclick = () => { const g = td.parentElement.dataset.u; if (g !== EXT_G && !cls.some(x => x.id === g)) return; member = member === g ? "all" : g; $("member").value = member; renderKpi(); });
   /* グラフ：1日なら時間帯別、ほかは日別の商談数（受注も添える） */
   const held = due.filter(resHeld), won = due.filter(r => !r.canceled && resDeal(r) === "受注");
   const buckets = [];
@@ -2444,9 +2489,9 @@ async function renderCloserKpi(a, b, pa, days, seq) {
 }
 /* 中身の一覧（数字・タイル・内訳を押す／［受注した案件の一覧］）。g＝クローザー（"*"＝全員） */
 function openResList(k, g) {
-  const f = RES_KIND[k][2];
-  const list = resView.list.filter(r => (!g || g === "*" || (r.memo.closer || "none") === g) && f(r)).sort((x, y) => y.memo.when - x.memo.when);
-  const who = g && g !== "*" ? "・クローザー " + (g === "none" ? "担当未定" : CNAME(g)) : "";
+  const f = RES_KIND[k][2], grp = closerGroupOf();
+  const list = resView.list.filter(r => (!g || g === "*" || grp(r) === g) && f(r)).sort((x, y) => y.memo.when - x.memo.when);
+  const who = g && g !== "*" ? "・クローザー " + groupName(g) : "";
   $("rlTitle").textContent = `${k === "held" ? "商談（実施）" : RES_KIND[k][1]} ${list.length}件`;
   $("rlNote").textContent = (resView.label || "") + who + "　押すと記録の詳細が開きます";
   $("rlList").innerHTML = list.length ? list.map(r => {
