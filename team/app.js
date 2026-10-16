@@ -1056,7 +1056,9 @@ let lastBookedSid = null, lastBookedDur = 0;   // bookSlot が最後に書いた
    ・前は「消して入れ直す」しかなく、KPIが減ったりシートに取り消しの行が残ったりしていた
    ============================================================ */
 const canResched = r => !r.isTask && r.r === "アポ" && !r.canceled && !!(r.memo && r.memo.when) && (r.uid === U || isAdminMe() || isCloserOf(r));
-const rsCloserFixed = r => !(r.uid === U || isAdminMe());   // そのアポのクローザーとして動かす人は、クローザーを変えられない
+/* 2026-10-16 社長の決定A（石川さん「クローザー本人だと、ほかのクローザーに渡せない」）：そのアポのクローザーも、ほかのクローザーに渡せる（ルール onlyReschedKeys も同時に変更。v65）。
+   前は「取った本人・管理者」だけだった。関数は残し、いつも false */
+const rsCloserFixed = r => false;
 function openResched(r) {
   if (!canResched(r)) { toast("日程を変えられるのは、アポを取った本人・管理者・そのアポのクローザーだけです"); return; }
   openMemo({...r, rs: true});
