@@ -135,17 +135,27 @@ let members = {};        // uid → 名簿
 let ITEMS = DEFAULT_ITEMS;
 let COL = {};
 let myToday = [];        // 自分の今日の記録
-let pendMine = [], pendTeam = [], undated = [], slots = [];
+let pendMine = [], undated = [], slots = [];
+let calMode = "team", myWk = 0;   // カレンダーの上の切りかえ（v74）：team＝みんなのカレンダー／me＝自分のリマインド。myWk＝何週先か
 const loadedFlags = {rec: false, task: false};   // 「今日の予定」は両方そろってから出す
 let unsubs = [];
-/* 購読が断られたら黙って止まらず、数秒おいて張り直す（名簿の確定直後などに起こりうる） */
-let retrying = false;
+/* 購読が断られたら黙って止まらず、数秒おいて張り直す（名簿の確定直後などに起こりうる）。
+   v74（テスター指摘）：間をあけて（3秒→10秒→30秒→1分→2分）、5回まで。権限で断られたときは2回まで（名簿の確定直後なら2回で直る）。
+   上限に来たら張り直しをやめ、「開き直す」を出したままにする（読み込みの数で無料枠を使い切らないため）。3分エラーが無ければ数え直し */
+const RETRY_WAIT = [3000, 10000, 30000, 60000, 120000];
+let retrying = false, retryN = 0, retryLast = 0;
 const onErr = what => e => {
   console.error(what, e);
   if (retrying || !U) return;
+  if (Date.now() - retryLast > 180000) retryN = 0;
+  retryLast = Date.now();
+  if (retryN >= (e && e.code === "permission-denied" ? 2 : RETRY_WAIT.length)) {
+    toast(what + "を読み込めませんでした。アプリを閉じて開き直してください（新しい版があるかもしれません）", "開き直す", () => location.reload(), 3600000);
+    return;
+  }
   retrying = true;
   toast(what + "の読み込みをやり直しています…");
-  setTimeout(() => { retrying = false; if (!U || !me || me.status !== "active") return; stopAll(); startApp(); }, 3000);
+  setTimeout(() => { retrying = false; if (!U || !me || me.status !== "active") return; stopAll(); startApp(); }, RETRY_WAIT[retryN++]);
 };
 let started = false, itemsLoaded = false;
 
@@ -342,13 +352,16 @@ function startApp() {
   unsubs.push(onSnapshot(query(recs, where("uid", "==", U), where("pending", "==", true)), s => {
     recPendMine = s.docs.map(recOf); loadedFlags.rec = true; rebuildPending(); cleanupOldApos();
   }, onErr("予定")));
-  unsubs.push(onSnapshot(query(recs, where("pending", "==", true)), s => { recPendTeam = s.docs.map(recOf); rebuildPending(); }, onErr("チームの予定")));
-  /* テレアポ以外の予定（前確など） */
+  /* テレアポ以外の予定（前確など）。v74：再架電は本人だけ・予定は担当と作った人だけが読める（ルール）ので、チーム全員の分は読まない */
   unsubs.push(onSnapshot(query(collection(db, "tasks"), where("uid", "==", U), where("done", "==", false)), s => {
     taskMine = s.docs.map(taskOf); loadedFlags.task = true; rebuildPending();
   }, onErr("予定")));
-  unsubs.push(onSnapshot(query(collection(db, "tasks"), where("done", "==", false)), s => { taskTeam = s.docs.map(taskOf); rebuildPending(); }, onErr("チームの予定")));
-  unsubs.push(onSnapshot(query(recs, where("undated", "==", true)), s => { undated = s.docs.map(recOf).sort((a, b) => a.t - b.t); renderUndated(); }, onErr("日時未定のアポ")));
+  /* 自分が作って、ほかの人を担当にした予定（v74・社長「作った人も見られる」）。終わったかどうかをリマインドの「頼んだ予定」で見る */
+  unsubs.push(onSnapshot(query(collection(db, "tasks"), where("by", "==", U)), s => {
+    taskAsked = s.docs.filter(d => d.data().uid !== U).map(d => ({...taskOf(d), doneAt: tsd(d.data().doneAt)}));
+    if (curTab === "remind") renderRemind();
+  }, onErr("頼んだ予定")));
+  unsubs.push(onSnapshot(query(recs, where("undated", "==", true), where("r", "==", "アポ")), s => { undated = s.docs.map(recOf).sort((a, b) => a.t - b.t); renderUndated(); }, onErr("日時未定のアポ")));
   unsubs.push(onSnapshot(collection(db, "busy"), {includeMetadataChanges: true}, s => {   // サーバーの最新が届いたことも知りたいので
     busyMap = {};
     const spans = a => (a || []).map(b => ({s: tsd(b.s), e: tsd(b.e)})).filter(b => b.s && b.e);
@@ -1115,9 +1128,9 @@ async function openReschedById(id) {
   openResched(r);
 }
 /* 記録を番号で取る：手元の予定（購読中の pending のアポ・再架電）にあればそれ、無ければ読む（3日より前に終わったアポなど）。
-   ほかの人の記録もメンバーなら読める（ルール records read: isActive）。読めなければ null */
+   ほかの人のアポもメンバーなら読める。ほかの人の再架電は読めない（v74 ルール）。読めなければ null */
 async function recById(id) {
-  const r = pendTeam.concat(pendMine).find(x => x.id === id && !x.isTask);
+  const r = pendMine.find(x => x.id === id && !x.isTask);
   if (r) return r;
   return getDoc(doc(db, "records", id)).then(s => s.exists() ? recOf(s) : null).catch(() => null);
 }
@@ -1660,6 +1673,7 @@ $("mPick").onclick = () => {
   wkStart = monday(w); calDay = dayStart(w); if (calDay.getDay() === 0) calDay = addDays(calDay, 1);
   calBeforePick = calCloser; calAuto = false;
   calCloser = selCloser === "auto" ? "all" : selCloser;
+  setCalMode("team");   // 日切りは共有のカレンダーで（v74）
   showTab("cal");
 };
 const endPick = () => { pickMode = false; document.body.classList.remove("picking"); $("pickBar").hidden = true; if (calBeforePick) calCloser = calBeforePick; calBeforePick = null; };
@@ -1680,6 +1694,7 @@ function renderUndated() {
       undated.map((r, i) => `<button data-i="${i}"><b>${esc((r.memo && r.memo.shop) || "（店名なし）")}</b><small>獲得 ${esc(nameOf(r.uid))} ・ ${md(r.t)} ${hm(r.t)}</small><span class="fix">${r.uid === U ? "日時を入れる" : "見る"}</span></button>`).join("");
     box.querySelectorAll("button").forEach(x => x.onclick = () => openMemo(undated[+x.dataset.i]));
   }
+  if (curTab === "cal" && calMode === "me") renderMyRm();   // 自分のリマインドの「日時なし」（v74）
 }
 
 /* ============================================================
@@ -1704,7 +1719,7 @@ const TASK_KINDS = [
   {k: "その他",     bg: "#E3E6EA", fg: "#3C4043"}
 ];
 const TASK_COL = Object.fromEntries(TASK_KINDS.map(t => [t.k, t]));
-let recPendMine = [], recPendTeam = [], taskMine = [], taskTeam = [];
+let recPendMine = [], taskMine = [], taskAsked = [];
 function taskOf(snap) {
   const d = snap.data();
   return {id: snap.id, isTask: true, uid: d.uid, by: d.by, r: d.kind || "その他", done: !!d.done,
@@ -1713,13 +1728,12 @@ function taskOf(snap) {
 }
 function rebuildPending() {
   pendMine = recPendMine.concat(taskMine);
-  pendTeam = recPendTeam.concat(taskTeam.filter(t => !recPendTeam.some(r => r.id === t.id)));
   renderAfterPending(); maybeDaySum();
 }
 const canEditTask = t => t.uid === U || t.by === U || (me && me.role === "admin");
 const itemLabel = r => r.isTask ? (r.title || r.r) : r.r;
 function todayMine() { const T = today(), E = addDays(T, 1); return visiblePending(pendMine).filter(r => r.memo.when >= T && r.memo.when < E).sort((a, b) => a.memo.when - b.memo.when); }
-function renderAfterPending() { renderNext(); if (curTab === "remind") renderRemind(); updateRmDot(); }
+function renderAfterPending() { renderNext(); if (curTab === "remind") renderRemind(); if (curTab === "cal" && calMode === "me") renderMyRm(); updateRmDot(); }
 function updateRmDot() {
   const n = visiblePending(pendMine).filter(r => r.memo.when < addDays(today(), 1)).length + myResPending().length;   // ＋商談の結果まだ（v66）
   $("rmDot").hidden = !n; $("rmDot").textContent = n;
@@ -1741,11 +1755,10 @@ function renderNext() {
 }
 setInterval(() => { if (started) { renderNext(); updateRmDot(); } }, 60000);   // 商談の時間が来たら、赤い丸の「結果まだ」も1分以内に増やす（v66）
 
-let rmF = "me";
-$("rmFilter").onclick = e => { const b = e.target.closest("button"); if (!b) return; rmF = b.dataset.f; $("rmFilter").querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", x === b)); renderRemind(); };
+/* v74：リマインドは自分の分だけ（「チーム全員」は外した。再架電と予定は本人だけが読める） */
 function renderRemind() {
   const now = new Date(), tmr = addDays(today(), 1);
-  const list = visiblePending(rmF === "me" ? pendMine : pendTeam).sort((a, b) => a.memo.when - b.memo.when);
+  const list = visiblePending(pendMine).sort((a, b) => a.memo.when - b.memo.when);
   const groups = [["過ぎている予定", list.filter(r => r.memo.when < now)], ["今日", list.filter(r => r.memo.when >= now && r.memo.when < tmr)], ["明日以降", list.filter(r => r.memo.when >= tmr)]];
   const body = $("rmBody"); body.innerHTML = "";
   renderResTodo(body);   // 商談の結果まだ（v66）
@@ -1782,7 +1795,70 @@ function renderRemind() {
     });
     body.appendChild(c);
   });
-  if (rmF === "me") renderDone(body);
+  renderAsked(body);
+  renderDone(body);
+}
+
+/* ---------- 自分のリマインド（v74・2026-10-19 社長）：カレンダーの上の切りかえ。自分の再架電（日時あり）・アポ・予定（tasks）を
+   週の予定表に並べる。共有のカレンダーは何も変えない。データは pendMine と日時未定のアポ（自分の分）だけ＝読み込みは増えない ---------- */
+function setCalMode(m) {
+  calMode = pickMode ? "team" : m;   // 日切りの間は共有のカレンダー
+  $("calMode").querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", b.dataset.m === calMode));
+  const me = calMode === "me";
+  document.querySelectorAll("#v-cal .cal-top, #v-cal .wk-nav, #v-cal .cal-wrap, #calFilter, #legend, #calDefs").forEach(el => el.classList.toggle("mr-off", me));
+  $("undatedTeam").classList.toggle("mr-off", me);
+  $("myRm").hidden = !me;
+  if (me) renderMyRm();
+}
+$("calMode").onclick = e => { const b = e.target.closest("button"); if (!b) return; myWk = 0; setCalMode(b.dataset.m); };
+function mrBtn(r) {
+  if (r.isTask) return canEditTask(r) ? (r.r === "再架電" || r.r === "折り返し待ち" ? "かけた" : "完了") : "";
+  if (!r.memo || !r.memo.when) return "日時を入れる";   // 日時未定のアポ
+  return r.r === "再架電" ? "かけた" : "詳細";
+}
+function mrItem(r, late) {
+  const m = r.memo || {};   // 日時未定のアポは memo が無いことがある
+  const c = r.isTask ? TASK_COL[r.r] || TASK_COL["その他"] : COL[r.r] || {bg: "#E8EAED", fg: "#3C4043"};
+  const shop = r.isTask ? [r.title, m.shop].filter(Boolean).join(" ") : (m.shop || "（店名なし）");
+  const sub = [m.tel ? "☎ " + m.tel : "", r.r === "アポ" && m.closer ? "クローザー " + CNAME(m.closer) : "", m.text || ""].filter(Boolean).join("　");
+  const b = mrBtn(r);
+  const row = document.createElement("div"); row.className = "mr-item tap"; row.tabIndex = 0;
+  row.style.setProperty("--c", c.fg);
+  row.innerHTML = `<span class="t num">${m.when ? (late ? md(m.when) + "<br>" : "") + hm(m.when) : "—"}</span>
+    <span class="s"><span class="k" style="background:${c.bg};color:${c.fg}">${esc(r.r)}</span>${esc(shop)}${sub ? `<small>${esc(sub)}</small>` : ""}</span>
+    ${b ? `<button class="go" type="button">${b}</button>` : ""}`;
+  const go = row.querySelector(".go");
+  if (go) go.onclick = e => { e.stopPropagation(); if (b === "日時を入れる") openMemo(r); else if (b === "詳細") openDetail(r); else markDone(r); };
+  row.onclick = () => m.when ? openDetail(r) : openMemo(r);
+  row.onkeydown = e => { if (e.key === "Enter") row.onclick(); };
+  return row;
+}
+function renderMyRm() {
+  const box = $("myRm"); if (!box || box.hidden) return;
+  const T = today(), from = addDays(T, myWk * 7), to = addDays(from, 7);
+  const list = visiblePending(pendMine).sort((a, b) => a.memo.when - b.memo.when);
+  const late = list.filter(r => r.memo.when < T), noDate = undated.filter(r => r.uid === U);
+  box.innerHTML = `<p class="mr-note">自分の再架電（日時を入れたもの）・アポ・予定だけが出ます。ほかの人には見えません。</p>
+    <button class="mr-add" type="button" data-newtask="1">＋ リマインドを入れる（再架電・折り返し・前確・その他）</button>`;
+  const sec = (cls, title, items, isLate, empty) => {
+    const d = document.createElement("div"); d.className = cls;
+    d.innerHTML = `<h4><span>${title}</span><span>${items.length}件</span></h4>`;
+    if (!items.length) d.insertAdjacentHTML("beforeend", `<div class="mr-empty">${empty}</div>`);
+    items.forEach(r => d.appendChild(mrItem(r, isLate)));
+    box.appendChild(d);
+  };
+  if (late.length && myWk === 0) sec("mr-late", "過ぎています（3日前まで）", late, true, "");
+  const nav = document.createElement("div"); nav.className = "mr-nav";
+  nav.innerHTML = `<button type="button" aria-label="前の週"${myWk <= 0 ? " disabled" : ""}>◀</button><b>${md(from)} 〜 ${md(addDays(to, -1))}</b><button type="button" aria-label="次の週">▶</button>`;
+  const [pv, nx] = nav.querySelectorAll("button");
+  pv.onclick = () => { if (myWk > 0) { myWk--; renderMyRm(); } }; nx.onclick = () => { myWk++; renderMyRm(); };
+  box.appendChild(nav);
+  for (let d = from; d < to; d = addDays(d, 1)) {
+    const e = addDays(d, 1), g = list.filter(r => r.memo.when >= d && r.memo.when < e);
+    if (d.getDay() === 0 && !g.length) continue;   // 日曜は予定がある時だけ
+    sec("mr-day" + (+d === +T ? " today" : ""), (+d === +T ? "今日 " : "") + md(d), g, false, "予定はありません");
+  }
+  if (noDate.length) sec("mr-day", "日時なし（日時未定のアポ）", noDate, false, "");
 }
 /* ---------- 商談の結果まだ（v66）：商談の始まりの時刻を過ぎて、結果が入っていないアポ。「自分の分」＝自分が取った・自分がクローザー、
    「チーム全員」＝全員の分。新しい商談から。押すと記録の詳細（いちばん上に結果の欄） ---------- */
@@ -1792,7 +1868,7 @@ function resStateText(r) {
   return "前確 " + x.pre + "・商談の結果まだ";
 }
 function renderResTodo(body) {
-  const list = (rmF === "me" ? myResPending() : apoRecent.filter(r => resPending(r) && !isSheetRec(r)).sort((a, b) => b.memo.when - a.memo.when));   // 営業結果シートだけの案件は出さない（v72）
+  const list = myResPending();   // v74：自分の分だけ（チーム全員の分は外した）
   if (!list.length) return;
   const bar = document.createElement("div"); bar.className = "res-todo";
   bar.innerHTML = `<b>商談の結果まだ ${list.length}件</b><small>商談の時間になったアポです。押して①前確と②商談の結果を入れてください</small>`;
@@ -1829,6 +1905,24 @@ async function loadDone() {
   const recs = rs.docs.map(recOf).filter(r => r.done && r.memo && r.memo.when).map(r => ({...r, doneAt: tsd(r.doneAt)}));
   const tasks = ts.docs.map(s => ({...taskOf(s), doneAt: tsd(s.data().doneAt)}));
   doneCache = {at: Date.now(), list: recs.concat(tasks).filter(r => doneAtOf(r) >= cut).sort((a, b) => doneAtOf(b) - doneAtOf(a))};
+}
+/* 頼んだ予定（v74）：自分が作って、ほかの人を担当にした予定。まだの分と、7日以内に終わった分。押すと予定の画面（直す・消す） */
+function renderAsked(body) {
+  const lim = addDays(today(), -7);
+  const list = taskAsked.filter(t => !t.done || (t.doneAt && t.doneAt >= lim)).sort((a, b) => (a.done - b.done) || ((a.memo.when || 0) - (b.memo.when || 0)));
+  if (!list.length) return;
+  const h = document.createElement("h2"); h.innerHTML = `ほかの人に頼んだ予定 <span class="aside">まだ ${list.filter(t => !t.done).length}件</span>`; body.appendChild(h);
+  const c = document.createElement("div"); c.className = "card"; body.appendChild(c);
+  list.slice(0, 30).forEach(t => {
+    const row = document.createElement("div"); row.className = "rm task tap" + (t.done ? " done" : ""); row.tabIndex = 0;
+    row.innerHTML = `<div class="time">${t.memo.when ? hm(t.memo.when) : "--:--"}<small>${t.memo.when ? md(t.memo.when) : ""}</small></div>
+      <div class="info"><div class="shop">${resChip(t.r)} ${esc(t.title || "")}${t.memo.shop ? ` <span class="t-shop">${esc(t.memo.shop)}</span>` : ""}${t.done ? `<span class="badge done">完了</span>` : ""}</div>
+      <div class="meta">担当 ${esc(nameOf(t.uid))}${t.done && t.doneAt ? " ・ 完了 " + md(t.doneAt) + " " + hm(t.doneAt) : " ・ まだ"}</div>
+      ${t.memo.text ? `<div class="memo">${esc(t.memo.text)}</div>` : ""}</div>`;
+    row.onclick = () => openTask(t);
+    row.onkeydown = e => { if (e.key === "Enter") openTask(t); };
+    c.appendChild(row);
+  });
 }
 async function renderDone(body) {
   const h = document.createElement("h2"); h.innerHTML = `かけ済み <span class="aside">7日以内・自分の分</span>`; body.appendChild(h);
@@ -3340,7 +3434,7 @@ function swInvites(ext, to) {
 /* 外部の人のアポ（記録・枠）を読む。開いたときと、［本当に切り替える］の直前にもう一度（その間に入ったアポも付け替えるため。テスター指摘） */
 async function loadSwitchPlan(extId) {
   const [rs, ss] = await Promise.all([
-    getDocs(query(collection(db, "records"), where("memo.closer", "==", extId))),
+    getDocs(query(collection(db, "records"), where("memo.closer", "==", extId), where("r", "==", "アポ"))),   // v74：r で絞らないと、ルール（再架電は本人だけ）に断られる
     getDocs(query(collection(db, "slots"), where("closer", "==", extId)))]);
   return {recs: rs.docs.map(d => ({id: d.id, ...d.data()})), slots: ss.docs.map(d => ({id: d.id, ...d.data()}))};
 }
@@ -3515,7 +3609,7 @@ function showTab(v) {
   VIEWS.forEach(x => $("v-" + x).hidden = x !== v);
   document.querySelectorAll(".tabs button").forEach(b => { if (b.dataset.go === v) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current"); });
   window.scrollTo(0, 0);
-  if (v === "cal") { rollCalDay(); renderCal(); } if (v === "kpi") renderKpi(); if (v === "remind") renderRemind(); if (v === "log") { renderLog(); if (logMode === "hist") loadHist(false); } if (v === "set") { renderAdmin(); renderGcal(); renderFeedback(); if (movePlan) renderMoveNag(); else refreshMove(); }
+  if (v === "cal") { rollCalDay(); renderCal(); renderMyRm(); } if (v === "kpi") renderKpi(); if (v === "remind") renderRemind(); if (v === "log") { renderLog(); if (logMode === "hist") loadHist(false); } if (v === "set") { renderAdmin(); renderGcal(); renderFeedback(); if (movePlan) renderMoveNag(); else refreshMove(); }
 }
 document.addEventListener("click", e => { const b = e.target.closest("[data-go]"); if (b) showTab(b.dataset.go); });
 COL = Object.fromEntries(ITEMS.map(i => [i.k, i]));

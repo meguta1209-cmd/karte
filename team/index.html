@@ -28,7 +28,7 @@
   } catch (e) {}
 })();
 </script>
-<link rel="stylesheet" href="./style.css?v=73">
+<link rel="stylesheet" href="./style.css?v=74">
 <script>
 /* LINEの中のブラウザではGoogleログインが通らない（途中の情報を覚えておけない）。
    LINEは ?openExternalBrowser=1 を付けると Safari / Chrome で開き直してくれるので、自動で付け直す */
@@ -170,6 +170,8 @@
   <!-- カレンダー -->
   <section id="v-cal" hidden>
     <h1 class="screen">アポカレンダー <small class="sub-h"><span class="live"></span>全員の画面にすぐ反映</small></h1>
+    <!-- v74（2026-10-19 社長）：自分のリマインド＝自分の再架電・アポ・予定だけの週の予定表。ほかの人には見えない -->
+    <div class="seg cal-mode" id="calMode" role="tablist" aria-label="カレンダーの種類"><button type="button" data-m="team" aria-pressed="true">みんなのカレンダー</button><button type="button" data-m="me" aria-pressed="false">自分のリマインド</button></div>
     <div class="pickbar" id="pickBar" hidden>
       <span><b>日切り中</b>　空いている枠を押すと、その日時が入ります</span>
       <button id="pickCancel">やめる</button>
@@ -188,6 +190,7 @@
     <div class="legend" id="legend"></div>
     <div class="card cal-wrap"><div class="cal" id="cal"></div></div>
     <p class="defs" id="calDefs"></p>
+    <div id="myRm" hidden></div>
   </section>
 
   <!-- KPI -->
@@ -236,10 +239,6 @@
   <section id="v-remind" hidden>
     <h1 class="screen">リマインド</h1>
     <button class="btn-add-task" data-newtask="1">＋ 予定を追加（再架電・前確・折り返し待ちなど）</button>
-    <div class="chips" id="rmFilter">
-      <button class="chip-btn" data-f="me" aria-pressed="true">自分の分</button>
-      <button class="chip-btn" data-f="all" aria-pressed="false">チーム全員</button>
-    </div>
     <div id="rmBody"></div>
   </section>
 
@@ -666,7 +665,7 @@
 <div class="offline" id="offline" hidden>オフライン中：つながったら送ります</div>
 <div class="toast" id="toast"></div>
 
-<script src="./breaktimer.js?v=73"></script>
-<script type="module" src="./app.js?v=73"></script>
+<script src="./breaktimer.js?v=74"></script>
+<script type="module" src="./app.js?v=74"></script>
 </body>
 </html>

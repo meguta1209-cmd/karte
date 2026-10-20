@@ -998,3 +998,27 @@ button.res-tile:hover{border-color:var(--rule2);}
 .theme-sw button[aria-checked="true"]::after{content:"✓"; margin-left:auto; color:var(--blue);}
 #themeMode{flex:0 0 auto;}
 @media (max-width:420px){ .theme-sw{grid-template-columns:repeat(2, 1fr);} }
+
+/* 自分のリマインド（v74）：カレンダーの上の切りかえと、自分の分の週の予定表 */
+.cal-mode{margin:4px 0 10px;}
+.cal-mode button{flex:1 1 0; font-size:14px; font-weight:700; padding:8px 6px;}
+.mr-off{display:none !important;}
+.mr-note{font-size:12px; color:var(--ink3); margin:0 0 8px;}
+.mr-add{display:block; width:100%; margin:0 0 12px; padding:11px; border-radius:10px; border:1.5px dashed var(--blue); background:var(--blue-soft); color:var(--blue); font:inherit; font-weight:700; font-size:15px; cursor:pointer;}
+.mr-nav{display:flex; align-items:center; justify-content:space-between; margin:6px 0;}
+.mr-nav button{border:1px solid var(--rule2); background:var(--card); border-radius:8px; padding:5px 12px; color:var(--ink2); font:inherit;}
+.mr-nav button:disabled{opacity:.35;}
+.mr-nav b{font-size:15px;}
+.mr-late{background:var(--red-soft); border:1px solid var(--red); border-radius:10px; padding:8px 10px; margin:0 0 10px;}
+.mr-late h4{color:var(--red);}
+.mr-day{margin:0 0 10px;}
+.mr-late h4, .mr-day h4{margin:0 0 4px; font-size:13px; display:flex; justify-content:space-between;}
+.mr-day h4{color:var(--ink2);}
+.mr-day.today h4{color:var(--blue);}
+.mr-item{display:grid; grid-template-columns:52px 1fr auto; gap:8px; align-items:center; background:var(--card); border:1px solid var(--rule); border-left:5px solid var(--c); border-radius:8px; padding:8px 10px; margin:4px 0;}
+.mr-item .t{font-weight:700; font-size:14px; line-height:1.25;}
+.mr-item .s{font-weight:700; font-size:14px; min-width:0; overflow-wrap:anywhere;}
+.mr-item .s small{display:block; font-weight:400; font-size:12px; color:var(--ink3);}
+.mr-item .k{font-size:11px; font-weight:700; border-radius:4px; padding:1px 6px; margin-right:4px;}
+.mr-item .go{font-size:12px; font-weight:700; color:var(--blue); border:1px solid var(--blue); border-radius:6px; padding:5px 9px; background:var(--card);}
+.mr-empty{font-size:12.5px; color:var(--ink3); padding:4px 2px;}
