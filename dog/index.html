@@ -1,0 +1,1897 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>わんカルテ</title>
+<meta name="description" content="ドッグトレーナー用の顧客カルテ。犬ごとにカウンセリング内容・健康・生活・レッスン記録を貯める">
+<meta name="theme-color" content="#F4F1EC" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#111013" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="わんカルテ">
+<meta name="format-detection" content="telephone=no">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="apple-touch-icon" href="./icons/icon-180.png">
+<link rel="icon" href="./icons/icon-192.png">
+</head>
+<body>
+<style>
+/* ============================================================
+   わんカルテ — ドッグトレーナー用カルテ
+   色: テラコッタ(操作) + 状態の4色(継続中/預かり中/休止/卒業)
+   ============================================================ */
+:root{
+  --ground:#F4F1EC;
+  --surface:#FFFFFF;
+  --surface-2:#ECE7DF;
+  --sunken:#E4DED4;
+  --line:rgba(40,30,20,.11);
+  --line-2:rgba(40,30,20,.065);
+  --ink:#1C1713;
+  --ink-2:#625A52;
+  --ink-3:#948B82;
+  --brand:#B8562B;
+  --brand-ink:#FFFFFF;
+  --brand-soft:#F6E4DA;
+  --scrim:rgba(20,14,10,.42);
+  --bar:rgba(244,241,236,.84);
+  --shadow-1:0 1px 2px rgba(28,23,19,.05);
+  --shadow-2:0 2px 6px rgba(28,23,19,.07), 0 10px 24px rgba(28,23,19,.06);
+  --shadow-3:0 -1px 0 rgba(40,30,20,.08), 0 -12px 40px rgba(28,23,19,.18);
+  --hi:rgba(255,255,255,.85);
+
+  --st-active:#0E7A54;   --st-active-bg:#DEF2E9;
+  --st-boarding:#B57708; --st-boarding-bg:#FBF0D9;
+  --st-paused:#7A8290;   --st-paused-bg:#ECEEF2;
+  --st-done:#3E5B9A;     --st-done-bg:#E3E9F6;
+  --danger:#BE3B36;      --danger-bg:#FBE9E7;
+  --k-counsel:#2B4A8F;   --k-counsel-bg:#E4EAF8;
+
+  --r-sm:10px; --r-md:14px; --r-lg:20px;
+  --tap:48px;
+  --font:-apple-system,BlinkMacSystemFont,"SF Pro JP","Hiragino Kaku Gothic ProN","Yu Gothic UI","Noto Sans JP","Segoe UI",sans-serif;
+  --mono:ui-monospace,"SF Mono","SFMono-Regular",Menlo,Consolas,"Roboto Mono",monospace;
+  --ease:cubic-bezier(.32,.72,0,1);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --ground:#111013; --surface:#1C1A1E; --surface-2:#262329; --sunken:#151317;
+    --line:rgba(255,255,255,.10); --line-2:rgba(255,255,255,.06);
+    --ink:#F0ECE6; --ink-2:#B1A99F; --ink-3:#77706A;
+    --brand:#F0A57E; --brand-ink:#1A0E07; --brand-soft:#3A2419;
+    --scrim:rgba(0,0,0,.6); --bar:rgba(17,16,19,.8);
+    --shadow-1:0 1px 2px rgba(0,0,0,.4);
+    --shadow-2:0 2px 6px rgba(0,0,0,.4), 0 10px 24px rgba(0,0,0,.3);
+    --shadow-3:0 -1px 0 rgba(255,255,255,.07), 0 -12px 40px rgba(0,0,0,.5);
+    --hi:rgba(255,255,255,.06);
+    --st-active:#45CA92; --st-active-bg:#132C24;
+    --st-boarding:#E4AB44; --st-boarding-bg:#302716;
+    --st-paused:#9AA3B0; --st-paused-bg:#23272E;
+    --st-done:#8FAAE6; --st-done-bg:#1D2740;
+    --danger:#EE7B73; --danger-bg:#33201F;
+    --k-counsel:#7FA2EE; --k-counsel-bg:#1D2941;
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#111013; --surface:#1C1A1E; --surface-2:#262329; --sunken:#151317;
+  --line:rgba(255,255,255,.10); --line-2:rgba(255,255,255,.06);
+  --ink:#F0ECE6; --ink-2:#B1A99F; --ink-3:#77706A;
+  --brand:#F0A57E; --brand-ink:#1A0E07; --brand-soft:#3A2419;
+  --scrim:rgba(0,0,0,.6); --bar:rgba(17,16,19,.8);
+  --shadow-1:0 1px 2px rgba(0,0,0,.4);
+  --shadow-2:0 2px 6px rgba(0,0,0,.4), 0 10px 24px rgba(0,0,0,.3);
+  --shadow-3:0 -1px 0 rgba(255,255,255,.07), 0 -12px 40px rgba(0,0,0,.5);
+  --hi:rgba(255,255,255,.06);
+  --st-active:#45CA92; --st-active-bg:#132C24;
+  --st-boarding:#E4AB44; --st-boarding-bg:#302716;
+  --st-paused:#9AA3B0; --st-paused-bg:#23272E;
+  --st-done:#8FAAE6; --st-done-bg:#1D2740;
+  --danger:#EE7B73; --danger-bg:#33201F;
+  --k-counsel:#7FA2EE; --k-counsel-bg:#1D2941;
+}
+
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{
+  background:var(--ground);color:var(--ink);
+  font-family:var(--font);font-size:15px;line-height:1.6;
+  -webkit-text-size-adjust:100%;
+  -webkit-tap-highlight-color:transparent;
+  -webkit-user-select:none;user-select:none;
+  overscroll-behavior:none;
+}
+input,textarea,select,.selectable{-webkit-user-select:text;user-select:text}
+button,input,textarea,select{font:inherit;color:inherit;margin:0}
+button{cursor:pointer;background:none;border:none;padding:0;touch-action:manipulation;-webkit-touch-callout:none}
+svg{display:block;flex:0 0 auto}
+:focus{outline:none}
+:focus-visible{outline:2px solid var(--brand);outline-offset:2px;border-radius:8px}
+@media (prefers-reduced-motion: reduce){*{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+
+/* ================= app shell ================= */
+.app{
+  position:fixed;inset:0;margin:0 auto;max-width:620px;
+  display:flex;flex-direction:column;background:var(--ground);
+  border-left:1px solid var(--line-2);border-right:1px solid var(--line-2);
+}
+@media (max-width:640px){.app{border:none}}
+.bar{
+  position:relative;z-index:30;flex:0 0 auto;
+  padding-top:env(safe-area-inset-top);
+  background:var(--bar);
+  -webkit-backdrop-filter:saturate(180%) blur(20px);
+  backdrop-filter:saturate(180%) blur(20px);
+  box-shadow:0 .5px 0 transparent;
+  transition:box-shadow .2s;
+}
+.app.compact .bar{box-shadow:0 .5px 0 var(--line)}
+.bar .inner{display:flex;align-items:center;gap:6px;height:52px;padding:0 8px}
+.bar h1{
+  flex:1;min-width:0;margin:0;text-align:center;
+  font-size:16px;font-weight:700;letter-spacing:-.01em;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  transition:opacity .2s,transform .2s;
+}
+.bar h1 .sub{
+  display:block;font-size:11px;font-weight:600;color:var(--ink-3);
+  letter-spacing:.02em;margin-top:-2px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.app[data-view="home"]:not(.compact) .bar h1{opacity:0;transform:translateY(3px)}
+.navbtn{
+  min-width:40px;height:40px;flex:0 0 auto;border-radius:12px;
+  display:flex;align-items:center;justify-content:center;gap:1px;
+  color:var(--brand);font-size:15px;font-weight:600;
+  transition:background .15s,transform .1s;
+}
+.navbtn:active{background:var(--surface-2);transform:scale(.94)}
+.navbtn[hidden]{display:none}
+
+/* ================= stage / screens ================= */
+.stage{position:relative;flex:1;overflow:hidden}
+.screen{
+  position:absolute;inset:0;overflow-y:auto;overflow-x:hidden;
+  -webkit-overflow-scrolling:touch;overscroll-behavior:contain;
+  background:var(--ground);
+  padding:4px 16px calc(40px + env(safe-area-inset-bottom));
+  visibility:hidden;
+}
+.screen.on{visibility:visible;z-index:2}
+.screen.leaving{visibility:visible;z-index:1}
+@keyframes pushIn{from{transform:translateX(100%)}to{transform:translateX(0)}}
+@keyframes pushOut{from{transform:translateX(0);opacity:1}to{transform:translateX(-26%);opacity:.55}}
+@keyframes popIn{from{transform:translateX(-26%);opacity:.55}to{transform:translateX(0);opacity:1}}
+@keyframes popOut{from{transform:translateX(0)}to{transform:translateX(100%)}}
+.screen.a-pushIn{animation:pushIn .34s var(--ease) both}
+.screen.a-pushOut{animation:pushOut .34s var(--ease) both}
+.screen.a-popIn{animation:popIn .34s var(--ease) both}
+.screen.a-popOut{animation:popOut .34s var(--ease) both}
+
+/* ================= type ================= */
+.largetitle{
+  margin:8px 2px 14px;font-size:30px;font-weight:800;letter-spacing:-.025em;
+  text-wrap:balance;line-height:1.2;
+}
+.largetitle small{display:block;font-size:12.5px;font-weight:600;color:var(--ink-3);letter-spacing:.04em;margin-top:2px}
+.grouphead{display:flex;align-items:baseline;gap:8px;margin:26px 4px 8px}
+.grouphead h2{margin:0;font-size:12px;font-weight:700;letter-spacing:.09em;color:var(--ink-3)}
+.grouphead .n{margin-left:auto;font-size:12px;color:var(--ink-3);font-variant-numeric:tabular-nums}
+.tiny{font-size:12.5px;line-height:1.55;color:var(--ink-3)}
+.hairline{height:1px;background:var(--line);margin:20px 0}
+
+/* ================= controls ================= */
+.btn{
+  width:100%;min-height:var(--tap);padding:0 18px;border-radius:var(--r-md);
+  background:var(--surface);color:var(--ink);font-size:15.5px;font-weight:700;
+  display:flex;align-items:center;justify-content:center;gap:8px;
+  box-shadow:var(--shadow-1);border:1px solid var(--line);
+  transition:transform .1s var(--ease),filter .15s;
+}
+.btn:active{transform:scale(.975);filter:brightness(.96)}
+.btn.primary{background:var(--brand);color:var(--brand-ink);border-color:transparent;box-shadow:var(--shadow-2)}
+.btn.plain{background:transparent;border-color:transparent;box-shadow:none;color:var(--brand)}
+.btn.danger{color:var(--danger)}
+.btn.sm{min-height:40px;font-size:14px;border-radius:11px}
+.row{display:flex;gap:10px}
+.row > *{flex:1;min-width:0}
+.stack{display:flex;flex-direction:column;gap:18px}
+
+.label{display:block;font-size:11.5px;font-weight:700;letter-spacing:.08em;color:var(--ink-3);margin:0 0 7px 3px}
+.label .req{color:var(--danger);margin-left:3px}
+.field{
+  width:100%;min-height:var(--tap);padding:12px 14px;
+  background:var(--surface);color:var(--ink);font-size:16px;
+  border:1px solid var(--line);border-radius:var(--r-md);
+  box-shadow:var(--shadow-1);appearance:none;
+  transition:border-color .15s,box-shadow .15s;
+}
+.field:focus{border-color:var(--brand);box-shadow:0 0 0 3px var(--brand-soft)}
+.field::placeholder{color:var(--ink-3)}
+textarea.field{min-height:92px;resize:none;line-height:1.6}
+input[type="date"].field,input[type="time"].field{min-width:0}
+
+.searchbar{position:relative;margin-bottom:4px}
+.searchbar .ic{position:absolute;left:13px;top:50%;transform:translateY(-50%);color:var(--ink-3);pointer-events:none}
+.searchbar .field{padding-left:42px}
+
+/* セグメント */
+.segwrap{margin:2px -16px 14px;padding:0 16px;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+.segwrap::-webkit-scrollbar{display:none}
+.seg{display:inline-flex;gap:2px;padding:3px;background:var(--sunken);border-radius:12px}
+.seg.full{display:flex}
+.seg.full button{flex:1}
+.seg button{
+  min-height:32px;padding:0 14px;border-radius:9px;white-space:nowrap;
+  font-size:13.5px;font-weight:600;color:var(--ink-2);
+  transition:background .18s,color .18s,box-shadow .18s,transform .1s;
+}
+.seg button:active{transform:scale(.96)}
+.seg button[aria-pressed="true"]{background:var(--surface);color:var(--ink);box-shadow:var(--shadow-1);font-weight:700}
+
+/* チップ(選択式) */
+.chips{display:flex;flex-wrap:wrap;gap:7px;margin-top:9px}
+.chips.scroll{flex-wrap:nowrap;overflow-x:auto;margin:9px -16px 0;padding:0 16px 2px;scrollbar-width:none}
+.chips.scroll::-webkit-scrollbar{display:none}
+.chips button{
+  min-height:36px;padding:0 13px;border-radius:10px;white-space:nowrap;
+  font-size:13px;font-weight:600;color:var(--ink-2);
+  background:var(--surface);border:1px solid var(--line);box-shadow:var(--shadow-1);
+  transition:transform .1s,background .15s,color .15s,border-color .15s;
+}
+.chips button:active{transform:scale(.94)}
+.chips button[aria-pressed="true"]{background:var(--brand);color:var(--brand-ink);border-color:transparent}
+.chips.tight{margin-top:7px}
+
+/* 3択トグル(できること) */
+.skillrow{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line-2)}
+.skillrow:last-child{border-bottom:none}
+.skillrow .nm{flex:1;min-width:0;font-size:14.5px;font-weight:600}
+.skillrow .seg button{min-width:58px;padding:0 10px;font-size:12.5px}
+.skillrow .seg button[aria-pressed="true"][data-v="ok"]{color:var(--st-active)}
+.skillrow .seg button[aria-pressed="true"][data-v="wip"]{color:var(--st-boarding)}
+
+/* チェックリスト */
+.checks{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:9px}
+.checks button{
+  min-height:42px;padding:0 12px;border-radius:11px;text-align:left;
+  display:flex;align-items:center;gap:8px;
+  font-size:13.5px;font-weight:600;color:var(--ink-2);
+  background:var(--surface);border:1px solid var(--line);box-shadow:var(--shadow-1);
+  transition:transform .1s,background .15s,color .15s;
+}
+.checks button::before{
+  content:"";flex:0 0 auto;width:18px;height:18px;border-radius:6px;
+  border:1.5px solid var(--ink-3);background:var(--surface);
+  transition:background .15s,border-color .15s;
+}
+.checks button[aria-pressed="true"]{color:var(--ink);background:var(--brand-soft);border-color:transparent}
+.checks button[aria-pressed="true"]::before{
+  background:var(--brand);border-color:var(--brand);
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5'/%3E%3C/svg%3E");
+  background-size:13px;background-position:center;background-repeat:no-repeat;
+}
+.checks button:active{transform:scale(.96)}
+.checks button.wide{grid-column:1 / -1}
+
+/* ================= inset grouped list ================= */
+.list{background:var(--surface);border-radius:var(--r-md);overflow:hidden;box-shadow:var(--shadow-1);border:1px solid var(--line)}
+.list .item{display:flex;align-items:center;gap:12px;width:100%;text-align:left;padding:12px 14px;position:relative;transition:background .12s}
+.list .item:active{background:var(--surface-2)}
+.list .item + .item::before{content:"";position:absolute;left:14px;right:0;top:0;height:1px;background:var(--line-2)}
+.item .txt{flex:1;min-width:0}
+.item .nm{font-size:15.5px;font-weight:650;letter-spacing:-.01em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:flex;align-items:center;gap:6px}
+.item .nm .breed{font-size:12.5px;font-weight:600;color:var(--ink-3);overflow:hidden;text-overflow:ellipsis}
+.item .meta{font-size:12.5px;color:var(--ink-3);font-variant-numeric:tabular-nums;margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.item .chev{color:var(--ink-3);opacity:.6}
+.item .pill{
+  flex:0 0 auto;font-family:var(--mono);font-size:11.5px;font-weight:700;
+  padding:4px 8px;border-radius:8px;background:var(--st-boarding-bg);color:var(--st-boarding);
+  font-variant-numeric:tabular-nums;
+}
+.item .pill.over{background:var(--danger-bg);color:var(--danger)}
+.item .pill.today{background:var(--st-active-bg);color:var(--st-active)}
+
+/* アバター */
+.avatar{
+  flex:0 0 auto;width:44px;height:44px;border-radius:50%;overflow:hidden;
+  display:grid;place-items:center;background:var(--ac,var(--brand-soft));color:#fff;
+  font-size:18px;font-weight:800;letter-spacing:-.02em;
+}
+.avatar img{width:100%;height:100%;object-fit:cover;display:block}
+.avatar.lg{width:72px;height:72px;font-size:28px;border-radius:22px}
+
+.empty{
+  display:flex;flex-direction:column;align-items:center;gap:10px;
+  text-align:center;padding:40px 22px;color:var(--ink-3);
+  background:var(--surface);border:1px solid var(--line);border-radius:var(--r-md);
+  box-shadow:var(--shadow-1);
+}
+.empty .art{color:var(--ink-3);opacity:.45}
+.empty p{margin:0;font-size:13.5px;line-height:1.7}
+
+/* ================= status chips ================= */
+.chip{display:inline-flex;align-items:center;gap:5px;vertical-align:middle;padding:3px 10px;border-radius:999px;font-size:12px;font-weight:700;line-height:1.5;white-space:nowrap}
+.chip::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.chip.nodot::before{display:none}
+.s-active{color:var(--st-active);background:var(--st-active-bg)}
+.s-boarding{color:var(--st-boarding);background:var(--st-boarding-bg)}
+.s-paused{color:var(--st-paused);background:var(--st-paused-bg)}
+.s-done{color:var(--st-done);background:var(--st-done-bg)}
+.s-danger{color:var(--danger);background:var(--danger-bg)}
+.k-visit{color:var(--brand);background:var(--brand-soft)}
+.k-board{color:var(--st-boarding);background:var(--st-boarding-bg)}
+.k-counsel{color:var(--k-counsel);background:var(--k-counsel-bg)}
+.k-other{color:var(--st-paused);background:var(--st-paused-bg)}
+
+/* ================= 犬の詳細 ================= */
+.doghead{
+  position:relative;overflow:hidden;margin:8px 0 14px;padding:18px 16px;
+  border-radius:var(--r-lg);background:var(--surface);border:1px solid var(--line);
+  box-shadow:var(--shadow-1);display:flex;align-items:center;gap:14px;
+}
+.doghead::after{content:"";position:absolute;left:0;top:0;bottom:0;width:5px;background:var(--pc)}
+.doghead .t{flex:1;min-width:0}
+.doghead .big{font-size:24px;font-weight:800;letter-spacing:-.02em;line-height:1.2;overflow-wrap:anywhere}
+.doghead .desc{font-size:13px;color:var(--ink-2);margin-top:3px;line-height:1.5}
+.doghead .flags{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.doghead button.statusbtn{display:inline-flex}
+
+.card{
+  background:var(--surface);border:1px solid var(--line);border-radius:var(--r-md);
+  box-shadow:var(--shadow-1);margin-bottom:10px;overflow:hidden;
+}
+.card .chead{
+  display:flex;align-items:center;gap:8px;width:100%;text-align:left;padding:12px 14px;
+}
+.card .chead:active{background:var(--surface-2)}
+.card .chead h3{flex:1;min-width:0;margin:0;font-size:14.5px;font-weight:750;letter-spacing:-.01em}
+.card .chead .ed{font-size:13px;font-weight:700;color:var(--brand);display:flex;align-items:center;gap:3px}
+.card .chead .cnt{font-size:12px;color:var(--ink-3)}
+.card .cbody{padding:0 14px 13px}
+.card .none{font-size:13px;color:var(--ink-3);padding:0 14px 12px;margin:-2px 0 0}
+.kv{display:grid;grid-template-columns:minmax(72px,36%) 1fr;gap:5px 12px;font-size:14px;margin:0}
+.kv dt{color:var(--ink-3);font-size:12.5px;padding-top:2px;line-height:1.45;overflow-wrap:anywhere}
+.kv dd{margin:0;overflow-wrap:anywhere;white-space:pre-wrap;-webkit-user-select:text;user-select:text}
+.kv a{color:var(--brand);font-weight:700;text-decoration:none}
+.kv .alert{color:var(--danger);font-weight:700}
+.skillview{display:flex;flex-wrap:wrap;gap:6px}
+.skillview span{font-size:12px;font-weight:700;padding:3px 9px;border-radius:8px;background:var(--surface-2);color:var(--ink-3)}
+.skillview span.ok{background:var(--st-active-bg);color:var(--st-active)}
+.skillview span.wip{background:var(--st-boarding-bg);color:var(--st-boarding)}
+
+/* 記録 */
+.rec{padding:13px 15px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r-md);margin-bottom:9px;box-shadow:var(--shadow-1);width:100%;text-align:left}
+.rec:active{background:var(--surface-2)}
+.rec .top{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.rec .date{font-family:var(--mono);font-size:13px;color:var(--ink-2);font-variant-numeric:tabular-nums}
+.rec .who{font-size:12px;color:var(--ink-3);margin-left:auto}
+.rec .body{font-size:14px;margin-top:8px;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.55}
+.rec .sub{font-size:12.5px;color:var(--ink-2);margin-top:6px;white-space:pre-wrap;overflow-wrap:anywhere}
+.rec .sub b{color:var(--ink-3);font-weight:700;margin-right:4px}
+.rec .tags{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}
+.rec .tags span{font-size:11.5px;font-weight:700;padding:2px 8px;border-radius:7px;background:var(--surface-2);color:var(--ink-2)}
+.next{display:inline-flex;align-items:center;gap:6px;margin-top:9px;font-size:12.5px;font-weight:700;color:var(--st-boarding);background:var(--st-boarding-bg);padding:5px 11px;border-radius:999px}
+
+/* 写真 */
+.photo{display:flex;align-items:center;gap:14px}
+.photo .avatar{cursor:pointer}
+.photo .acts{display:flex;flex-direction:column;gap:8px;flex:1}
+.photo input[type="file"]{display:none}
+
+/* ================= sheet ================= */
+.scrim{position:fixed;inset:0;z-index:50;background:var(--scrim);opacity:0;pointer-events:none;transition:opacity .3s var(--ease)}
+.scrim.on{opacity:1;pointer-events:auto}
+.sheet{
+  position:fixed;left:0;right:0;bottom:0;z-index:60;margin:0 auto;max-width:620px;max-height:92%;
+  background:var(--ground);border-radius:var(--r-lg) var(--r-lg) 0 0;box-shadow:var(--shadow-3);
+  transform:translateY(101%);transition:transform .38s var(--ease);display:flex;flex-direction:column;
+}
+.sheet.on{transform:translateY(0)}
+.sheet .grab{width:36px;height:5px;border-radius:3px;background:var(--line);margin:8px auto 0;flex:0 0 auto}
+.sheet .head{display:flex;align-items:center;gap:8px;padding:10px 12px 12px;flex:0 0 auto}
+.sheet .head h3{flex:1;margin:0;text-align:center;font-size:16px;font-weight:700;letter-spacing:-.01em}
+.sheet .head button{min-width:56px;height:36px;border-radius:10px;font-size:15px;color:var(--brand);display:flex;align-items:center;justify-content:center;padding:0 6px}
+.sheet .head button.done{font-weight:700}
+.sheet .head button:active{background:var(--surface-2)}
+.sheet .body{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:2px 16px calc(24px + env(safe-area-inset-bottom))}
+
+.picker{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.picker.c2{grid-template-columns:repeat(2,1fr)}
+.picker button{
+  min-height:58px;border-radius:var(--r-md);background:var(--surface);border:1px solid var(--line);box-shadow:var(--shadow-1);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;
+  font-size:13.5px;font-weight:700;color:var(--ink-2);padding:0 4px;text-align:center;line-height:1.2;
+  transition:transform .12s var(--ease),background .18s,color .18s,box-shadow .18s;
+}
+.picker button::before{content:"";width:10px;height:10px;border-radius:50%;background:var(--pc);transition:transform .18s var(--ease)}
+.picker button:active{transform:scale(.95)}
+.picker button[aria-pressed="true"]{background:var(--pc);color:#fff;border-color:transparent;box-shadow:var(--shadow-2)}
+.picker button[aria-pressed="true"]::before{background:#fff;transform:scale(1.15)}
+
+.note{display:flex;gap:9px;padding:12px 13px;border-radius:var(--r-md);background:var(--surface-2);font-size:12.5px;line-height:1.6;color:var(--ink-2)}
+.note b{color:var(--ink);font-weight:700}
+.warn{display:flex;gap:9px;padding:12px 13px;border-radius:var(--r-md);margin-bottom:14px;background:var(--danger-bg);color:var(--danger);font-size:12.5px;font-weight:600;line-height:1.6}
+.nudge{display:flex;align-items:center;gap:12px;margin-top:20px;padding:13px 14px;border-radius:var(--r-md);background:var(--st-boarding-bg);border:1px solid var(--line)}
+.nudge .t{flex:1;min-width:0;font-size:12.5px;line-height:1.55;color:var(--st-boarding);font-weight:600}
+.nudge button{flex:0 0 auto;min-height:36px;padding:0 14px;border-radius:10px;font-size:13px;font-weight:700;color:#fff;background:var(--st-boarding);transition:transform .1s}
+.nudge button:active{transform:scale(.95)}
+
+.demo{display:flex;align-items:center;gap:12px;margin-top:16px;padding:13px 14px;border-radius:var(--r-md);background:var(--brand-soft);border:1px solid var(--line)}
+.demo .t{flex:1;min-width:0;font-size:12.5px;line-height:1.55;color:var(--ink-2);font-weight:600}
+.demo .t b{color:var(--brand);font-weight:800}
+.demo button{flex:0 0 auto;min-height:36px;padding:0 14px;border-radius:10px;font-size:13px;font-weight:700;color:var(--brand-ink);background:var(--brand);transition:transform .1s}
+.demo button:active{transform:scale(.95)}
+a.btn{text-decoration:none}
+
+.switchrow{display:flex;align-items:center;gap:12px;margin-top:12px;font-size:13.5px;color:var(--ink-2)}
+.switchrow .sw{
+  margin-left:auto;flex:0 0 auto;min-width:56px;height:34px;border-radius:999px;
+  font-size:12.5px;font-weight:800;letter-spacing:.06em;
+  background:var(--sunken);color:var(--ink-3);border:1px solid var(--line);
+  transition:background .18s,color .18s,transform .1s;
+}
+.switchrow .sw[aria-pressed="true"]{background:var(--st-active);color:#fff;border-color:transparent}
+.switchrow .sw:active{transform:scale(.94)}
+
+/* ================= toast ================= */
+.toast{
+  position:fixed;left:50%;bottom:calc(34px + env(safe-area-inset-bottom));z-index:90;
+  transform:translateX(-50%) translateY(14px) scale(.96);
+  display:flex;align-items:center;gap:8px;background:var(--ink);color:var(--ground);
+  padding:11px 18px;border-radius:999px;font-size:14px;font-weight:700;box-shadow:var(--shadow-2);
+  opacity:0;pointer-events:none;transition:opacity .22s var(--ease),transform .22s var(--ease);
+  max-width:calc(100% - 32px);text-align:center;
+}
+.toast.on{opacity:1;transform:translateX(-50%) translateY(0) scale(1)}
+</style>
+
+<div class="app" id="app" data-view="home">
+  <header class="bar">
+    <div class="inner">
+      <button class="navbtn" id="back" hidden aria-label="戻る"></button>
+      <h1 id="title">わんカルテ</h1>
+      <button class="navbtn" id="menu" aria-label="設定とデータ管理"></button>
+    </div>
+  </header>
+
+  <div class="stage">
+    <!-- ========= 犬の一覧 ========= -->
+    <section class="screen on" id="sc-home">
+      <h1 class="largetitle">わんカルテ<small id="orgname"></small></h1>
+      <div class="searchbar">
+        <span class="ic" id="searchIcon"></span>
+        <input class="field" id="q" type="search" placeholder="犬の名前・飼い主・犬種で探す" autocomplete="off" enterkeyhint="search">
+      </div>
+      <button class="btn primary" id="newdog" style="margin-top:12px">新しい犬を登録</button>
+      <div class="segwrap" style="margin-top:14px">
+        <div class="seg" id="hfilters">
+          <button data-f="all" aria-pressed="true">すべて</button>
+          <button data-f="active" aria-pressed="false">継続中</button>
+          <button data-f="boarding" aria-pressed="false">預かり中</button>
+          <button data-f="paused" aria-pressed="false">休止</button>
+          <button data-f="done" aria-pressed="false">卒業</button>
+        </div>
+      </div>
+      <div id="plan"></div>
+      <div id="dlist"></div>
+    </section>
+
+    <!-- ========= 犬の詳細 ========= -->
+    <section class="screen" id="sc-dog">
+      <div class="doghead" id="dhead"></div>
+      <button class="btn primary" id="newrec">記録を追加する</button>
+      <div class="segwrap" style="margin-top:14px">
+        <div class="seg full" id="dtabs">
+          <button data-t="karte" aria-pressed="true">カルテ</button>
+          <button data-t="recs" aria-pressed="false">記録</button>
+        </div>
+      </div>
+      <div id="dbody"></div>
+    </section>
+  </div>
+</div>
+
+<div class="scrim" id="scrim"></div>
+<div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
+  <div class="grab"></div>
+  <div class="head">
+    <button id="sheetCancel">キャンセル</button>
+    <h3 id="sheetTitle"></h3>
+    <button class="done" id="sheetDone"></button>
+  </div>
+  <div class="body" id="sheetBody"></div>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(() => {
+"use strict";
+
+/* ================= アイコン ================= */
+const SVG = d => `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+const ICON = {
+  back:    SVG(`<path d="M15 5l-7 7 7 7"/>`),
+  chev:    `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.5 5l7 7-7 7"/></svg>`,
+  more:    SVG(`<circle cx="5" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.6" fill="currentColor" stroke="none"/>`),
+  search:  `<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.6-3.6"/></svg>`,
+  plus:    SVG(`<path d="M12 5.5v13M5.5 12h13"/>`),
+  edit:    `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4l10.5-10.5a2.1 2.1 0 00-3-3L5 17v3z"/><path d="M13.5 6.5l3 3"/></svg>`,
+  cal:     `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="5.5" width="17" height="15" rx="3"/><path d="M8 3v4M16 3v4M3.5 10.5h17"/></svg>`,
+  trash:   `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M9.5 7V4.8h5V7M6.5 7l.9 12.2h9.2L17.5 7"/></svg>`,
+  save:    SVG(`<path d="M12 4v11m0 0l-4-4m4 4l4-4M4.5 19.5h15"/>`),
+  copy:    SVG(`<rect x="9" y="9" width="11" height="11" rx="2.5"/><path d="M5.5 15H5a1.5 1.5 0 01-1.5-1.5v-9A1.5 1.5 0 015 3h9A1.5 1.5 0 0115.5 4.5V5"/>`),
+  table:   SVG(`<rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><path d="M3.5 9.5h17M9.5 9.5v10"/>`),
+  restore: SVG(`<path d="M4 9.5A8 8 0 1112 20a8 8 0 01-7.4-5"/><path d="M3.5 4.5v5h5"/>`),
+  sync:    SVG(`<path d="M20.5 12a8.5 8.5 0 01-14.6 5.9"/><path d="M3.5 12a8.5 8.5 0 0114.6-5.9"/><path d="M18.5 2.5v4h-4M5.5 21.5v-4h4"/>`),
+  link:    SVG(`<path d="M10 14a3.5 3.5 0 005 0l3-3a3.5 3.5 0 00-5-5l-1 1"/><path d="M14 10a3.5 3.5 0 00-5 0l-3 3a3.5 3.5 0 005 5l1-1"/>`),
+  camera:  SVG(`<path d="M4 8.5A1.5 1.5 0 015.5 7H8l1.3-2h5.4L16 7h2.5A1.5 1.5 0 0120 8.5v9a1.5 1.5 0 01-1.5 1.5h-13A1.5 1.5 0 014 17.5z"/><circle cx="12" cy="13" r="3.2"/>`),
+  paw:     `<svg width="40" height="40" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><ellipse cx="7" cy="8.2" rx="1.9" ry="2.5"/><ellipse cx="11" cy="5.6" rx="1.9" ry="2.5"/><ellipse cx="15.5" cy="6.4" rx="1.9" ry="2.5"/><ellipse cx="19" cy="10" rx="1.8" ry="2.3"/><path d="M13 10.5c-3.6 0-6.5 2.9-6.5 5.8 0 1.8 1.3 3 3 3 1.1 0 1.9-.5 3.5-.5s2.4.5 3.5.5c1.7 0 3-1.2 3-3 0-2.9-2.9-5.8-6.5-5.8z"/></svg>`
+};
+
+/* ================= 定数 ================= */
+const APP = "わんカルテ";
+const STATUS = [
+  {k:"active",   label:"継続中",   color:"var(--st-active)",   bg:"var(--st-active-bg)"},
+  {k:"boarding", label:"預かり中", color:"var(--st-boarding)", bg:"var(--st-boarding-bg)"},
+  {k:"paused",   label:"休止",     color:"var(--st-paused)",   bg:"var(--st-paused-bg)"},
+  {k:"done",     label:"卒業",     color:"var(--st-done)",     bg:"var(--st-done-bg)"}
+];
+const ST = Object.fromEntries(STATUS.map(s => [s.k, s]));
+const KINDS = [
+  {k:"visit",   label:"出張レッスン",   color:"var(--brand)",       bg:"var(--brand-soft)"},
+  {k:"board",   label:"預かり日誌",     color:"var(--st-boarding)", bg:"var(--st-boarding-bg)"},
+  {k:"counsel", label:"カウンセリング", color:"var(--k-counsel)",   bg:"var(--k-counsel-bg)"},
+  {k:"other",   label:"その他",         color:"var(--st-paused)",   bg:"var(--st-paused-bg)"}
+];
+const KD = Object.fromEntries(KINDS.map(k => [k.k, k]));
+const BREEDS = ["トイプードル","チワワ","柴犬","ミニチュアダックス","ポメラニアン","MIX","フレンチブルドッグ","ミニチュアシュナウザー","ヨークシャーテリア","マルチーズ","パピヨン","コーギー","ジャックラッセル","ボーダーコリー","ゴールデンレトリバー","ラブラドール"];
+const ISSUES = ["来客・物音に吠える","要求吠え","散歩で引っ張る","飛びつき","甘噛み","本気で咬む","トイレの失敗","マーキング","留守番で鳴く・壊す","分離不安","拾い食い","他の犬に吠える・向かう","人見知り・怖がり","呼んでも来ない","散歩を嫌がる","興奮が止まらない","車・病院が苦手","食糞","その他"];
+const SKILLS = [["sit","おすわり"],["down","ふせ"],["stay","まて"],["come","おいで"],["heel","つけ（横歩き）"],["house","ハウス"],["eye","アイコンタクト"],["touch","体を触らせる"],["drop","ちょうだい（放せ）"],["toilet","トイレ"]];
+const SKILL_V = [["no","未"],["wip","練習中"],["ok","できる"]];
+const SKILL_L = Object.fromEntries(SKILL_V);
+const MOODS = ["落ち着いていた","集中できた","楽しそう","興奮気味","緊張・怖がり","疲れていた","体調が気になる"];
+const BOARD_ITEMS = ["フード","リード・首輪（ハーネス）","ケージ・ベッド","おもちゃ","薬","ワクチン証明書","おやつ","タオル・毛布"];
+const PHOTO_MAX = 240, PHOTO_CHARS = 24000;
+
+/* ================= カルテの項目（この表を増やせば項目が増える） =================
+   type: text / textarea / date / time / pick(1つ選ぶ) / multi(いくつでも) / checks(チェック欄) / skills / photo
+   chips: 入力の補助に出す候補。関数なら実行時に作る */
+const SEC = {
+  basic: {title:"基本情報", fields:[
+    {k:"name",    label:"名前", req:true, ph:"例）ココ"},
+    {k:"kana",    label:"フリガナ", ph:"例）ココ"},
+    {k:"breed",   label:"犬種", ph:"例）トイプードル", chips:BREEDS},
+    {k:"sex",     label:"性別", type:"pick", opts:["オス","メス"]},
+    {k:"neutered",label:"去勢・避妊", type:"pick", opts:["済","未","不明"]},
+    {k:"birth",   label:"生年月日", type:"date"},
+    {k:"ageText", label:"年齢（生年月日がわからないとき）", ph:"例）3歳くらい"},
+    {k:"weight",  label:"体重（kg）", ph:"例）4.2", mode:"decimal"},
+    {k:"color",   label:"毛色・特徴", ph:"例）レッド、左耳に白"},
+    {k:"from",    label:"迎えた先", type:"pick", opts:["ブリーダー","ペットショップ","保護犬","知人から","その他"]},
+    {k:"fromAge", label:"迎えた時期", ph:"例）生後3か月"},
+    {k:"trainer", label:"担当トレーナー", ph:"例）竹内", chips:() => knownOwners()},
+    {k:"memo",    label:"メモ", type:"textarea", ph:"性格、注意点、その他なんでも"}
+  ]},
+  owner: {title:"飼い主", fields:[
+    {k:"name",    label:"お名前", ph:"例）山田 花子", req:true},
+    {k:"kana",    label:"フリガナ"},
+    {k:"tel",     label:"電話番号", type:"tel", ph:"090-0000-0000"},
+    {k:"email",   label:"メール", type:"email"},
+    {k:"address", label:"住所", type:"textarea", ph:"出張先の住所。マンション名・部屋番号まで"},
+    {k:"parking", label:"駐車場", type:"pick", opts:["あり","なし","近くにコインP"]},
+    {k:"family",  label:"家族構成", ph:"例）夫婦＋小学生2人"},
+    {k:"carer",   label:"主にお世話する人", ph:"例）奥様"},
+    {k:"pets",    label:"ほかのペット", ph:"例）猫1匹、先住犬あり"},
+    {k:"contact", label:"希望の連絡手段", type:"pick", opts:["LINE","電話","SMS","メール"]},
+    {k:"emergency",label:"緊急連絡先", ph:"例）夫 090-0000-0000"}
+  ]},
+  health: {title:"健康", fields:[
+    {k:"vet",      label:"かかりつけ動物病院", ph:"例）〇〇動物病院"},
+    {k:"vetTel",   label:"病院の電話番号", type:"tel"},
+    {k:"vaccine",  label:"混合ワクチン（最終接種日）", type:"date"},
+    {k:"rabies",   label:"狂犬病予防注射（最終接種日）", type:"date"},
+    {k:"filaria",  label:"フィラリア予防", type:"pick", opts:["済","未","不明"]},
+    {k:"flea",     label:"ノミ・ダニ予防", type:"pick", opts:["済","未","不明"]},
+    {k:"conditions",label:"持病・既往歴", type:"textarea", ph:"例）膝蓋骨脱臼グレード1、去年に胃腸炎"},
+    {k:"meds",     label:"服用中の薬", ph:"例）なし"},
+    {k:"allergy",  label:"アレルギー", ph:"例）鶏肉"},
+    {k:"heat",     label:"最終ヒート（メスの場合）", type:"date"},
+    {k:"bite",     label:"咬傷歴（人や犬を咬んだことがあるか）", type:"pick", opts:["なし","人を咬んだ","犬を咬んだ","人も犬も"]},
+    {k:"biteNote", label:"咬傷の状況", type:"textarea", ph:"いつ・誰に・どんな場面で・けがの程度"}
+  ]},
+  life: {title:"生活", fields:[
+    {k:"food",     label:"フード", ph:"例）ロイヤルカナン ミニアダルト"},
+    {k:"meals",    label:"食事回数", type:"pick", opts:["1回","2回","3回","4回以上"]},
+    {k:"amount",   label:"1回の量・時間", ph:"例）40g、7時と19時"},
+    {k:"treats",   label:"おやつ", ph:"例）ささみジャーキー、チーズ"},
+    {k:"walks",    label:"散歩", ph:"例）朝夕2回、各30分"},
+    {k:"toilet",   label:"トイレの場所", type:"pick", opts:["室内シート","屋外","両方"]},
+    {k:"toiletOk", label:"トイレの成功率", type:"pick", opts:["ほぼ成功","時々失敗","よく失敗"]},
+    {k:"alone",    label:"留守番", ph:"例）平日 9〜18時"},
+    {k:"aloneWhere",label:"留守番中の場所", type:"pick", opts:["ケージ・サークル","クレート","フリー"]},
+    {k:"sleep",    label:"寝る場所", ph:"例）飼い主のベッド"},
+    {k:"crate",    label:"クレート慣れ", type:"pick", opts:["慣れている","練習中","苦手"]},
+    {k:"likes",    label:"好きなもの（ごほうびになるもの）", type:"textarea", ph:"例）ささみ、ボール遊び、なでられること"},
+    {k:"dislikes", label:"苦手なもの", type:"textarea", ph:"例）掃除機の音、男性、足先を触られる"}
+  ]},
+  issues: {title:"困りごと・目標", fields:[
+    {k:"list",     label:"困りごと（あてはまるもの全部）", type:"checks", opts:ISSUES},
+    {k:"detail",   label:"具体的な状況", type:"textarea", ph:"いつ・どこで・何に対して・どのくらいの頻度で"},
+    {k:"tried",    label:"これまで試したこと", type:"textarea", ph:"例）しつけ教室に3か月、無視する方法"},
+    {k:"goal",     label:"目標（飼い主の希望）", type:"textarea", ph:"例）来客時に吠えずに落ち着いていられる"},
+    {k:"priority", label:"優先順位・期限", ph:"例）まず吠え。年内に"}
+  ]},
+  skills: {title:"できること", fields:[
+    {k:"map",   label:"", type:"skills"},
+    {k:"extra", label:"ほかにできること", ph:"例）ハイタッチ、バーン"}
+  ]},
+  visit: {title:"出張メモ", fields:[
+    {k:"place",  label:"レッスン場所", ph:"例）自宅リビング、近くの〇〇公園"},
+    {k:"access", label:"アクセス・駐車場", type:"textarea", ph:"例）駅から徒歩10分、裏に1台分あり"},
+    {k:"notes",  label:"訪問時の注意", type:"textarea", ph:"例）インターホン厳禁（吠える）、先住犬は別室に"}
+  ]},
+  boarding: {title:"預かり", fields:[
+    {k:"type",   label:"預かりの種類", type:"pick", opts:["合宿","ホテル","デイ"]},
+    {k:"from",   label:"開始日", type:"date"},
+    {k:"to",     label:"お迎え日", type:"date"},
+    {k:"pickup", label:"お迎え時間・方法", ph:"例）18時に飼い主がお迎え"},
+    {k:"items",  label:"持ち物チェック", type:"checks", opts:BOARD_ITEMS},
+    {k:"meals",  label:"食事の指示", type:"textarea", ph:"例）朝夕40g、ふやかす"},
+    {k:"care",   label:"預かり中の注意", type:"textarea", ph:"例）薬は朝食後、雷が苦手"},
+    {k:"note",   label:"備考", type:"textarea"}
+  ]}
+};
+const SEC_ORDER = ["basic","owner","health","life","issues","skills","visit","boarding"];
+
+/* ================= 保存 ================= */
+/* アドレスの末尾に ?demo を付けて開くと、見本データ入りのお試し版になる。
+   本番のデータとは別の箱に保存するので、混ざらない */
+const DEMO = /(^|&)demo(=|&|$)/.test(location.search.slice(1));
+const KEY = DEMO ? "dog_karte_demo" : "dog_karte_v1";
+let memOnly = false;
+let DB = {v:1, dogs:[], sessions:[]};
+
+function load(){
+  let seeded = false;
+  try {
+    const raw = localStorage.getItem(KEY);
+    if (raw) DB = JSON.parse(raw);
+    else if (DEMO) { DB = demoData(); seeded = true; }
+    localStorage.setItem(KEY + "_probe", "1");
+    localStorage.removeItem(KEY + "_probe");
+  } catch (e) { memOnly = true; }
+  if (!DB || !Array.isArray(DB.dogs)) DB = {v:1, dogs:[], sessions:[]};
+  normalize();
+  if (seeded) save();
+}
+/* 保存データに足りない欄を補う（古いバックアップを読み込んだ時のため） */
+function normalize(){
+  if (!Array.isArray(DB.dogs)) DB.dogs = [];
+  if (!Array.isArray(DB.sessions)) DB.sessions = [];
+  if (!DB.meta) DB.meta = {};
+  if (!DB.meta.deleted) DB.meta.deleted = {dogs: [], sessions: []};
+  if (!Array.isArray(DB.meta.deleted.dogs)) DB.meta.deleted.dogs = [];
+  if (!Array.isArray(DB.meta.deleted.sessions)) DB.meta.deleted.sessions = [];
+  if (!DB.meta.dirty) DB.meta.dirty = {dogs: [], sessions: []};
+  if (!Array.isArray(DB.meta.dirty.dogs)) DB.meta.dirty.dogs = [];
+  if (!Array.isArray(DB.meta.dirty.sessions)) DB.meta.dirty.sessions = [];
+  if (DB.meta.autoSync === undefined) DB.meta.autoSync = true;
+  DB.dogs = DB.dogs.filter(d => d && d.id);
+  DB.dogs.forEach(d => {
+    SEC_ORDER.forEach(k => { if (!d[k] || typeof d[k] !== "object") d[k] = {}; });
+    if (!d.state || typeof d.state !== "object") d.state = {status: "active"};
+    if (!ST[d.state.status]) d.state.status = "active";
+    if (!d.photo || typeof d.photo !== "object") d.photo = {};
+    if (!d.createdAt) d.createdAt = nowISO();
+  });
+  DB.sessions = DB.sessions.filter(s => s && s.id && s.dogId);
+}
+/* お試し版の見本データ。日付は開いた日を基準に作る（予定が古くならないように） */
+function demoData(){
+  const day = n => { const d = new Date(); d.setDate(d.getDate() + n);
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; };
+  const u = new Date(Date.now() - 86400000).toISOString(), by = "見本";
+  const at = n => new Date(Date.now() + n * 86400000).toISOString();
+  const empty = () => ({});
+  return {v:1, meta:{owner:"", org:"見本データ入りのお試し版", welcomed:true, autoSync:false, lastBackup:day(0),
+      deleted:{dogs:[],sessions:[]}, dirty:{dogs:[],sessions:[]}},
+    dogs:[
+      {id:"demo-coco", createdAt:at(-30), state:{status:"active",u,by}, photo:{},
+       basic:{name:"ココ", kana:"ココ", breed:"トイプードル", sex:"メス", neutered:"済", birth:day(-910), weight:"4.2", color:"レッド",
+              from:"ブリーダー", fromAge:"生後3か月", trainer:"田中", memo:"人懐っこいが、来客と物音に弱い", u, by},
+       owner:{name:"山田 花子", kana:"ヤマダ ハナコ", tel:"090-0000-0001", address:"大阪市中央区〇〇1-2-3 〇〇マンション805",
+              parking:"近くにコインP", family:"夫婦＋小学生2人", carer:"奥様", contact:"LINE", u, by},
+       health:{vet:"さくら動物病院", vetTel:"06-0000-0000", vaccine:day(-200), rabies:day(-180), filaria:"済", flea:"済",
+               conditions:"膝蓋骨脱臼グレード1", meds:"なし", bite:"なし", u, by},
+       life:{food:"ドライフード 小型犬成犬用", meals:"2回", amount:"40g、7時と19時", treats:"ささみ、チーズ", walks:"朝夕2回 各30分",
+             toilet:"室内シート", toiletOk:"ほぼ成功", alone:"平日 9〜18時", aloneWhere:"フリー", sleep:"飼い主のベッド", crate:"練習中",
+             likes:"ささみ、ボール遊び、なでられること", dislikes:"掃除機の音、男性、足先を触られる", u, by},
+       issues:{list:["来客・物音に吠える","飛びつき"], detail:"インターホンが鳴ると玄関に走って吠え続ける。来客に飛びつく",
+               tried:"無視する方法を2か月", goal:"来客時にマットで落ち着いて待てる", priority:"まず吠え。年内に", u, by},
+       skills:{map:{sit:"ok", down:"ok", stay:"wip", come:"wip", eye:"ok", toilet:"ok"}, extra:"お手", u, by},
+       visit:{place:"自宅リビング", access:"駅から徒歩10分。マンション裏に来客用1台", notes:"インターホンは鳴らさない。着いたらLINEで連絡", u, by},
+       boarding:{}},
+      {id:"demo-maron", createdAt:at(-12), state:{status:"boarding",u,by}, photo:{},
+       basic:{name:"マロン", breed:"柴犬", sex:"オス", neutered:"未", birth:day(-335), weight:"8.5", trainer:"佐藤", u, by},
+       owner:{name:"鈴木 健", tel:"090-0000-0002", u, by},
+       health:{vet:"ひまわり動物病院", vaccine:day(-60), rabies:day(-150), bite:"人を咬んだ", biteNote:"宅配の人の手を軽く。出血なし", u, by},
+       life:{food:"ドライフード 子犬用", meals:"2回", likes:"ジャーキー、引っぱりっこ", dislikes:"雷、ブラッシング", u, by},
+       issues:{list:["散歩で引っ張る","本気で咬む","他の犬に吠える・向かう"], goal:"散歩で横について歩ける。人に咬まない", u, by},
+       skills:{map:{sit:"ok", house:"wip"}, u, by}, visit:{},
+       boarding:{type:"合宿", from:day(-2), to:day(5), pickup:"18時に飼い主がお迎え", items:["フード","リード・首輪（ハーネス）","薬","ワクチン証明書"],
+                 meals:"朝夕60g", care:"薬は朝食後。雷が苦手なので天気が悪い日はクレートを布で覆う", u, by}},
+      {id:"demo-leo", createdAt:at(-120), state:{status:"done",u,by}, photo:{},
+       basic:{name:"レオ", breed:"MIX", sex:"オス", neutered:"済", ageText:"5歳くらい", trainer:"田中", u, by},
+       owner:{name:"高橋 美咲", u, by}, health:empty(), life:empty(),
+       issues:{list:["留守番で鳴く・壊す"], goal:"留守番中に静かに過ごせる", u, by}, skills:empty(), visit:empty(), boarding:empty()}
+    ],
+    sessions:[
+      {id:"demo-s1", dogId:"demo-coco", createdAt:at(-14), updatedAt:at(-14), by, date:day(-14), time:"10:30", kind:"counsel", dur:"90",
+       trainer:"田中", place:"自宅", content:"初回カウンセリング。困りごとの聞き取りと目標決め", mood:["緊張・怖がり"],
+       homework:"おやつを持って名前を呼ぶ練習", next:day(-7), nextTime:"10:30", fee:"8000", paid:true},
+      {id:"demo-s2", dogId:"demo-coco", createdAt:at(-7), updatedAt:at(-7), by, date:day(-7), time:"10:30", kind:"visit", dur:"60",
+       trainer:"田中", place:"自宅", content:"おすわり・まての練習。インターホン対策の導入（鳴ったらマットへ）", mood:["集中できた","興奮気味"],
+       good:"まてが10秒できた", issue:"人が動くと立ってしまう", homework:"1日5分、まての練習。成功したらすぐごほうび",
+       next:day(2), nextTime:"10:30", fee:"6000", paid:false},
+      {id:"demo-s3", dogId:"demo-maron", createdAt:at(-1), updatedAt:at(-1), by, date:day(-1), kind:"board", trainer:"佐藤",
+       content:"朝の散歩40分、リードの練習。午後はクレートで休憩", appetite:"完食", stool:"良好", cond:"良好", mood:["落ち着いていた"],
+       good:"引っ張りが半分くらいに減った", memo:"夜は少し鳴いたが10分で寝た"},
+      {id:"demo-s4", dogId:"demo-leo", createdAt:at(-60), updatedAt:at(-60), by, date:day(-60), kind:"visit", trainer:"田中", place:"自宅",
+       content:"最終回。留守番の練習の仕上げ", good:"30分の留守番で鳴かなくなった", memo:"卒業"}
+    ]};
+}
+function demoBanner(){
+  if (!DEMO) return "";
+  return `<div class="demo">
+    <span class="t"><b>お試し版</b>です。自由に触ってOK。ここで入れた内容はこの端末にだけ残り、本番とは別です。</span>
+    <button id="demoReset">見本に戻す</button>
+  </div>`;
+}
+function save(){
+  if (memOnly) return;
+  try { localStorage.setItem(KEY, JSON.stringify(DB)); }
+  catch (e) { memOnly = true; toast("保存できませんでした"); }
+}
+
+/* ================= 小道具 ================= */
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+const nowISO = () => new Date().toISOString();
+const today = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+};
+const fmtDate = s => s ? String(s).slice(5).replace("-", "/") : "";
+const fmtFull = s => s ? String(s).replace(/-/g, "/") : "";
+let toastTimer = null;
+function toast(msg){
+  const t = $("#toast");
+  t.textContent = msg;
+  t.classList.add("on");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove("on"), 2100);
+}
+/* 何日前か。日付が無ければ null */
+function daysSince(d){
+  if (!d) return null;
+  const ms = new Date(today()) - new Date(d);
+  return Math.max(0, Math.round(ms / 86400000));
+}
+/* 生年月日 → 「2歳3か月」 */
+function ageOf(birth){
+  if (!birth || !/^\d{4}-\d{2}-\d{2}$/.test(birth)) return "";
+  const b = new Date(birth), n = new Date(today());
+  if (isNaN(b) || b > n) return "";
+  let m = (n.getFullYear() - b.getFullYear()) * 12 + (n.getMonth() - b.getMonth());
+  if (n.getDate() < b.getDate()) m--;
+  if (m < 0) return "";
+  const y = Math.floor(m / 12), mm = m % 12;
+  if (y === 0) return `${mm}か月`;
+  return mm ? `${y}歳${mm}か月` : `${y}歳`;
+}
+/* これまでに登場した担当名 */
+function knownOwners(){
+  const seen = new Set();
+  if (DB.meta.owner) seen.add(DB.meta.owner);
+  DB.dogs.forEach(d => { if (d.basic && d.basic.trainer) seen.add(d.basic.trainer); });
+  DB.sessions.forEach(s => { if (s.trainer) seen.add(s.trainer); });
+  return [...seen];
+}
+function markBackedUp(){ DB.meta.lastBackup = today(); save(); if (view === "home") renderHome(); }
+function hasData(){ return DB.dogs.length > 0 || DB.sessions.length > 0; }
+
+/* ---- 犬まわり ---- */
+function getDog(id){ return DB.dogs.find(d => d.id === id) || null; }
+function dogName(d){ return (d.basic && d.basic.name) || "（名前なし）"; }
+function dogStamp(d){
+  let m = "";
+  ["state","photo"].concat(SEC_ORDER).forEach(k => { const u = d[k] && d[k].u; if (u && u > m) m = u; });
+  return m || d.createdAt || "";
+}
+function statusOf(d){ return ST[(d.state && d.state.status) || "active"] || ST.active; }
+function sessionsOf(id){
+  return DB.sessions.filter(s => s.dogId === id).sort((a, b) =>
+    a.date < b.date ? 1 : a.date > b.date ? -1 : String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
+}
+/* 直近の記録に書いた「次回」 */
+function nextOf(d){
+  const list = sessionsOf(d.id);   /* 新しい順 */
+  for (let i = 0; i < list.length; i++) {
+    const s = list[i];
+    if (!s.next) continue;
+    /* 予定日以降に新しい記録があれば、その予定は済んだとみなす */
+    const fulfilled = list.slice(0, i).some(x => x.date >= s.next);
+    return fulfilled ? null : s;
+  }
+  return null;
+}
+function dogDesc(d){
+  const b = d.basic || {};
+  const bits = [];
+  if (b.breed) bits.push(b.breed);
+  if (b.sex) bits.push(b.sex + (b.neutered === "済" ? "（去勢・避妊済）" : ""));
+  const age = ageOf(b.birth) || b.ageText;
+  if (age) bits.push(age);
+  if (b.weight) bits.push(b.weight + "kg");
+  return bits.join(" ・ ");
+}
+function hasBite(d){ const h = d.health || {}; return !!(h.bite && h.bite !== "なし"); }
+/* 名前から色を決める（写真がない犬のアイコン用） */
+const AVATAR_COLORS = ["#B8562B","#2B4A8F","#0E7A54","#B57708","#7A4E9A","#2F8A9E","#BE3B36","#5A6878"];
+function avatarHtml(d, lg){
+  const nm = dogName(d);
+  const p = d.photo && d.photo.data;
+  let h = 0; for (const c of nm) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  const col = AVATAR_COLORS[h % AVATAR_COLORS.length];
+  return `<span class="avatar${lg ? " lg" : ""}" style="--ac:${col}">${p ? `<img src="${esc(p)}" alt="">` : esc(nm.slice(0, 1))}</span>`;
+}
+/* 検索用の文字列 */
+function searchText(d){
+  const b = d.basic || {}, o = d.owner || {};
+  return [b.name, b.kana, b.breed, b.trainer, o.name, o.kana, o.tel].map(x => String(x || "")).join(" ").toLowerCase();
+}
+/* 空の項目は表示しない。値を人が読む形に */
+function hasVal(v){ return Array.isArray(v) ? v.length > 0 : (v !== undefined && v !== null && String(v).trim() !== ""); }
+
+/* ================= 画面遷移 ================= */
+let view = "home", curD = null, filter = "all", dtab = "karte", animating = false;
+const ORDER = {home: 0, dog: 1};
+
+function go(v, animate){
+  const from = $("#sc-" + view), to = $("#sc-" + v);
+  const dir = ORDER[v] > ORDER[view] ? "push" : "pop";
+  const same = v === view;
+  view = v;
+  $("#app").dataset.view = v;
+  $("#back").hidden = (v === "home");
+  render();
+
+  if (same || animate === false || animating) {
+    document.querySelectorAll(".screen").forEach(s => s.classList.remove("on", "leaving"));
+    to.classList.add("on");
+    syncBar();
+    return;
+  }
+  animating = true;
+  if (dir === "push") to.scrollTop = 0;
+  to.classList.add("on", "a-" + dir + "In");
+  from.classList.remove("on");
+  from.classList.add("leaving", "a-" + dir + "Out");
+
+  const done = () => {
+    from.classList.remove("leaving", "a-pushOut", "a-popOut");
+    to.classList.remove("a-pushIn", "a-popIn");
+    animating = false;
+    syncBar();
+  };
+  let n = 0;
+  const tick = () => { if (++n >= 2) done(); };
+  from.addEventListener("animationend", tick, {once: true});
+  to.addEventListener("animationend", tick, {once: true});
+  setTimeout(() => { if (animating) done(); }, 500);
+}
+function syncBar(){
+  const s = $("#sc-" + view);
+  $("#app").classList.toggle("compact", s.scrollTop > (view === "home" ? 34 : 6));
+}
+document.querySelectorAll(".screen").forEach(s => s.addEventListener("scroll", () => {
+  if (s.classList.contains("on")) syncBar();
+}, {passive: true}));
+/* 裏で描き直しても、見ていた位置は動かさない */
+function reRender(){
+  const s = document.querySelector(".screen.on");
+  const y = s ? s.scrollTop : 0;
+  render();
+  const s2 = document.querySelector(".screen.on");
+  if (s2 && y) s2.scrollTop = y;
+}
+
+/* ================= 描画 ================= */
+function render(){
+  if (view === "home") renderHome();
+  else renderDog();
+}
+const warnBanner = () => memOnly
+  ? `<div class="warn"><span>この端末では自動保存が使えません。閉じると消えるので、右上の… → バックアップで控えを取ってください。</span></div>` : "";
+
+/* ---- 犬の一覧 ---- */
+function renderHome(){
+  $("#title").innerHTML = APP;
+  $("#orgname").textContent = DB.meta.org || "ドッグトレーナー用カルテ";
+  const q = $("#q").value.trim().toLowerCase();
+  $("#hfilters").querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", String(x.dataset.f === filter)));
+
+  const list = DB.dogs
+    .filter(d => !q || searchText(d).includes(q))
+    .filter(d => filter === "all" || statusOf(d).k === filter)
+    .sort((a, b) => {
+      /* 預かり中を上に、あとは最近さわった順 */
+      const ab = statusOf(a).k === "boarding" ? 0 : 1, bb = statusOf(b).k === "boarding" ? 0 : 1;
+      if (ab !== bb) return ab - bb;
+      return dogStamp(b).localeCompare(dogStamp(a)) || dogName(a).localeCompare(dogName(b), "ja");
+    });
+
+  /* 予定: 次回レッスン・お迎え・預かり開始 */
+  const t = today();
+  const plans = [];
+  DB.dogs.forEach(d => {
+    if (statusOf(d).k === "done") return;
+    const n = nextOf(d);
+    if (n) plans.push({d, date: n.next, what: "次回" + (KD[n.kind] ? KD[n.kind].label : "レッスン") + (n.nextTime ? " " + n.nextTime : "")});
+    const b = d.boarding || {};
+    if (b.from && b.from >= t) plans.push({d, date: b.from, what: "預かり開始" + (b.type ? "（" + b.type + "）" : "")});
+    if (b.to && b.to >= t && (!b.from || b.from <= t || b.from === b.to)) plans.push({d, date: b.to, what: "お迎え" + (b.pickup ? " " + b.pickup : "")});
+  });
+  plans.sort((a, b) => a.date.localeCompare(b.date));
+
+  const since = daysSince(DB.meta.lastBackup);
+  const nudge = (!q && hasData() && !DB.meta.syncUrl && (since === null || since >= 14))
+    ? `<div class="nudge">
+        <span class="t">${since === null ? "まだ一度もバックアップしていません。" : `前回のバックアップから${since}日たちました。`}<br>控えを取っておくと機種変でも安心です。</span>
+        <button id="nudgeBtn">バックアップ</button>
+      </div>` : "";
+
+  $("#plan").innerHTML = demoBanner() + nudge + ((!q && filter === "all" && plans.length) ? `
+    <div class="grouphead"><h2>予定</h2><span class="n">${plans.length}件</span></div>
+    <div class="list">${plans.slice(0, 12).map(p => `
+      <button class="item" data-d="${p.d.id}">
+        <span class="pill${p.date < t ? " over" : p.date === t ? " today" : ""}">${p.date < t ? "過ぎ " : ""}${esc(fmtDate(p.date))}</span>
+        <span class="txt">
+          <span class="nm">${esc(dogName(p.d))}</span>
+          <span class="meta">${esc(p.what)}${(p.d.owner && p.d.owner.name) ? " ・ " + esc(p.d.owner.name) + "様" : ""}</span>
+        </span>
+        <span class="chev">${ICON.chev}</span>
+      </button>`).join("")}</div>` : "");
+
+  $("#dlist").innerHTML = warnBanner() + (
+    list.length ? `
+      <div class="grouphead"><h2>${filter === "all" ? "犬" : ST[filter].label}</h2><span class="n">${list.length}頭</span></div>
+      <div class="list">${list.map(d => {
+        const st = statusOf(d), recs = sessionsOf(d.id), o = d.owner || {};
+        const bits = [];
+        if (o.name) bits.push(o.name + "様");
+        if (d.basic && d.basic.trainer) bits.push("担当 " + d.basic.trainer);
+        if (recs.length) bits.push(`最終 ${fmtDate(recs[0].date)}`);
+        else bits.push("記録なし");
+        return `<button class="item" data-d="${d.id}">
+          ${avatarHtml(d)}
+          <span class="txt">
+            <span class="nm">${esc(dogName(d))}${d.basic && d.basic.breed ? `<span class="breed">${esc(d.basic.breed)}</span>` : ""}${hasBite(d) ? `<span class="chip s-danger nodot">咬</span>` : ""}</span>
+            <span class="meta">${bits.join(" ・ ")}</span>
+          </span>
+          ${st.k !== "active" ? `<span class="chip s-${st.k}">${st.label}</span>` : ""}
+          <span class="chev">${ICON.chev}</span>
+        </button>`;
+      }).join("")}</div>`
+    : `<div class="empty" style="margin-top:22px">
+        <span class="art">${ICON.paw}</span>
+        <p>${q ? `「${esc(q)}」に合う犬は見つかりません。`
+              : filter !== "all" ? `${ST[filter].label}の犬はいません。`
+              : "まだ登録がありません。<br>上のボタンから最初の1頭を登録しましょう。"}</p>
+        ${(!q && filter === "all" && !DEMO) ? `<a class="btn sm plain" href="./?demo">見本データ入りのお試し版を見る</a>` : ""}
+      </div>`
+  );
+}
+
+/* ---- 犬の詳細 ---- */
+function renderDog(){
+  const d = getDog(curD);
+  if (!d) return go("home", false);
+  const st = statusOf(d), o = d.owner || {};
+  $("#title").innerHTML = `${esc(dogName(d))}<span class="sub">${esc(dogDesc(d) || "カルテ")}</span>`;
+  $("#dtabs").querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", String(x.dataset.t === dtab)));
+
+  const flags = [`<button class="chip s-${st.k} statusbtn" id="stbtn">${st.label}</button>`];
+  if (hasBite(d)) flags.push(`<span class="chip s-danger">咬傷歴あり</span>`);
+  if (d.basic && d.basic.trainer) flags.push(`<span class="chip s-paused nodot">担当 ${esc(d.basic.trainer)}</span>`);
+  $("#dhead").setAttribute("style", `--pc:${st.color}`);
+  $("#dhead").innerHTML = `
+    ${avatarHtml(d, true)}
+    <span class="t">
+      <span class="big">${esc(dogName(d))}</span>
+      <span class="desc">${esc(dogDesc(d) || "基本情報を入れましょう")}${o.name ? `<br>${esc(o.name)}様${o.tel ? ` <a href="tel:${esc(o.tel.replace(/[^\d+]/g, ""))}" style="color:var(--brand);font-weight:700;text-decoration:none">${esc(o.tel)}</a>` : ""}` : ""}</span>
+      <span class="flags">${flags.join("")}</span>
+    </span>`;
+
+  if (dtab === "karte") renderKarte(d);
+  else renderRecs(d);
+}
+
+/* カルテ（項目ごとのカード） */
+function renderKarte(d){
+  $("#dbody").innerHTML = SEC_ORDER.map(k => {
+    const sec = SEC[k], data = d[k] || {};
+    const rows = [];
+    sec.fields.forEach(f => {
+      const v = data[f.k];
+      if (f.type === "skills") {
+        const m = v || {};
+        const have = SKILLS.filter(s => m[s[0]] && m[s[0]] !== "no");
+        if (have.length) rows.push(["", `<div class="skillview">${have.map(s => `<span class="${esc(m[s[0]])}">${esc(s[1])}${m[s[0]] === "wip" ? "・練習中" : ""}</span>`).join("")}</div>`]);
+        return;
+      }
+      if (!hasVal(v)) return;
+      let out;
+      if (Array.isArray(v)) out = esc(v.join("、"));
+      else if (f.type === "date") out = esc(fmtFull(v)) + (f.k === "birth" && ageOf(v) ? `（${ageOf(v)}）` : "");
+      else if (f.type === "tel") out = `<a href="tel:${esc(String(v).replace(/[^\d+]/g, ""))}">${esc(v)}</a>`;
+      else if (f.k === "bite" && v !== "なし") out = `<span class="alert">${esc(v)}</span>`;
+      else out = esc(v);
+      rows.push([f.label, out]);
+    });
+    const showEmpty = !rows.length;
+    return `<div class="card">
+      <button class="chead" data-edit="${k}">
+        <h3>${esc(sec.title)}</h3>
+        <span class="ed">${ICON.edit}${showEmpty ? "入力" : "編集"}</span>
+      </button>
+      ${showEmpty
+        ? `<p class="none">${k === "boarding" ? "預かりの予定が入ったらここに。" : k === "visit" ? "出張先の情報はここに。" : "まだ入っていません。"}</p>`
+        : `<div class="cbody"><dl class="kv">${rows.map(r => r[0] ? `<dt>${esc(r[0])}</dt><dd>${r[1]}</dd>` : `<dd style="grid-column:1 / -1">${r[1]}</dd>`).join("")}</dl></div>`}
+    </div>`;
+  }).join("") + `
+    <div class="hairline"></div>
+    <p class="tiny" style="margin:0 3px 10px">登録 ${esc(fmtFull(String(d.createdAt || "").slice(0, 10)))}${dogStamp(d) ? ` ・ 最終更新 ${esc(fmtFull(dogStamp(d).slice(0, 10)))}` : ""}${d.state && d.state.by ? ` ・ ${esc(d.state.by)}` : ""}</p>
+    <button class="btn sm danger" id="deldog">${ICON.trash}この犬のカルテを削除</button>`;
+}
+
+/* 記録の一覧 */
+function renderRecs(d){
+  const recs = sessionsOf(d.id);
+  $("#dbody").innerHTML = recs.length ? `
+    <div class="grouphead" style="margin-top:4px"><h2>記録</h2><span class="n">${recs.length}件</span></div>
+    ${recs.map(s => {
+      const k = KD[s.kind] || KD.other;
+      const subs = [];
+      if (s.good) subs.push(["できた", s.good]);
+      if (s.issue) subs.push(["課題", s.issue]);
+      if (s.homework) subs.push(["宿題", s.homework]);
+      if (s.kind === "board") {
+        const b = [];
+        if (s.appetite) b.push("食欲 " + s.appetite);
+        if (s.stool) b.push("排泄 " + s.stool);
+        if (s.cond) b.push("体調 " + s.cond);
+        if (b.length) subs.push(["様子", b.join(" ・ ")]);
+      }
+      if (s.memo) subs.push(["メモ", s.memo]);
+      const tags = (s.mood || []).slice();
+      if (s.place) tags.unshift(s.place);
+      if (s.dur) tags.push(s.dur + "分");
+      if (s.fee) tags.push(`¥${Number(s.fee).toLocaleString()}${s.paid ? " 済" : " 未収"}`);
+      return `<button class="rec" data-rec="${s.id}">
+        <div class="top">
+          <span class="date">${esc(fmtFull(s.date))}${s.time ? " " + esc(s.time) : ""}</span>
+          <span class="chip k-${k.k}">${k.label}</span>
+          ${s.trainer ? `<span class="who">${esc(s.trainer)}</span>` : ""}
+        </div>
+        ${s.content ? `<div class="body">${esc(s.content)}</div>` : ""}
+        ${subs.map(x => `<div class="sub"><b>${esc(x[0])}</b>${esc(x[1])}</div>`).join("")}
+        ${tags.length ? `<div class="tags">${tags.map(x => `<span>${esc(x)}</span>`).join("")}</div>` : ""}
+        ${s.next ? `<span class="next">${ICON.cal}次回 ${esc(fmtFull(s.next))}${s.nextTime ? " " + esc(s.nextTime) : ""}</span>` : ""}
+      </button>`;
+    }).join("")}`
+  : `<div class="empty" style="margin-top:4px"><span class="art">${ICON.paw}</span><p>まだ記録がありません。<br>上のボタンから、今日のレッスンや預かりの様子を残せます。</p></div>`;
+}
+
+/* ================= シート ================= */
+let sheetDoneFn = null;
+function openSheet({title, done, cancel, html, onDone}){
+  $("#sheetTitle").textContent = title;
+  $("#sheetCancel").textContent = cancel || "キャンセル";
+  $("#sheetDone").textContent = done || "";
+  $("#sheetDone").style.visibility = done ? "visible" : "hidden";
+  $("#sheetBody").innerHTML = html;
+  $("#sheetBody").scrollTop = 0;
+  sheetDoneFn = onDone || null;
+  $("#scrim").classList.add("on");
+  $("#sheet").classList.add("on");
+}
+function closeSheet(){
+  $("#scrim").classList.remove("on");
+  $("#sheet").classList.remove("on");
+  sheetDoneFn = null;
+  if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+}
+function sheetOpen(){ const s = $("#sheet"); return !!s && s.classList.contains("on"); }
+$("#scrim").addEventListener("click", closeSheet);
+$("#sheetCancel").addEventListener("click", closeSheet);
+$("#sheetDone").addEventListener("click", () => { if (sheetDoneFn) sheetDoneFn(); });
+document.addEventListener("keydown", e => { if (e.key === "Escape") closeSheet(); });
+
+/* ================= 入力欄の部品 =================
+   SEC の表から入力欄を作り、保存時に読み取る。項目を増やすときは SEC を増やすだけ */
+function fid(sec, f){ return `f-${sec}-${f.k}`; }
+function fieldHtml(sec, f, v){
+  const id = fid(sec, f);
+  const lab = f.label ? `<span class="label">${esc(f.label)}${f.req ? '<span class="req">*</span>' : ""}</span>` : "";
+  const t = f.type || "text";
+  if (t === "textarea") return `<div>${lab}<textarea class="field" id="${id}" placeholder="${esc(f.ph || "")}">${esc(v || "")}</textarea></div>`;
+  if (t === "date" || t === "time") return `<div>${lab}<input class="field" type="${t}" id="${id}" value="${esc(v || "")}"></div>`;
+  if (t === "pick") return `<div>${lab}<div class="chips tight" data-pick="${id}">${f.opts.map(o =>
+      `<button type="button" data-v="${esc(o)}" aria-pressed="${String(v === o)}">${esc(o)}</button>`).join("")}</div></div>`;
+  if (t === "multi") { const arr = Array.isArray(v) ? v : []; return `<div>${lab}<div class="chips tight" data-multi="${id}">${f.opts.map(o =>
+      `<button type="button" data-v="${esc(o)}" aria-pressed="${String(arr.includes(o))}">${esc(o)}</button>`).join("")}</div></div>`; }
+  if (t === "checks") { const arr = Array.isArray(v) ? v : []; return `<div>${lab}<div class="checks" data-multi="${id}">${f.opts.map(o =>
+      `<button type="button" data-v="${esc(o)}" aria-pressed="${String(arr.includes(o))}">${esc(o)}</button>`).join("")}</div></div>`; }
+  if (t === "skills") { const m = v || {}; return `<div data-skills="${id}">${SKILLS.map(s => `
+      <div class="skillrow" data-sk="${s[0]}"><span class="nm">${esc(s[1])}</span>
+        <div class="seg">${SKILL_V.map(x => `<button type="button" data-v="${x[0]}" aria-pressed="${String((m[s[0]] || "no") === x[0])}">${x[1]}</button>`).join("")}</div>
+      </div>`).join("")}</div>`; }
+  /* 文字入力（候補チップつき） */
+  const chips = typeof f.chips === "function" ? f.chips() : (f.chips || []);
+  const type = t === "tel" ? "tel" : t === "email" ? "email" : "text";
+  const mode = f.mode ? ` inputmode="${f.mode}"` : t === "tel" ? ' inputmode="tel"' : "";
+  return `<div>${lab}<input class="field" type="${type}" id="${id}" value="${esc(v || "")}" placeholder="${esc(f.ph || "")}" autocomplete="off"${mode}>
+    ${chips.length ? `<div class="chips scroll" data-chips="${id}">${chips.map(c => `<button type="button" data-v="${esc(c)}">${esc(c)}</button>`).join("")}</div>` : ""}</div>`;
+}
+function readField(sec, f){
+  const id = fid(sec, f), t = f.type || "text";
+  if (t === "pick") { const b = document.querySelector(`[data-pick="${id}"] button[aria-pressed="true"]`); return b ? b.dataset.v : ""; }
+  if (t === "multi" || t === "checks") return [...document.querySelectorAll(`[data-multi="${id}"] button[aria-pressed="true"]`)].map(b => b.dataset.v);
+  if (t === "skills") {
+    const m = {};
+    document.querySelectorAll(`[data-skills="${id}"] .skillrow`).forEach(r => {
+      const b = r.querySelector('button[aria-pressed="true"]');
+      if (b && b.dataset.v !== "no") m[r.dataset.sk] = b.dataset.v;
+    });
+    return m;
+  }
+  const el = $("#" + id);
+  return el ? el.value.trim() : "";
+}
+/* チップ類の押した時の動き（シートの中で共通） */
+$("#sheetBody").addEventListener("click", e => {
+  const btn = e.target.closest("button[data-v]");
+  if (!btn) return;
+  const pick = btn.closest("[data-pick]");
+  if (pick) {
+    const on = btn.getAttribute("aria-pressed") === "true";
+    pick.querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", "false"));
+    if (!on) btn.setAttribute("aria-pressed", "true");
+    pick.dispatchEvent(new CustomEvent("pick", {bubbles: true, detail: on ? "" : btn.dataset.v}));
+    return;
+  }
+  if (btn.closest("[data-multi]")) { btn.setAttribute("aria-pressed", String(btn.getAttribute("aria-pressed") !== "true")); return; }
+  const chips = btn.closest("[data-chips]");
+  if (chips) { const el = $("#" + chips.dataset.chips); if (el) { el.value = btn.dataset.v; el.dispatchEvent(new Event("input")); } return; }
+  const row = btn.closest(".skillrow");
+  if (row) { row.querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", String(x === btn))); }
+});
+
+/* ================= カルテの項目を編集 ================= */
+function editSection(k){
+  const d = getDog(curD);
+  if (!d || !SEC[k]) return;
+  const sec = SEC[k], data = d[k] || {};
+  openSheet({
+    title: sec.title,
+    done: "保存",
+    html: `<div class="stack">${sec.fields.map(f => fieldHtml(k, f, data[f.k])).join("")}
+      ${k === "boarding" ? `<p class="tiny" style="margin:-4px 3px 0">保存すると、犬の状態も「預かり中」に合わせるか聞きます。</p>` : ""}</div>`,
+    onDone: () => {
+      const out = {};
+      for (const f of sec.fields) {
+        const v = readField(k, f);
+        if (f.req && !hasVal(v)) return toast(`${f.label}を入れてください`);
+        out[f.k] = v;
+      }
+      out.u = nowISO(); out.by = DB.meta.owner || "";
+      d[k] = out;
+      markDirty("dogs", d.id);
+      save(); closeSheet(); render(); queueSync(); toast("保存しました");
+      /* 預かり期間の中なら、状態も合わせる */
+      if (k === "boarding" && out.from && out.to && out.from <= today() && today() <= out.to && statusOf(d).k !== "boarding") {
+        if (confirm("いま預かり期間中です。状態を「預かり中」にしますか？")) setStatus(d, "boarding");
+      }
+    }
+  });
+}
+function setStatus(d, k){
+  d.state = {status: k, u: nowISO(), by: DB.meta.owner || ""};
+  markDirty("dogs", d.id);
+  save(); render(); queueSync();
+}
+
+/* ---- 状態の変更 ---- */
+function statusForm(){
+  const d = getDog(curD);
+  if (!d) return;
+  let picked = statusOf(d).k;
+  openSheet({
+    title: "状態を変更",
+    done: "決定",
+    html: `<div class="stack">
+      <div class="picker" id="stpick">${STATUS.map(s => `<button type="button" data-k="${s.k}" aria-pressed="${String(s.k === picked)}" style="--pc:${s.color}">${s.label}</button>`).join("")}</div>
+      <p class="tiny" style="margin:-6px 3px 0">「卒業」にすると一覧の下に移り、予定にも出なくなります。記録は残ります。</p>
+    </div>`,
+    onDone: () => { setStatus(d, picked); closeSheet(); toast(`${ST[picked].label}にしました`); }
+  });
+  $("#stpick").addEventListener("click", e => {
+    const b = e.target.closest("button[data-k]");
+    if (!b) return;
+    picked = b.dataset.k;
+    $("#stpick").querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", String(x === b)));
+  });
+}
+
+/* ---- 新しい犬 ---- */
+const NEW_FIELDS = [
+  {k:"name",    label:"犬の名前", req:true, ph:"例）ココ"},
+  {k:"breed",   label:"犬種", ph:"例）トイプードル", chips:BREEDS},
+  {k:"sex",     label:"性別", type:"pick", opts:["オス","メス"]},
+  {k:"birth",   label:"生年月日（わかれば）", type:"date"},
+  {k:"oname",   label:"飼い主のお名前", ph:"例）山田 花子"},
+  {k:"otel",    label:"飼い主の電話番号", type:"tel", ph:"090-0000-0000"},
+  {k:"trainer", label:"担当トレーナー", ph:"例）竹内", chips:() => knownOwners()}
+];
+function newDogForm(){
+  openSheet({
+    title: "新しい犬を登録",
+    done: "登録",
+    html: `<div class="stack">
+      ${NEW_FIELDS.map(f => fieldHtml("new", f, f.k === "trainer" ? (DB.meta.owner || "") : "")).join("")}
+      <p class="tiny" style="margin:-4px 3px 0">名前だけで登録してもOK。健康・生活・困りごとなどは、カルテの各項目からあとで足せます。</p>
+    </div>`,
+    onDone: () => {
+      const v = {};
+      NEW_FIELDS.forEach(f => { v[f.k] = readField("new", f); });
+      if (!v.name) return toast("犬の名前を入れてください");
+      const u = nowISO(), by = DB.meta.owner || "";
+      const d = {
+        id: uid(), createdAt: u,
+        state: {status: "active", u, by},
+        basic: {name: v.name, breed: v.breed, sex: v.sex, birth: v.birth, trainer: v.trainer, u, by},
+        owner: {name: v.oname, tel: v.otel, u, by},
+        photo: {}, health: {}, life: {}, issues: {}, skills: {}, visit: {}, boarding: {}
+      };
+      DB.dogs.push(d);
+      markDirty("dogs", d.id);
+      save(); closeSheet();
+      curD = d.id; dtab = "karte";
+      $("#q").value = "";
+      go("dog"); queueSync();
+      toast(`${v.name}を登録しました`);
+    }
+  });
+}
+
+/* ---- 写真 ---- */
+function photoForm(){
+  const d = getDog(curD);
+  if (!d) return;
+  const has = !!(d.photo && d.photo.data);
+  openSheet({
+    title: "写真",
+    cancel: "閉じる",
+    html: `<div class="stack">
+      <div class="photo">${avatarHtml(d, true)}
+        <div class="acts">
+          <label class="btn primary" style="cursor:pointer">${ICON.camera}${has ? "写真を変える" : "写真を選ぶ"}<input type="file" id="ph-file" accept="image/*"></label>
+          ${has ? `<button class="btn sm danger" id="ph-del">${ICON.trash}写真を消す</button>` : ""}
+        </div>
+      </div>
+      <p class="tiny" style="margin:-6px 3px 0">小さく縮めて保存するので、同期しても重くなりません。</p>
+    </div>`
+  });
+  $("#ph-file").addEventListener("change", e => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    shrinkImage(file).then(data => {
+      d.photo = {data, u: nowISO(), by: DB.meta.owner || ""};
+      markDirty("dogs", d.id);
+      save(); closeSheet(); render(); queueSync(); toast("写真を保存しました");
+    }).catch(() => toast("この写真は読み込めませんでした"));
+  });
+  const del = $("#ph-del");
+  if (del) del.addEventListener("click", () => {
+    d.photo = {data: "", u: nowISO(), by: DB.meta.owner || ""};
+    markDirty("dogs", d.id);
+    save(); closeSheet(); render(); queueSync(); toast("写真を消しました");
+  });
+}
+/* 画像を小さくして、文字数が収まるまで画質を落とす */
+function shrinkImage(file){
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const r = Math.min(1, PHOTO_MAX / Math.max(img.width, img.height));
+      const w = Math.max(1, Math.round(img.width * r)), h = Math.max(1, Math.round(img.height * r));
+      const c = document.createElement("canvas");
+      c.width = w; c.height = h;
+      c.getContext("2d").drawImage(img, 0, 0, w, h);
+      let q = 0.8, out = c.toDataURL("image/jpeg", q);
+      while (out.length > PHOTO_CHARS && q > 0.3) { q -= 0.1; out = c.toDataURL("image/jpeg", q); }
+      if (out.length > PHOTO_CHARS) {
+        const c2 = document.createElement("canvas");
+        c2.width = Math.round(w * 0.7); c2.height = Math.round(h * 0.7);
+        c2.getContext("2d").drawImage(img, 0, 0, c2.width, c2.height);
+        out = c2.toDataURL("image/jpeg", 0.5);
+      }
+      resolve(out);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("decode")); };
+    img.src = url;
+  });
+}
+
+/* ---- 記録（レッスン・預かり日誌） ---- */
+const REC_PLACES = ["自宅","公園","教室・施設","オンライン"];
+function sessionForm(sid){
+  const d = getDog(curD);
+  if (!d) return;
+  const s = sid ? DB.sessions.find(x => x.id === sid) : null;
+  const v = s || {kind: statusOf(d).k === "boarding" ? "board" : "visit", date: today(), trainer: DB.meta.owner || "", mood: [], paid: false};
+  let kind = v.kind || "visit";
+  const F = (k, label, extra) => Object.assign({k, label}, extra || {});
+  const fields = {
+    date:     F("date", "日付", {type:"date"}),
+    time:     F("time", "時間", {type:"time"}),
+    dur:      F("dur", "所要時間（分）", {ph:"例）60", mode:"numeric"}),
+    trainer:  F("trainer", "担当", {ph:"例）竹内", chips:() => knownOwners()}),
+    place:    F("place", "場所", {type:"pick", opts:REC_PLACES}),
+    content:  F("content", "やった内容", {type:"textarea", ph:"例）おすわり・まての練習、インターホン対策の導入"}),
+    appetite: F("appetite", "食欲", {type:"pick", opts:["完食","半分","食べず"]}),
+    stool:    F("stool", "排泄", {type:"pick", opts:["良好","軟便","下痢","なし"]}),
+    cond:     F("cond", "体調", {type:"pick", opts:["良好","気になる"]}),
+    mood:     F("mood", "犬の様子", {type:"multi", opts:MOODS}),
+    good:     F("good", "できたこと", {type:"textarea", ph:"例）2回目でまてが10秒できた"}),
+    issue:    F("issue", "課題", {type:"textarea", ph:"例）人が動くと立ってしまう"}),
+    homework: F("homework", "飼い主への宿題", {type:"textarea", ph:"例）1日5分、まての練習。成功したらすぐごほうび"}),
+    next:     F("next", "次回の予定日", {type:"date"}),
+    nextTime: F("nextTime", "次回の時間", {type:"time"}),
+    fee:      F("fee", "料金（円）", {ph:"例）6000", mode:"numeric"}),
+    paid:     F("paid", "支払い", {type:"pick", opts:["済","未収"]}),
+    memo:     F("memo", "メモ", {type:"textarea"})
+  };
+  const H = k => fieldHtml("r", fields[k], k === "paid" ? (v.paid ? "済" : (v.fee ? "未収" : "")) : v[k]);
+  openSheet({
+    title: s ? "記録を編集" : `${dogName(d)}の記録`,
+    done: "保存",
+    html: `<div class="stack">
+      <div>
+        <span class="label">種類</span>
+        <div class="picker" id="kpick">${KINDS.map(x => `<button type="button" data-k="${x.k}" aria-pressed="${String(x.k === kind)}" style="--pc:${x.color}">${x.label}</button>`).join("")}</div>
+      </div>
+      <div class="row">${H("date")}${H("time")}</div>
+      <div class="row">${H("dur")}${H("trainer")}</div>
+      ${H("place")}
+      ${H("content")}
+      <div id="boardonly" ${kind === "board" ? "" : "hidden"} class="stack" style="gap:14px">${H("appetite")}${H("stool")}${H("cond")}</div>
+      ${H("mood")}
+      ${H("good")}
+      ${H("issue")}
+      ${H("homework")}
+      <div class="row">${H("next")}${H("nextTime")}</div>
+      <div class="row">${H("fee")}${H("paid")}</div>
+      ${H("memo")}
+      ${s ? `<div class="hairline" style="margin:2px 0"></div><button class="btn danger" id="r-del">${ICON.trash}この記録を削除</button>` : ""}
+      <p class="tiny" style="margin:-4px 3px 0">種類と日付だけで保存してもOK。あとから何度でも直せます。</p>
+    </div>`,
+    onDone: () => {
+      const out = {};
+      Object.keys(fields).forEach(k => { out[k] = readField("r", fields[k]); });
+      if (!out.date) return toast("日付を入れてください");
+      out.paid = out.paid === "済";
+      out.fee = String(out.fee || "").replace(/[^\d]/g, "");
+      const u = nowISO(), by = DB.meta.owner || "";
+      if (s) Object.assign(s, out, {kind, updatedAt: u, by});
+      else DB.sessions.push(Object.assign({id: uid(), dogId: d.id, createdAt: u, updatedAt: u, by, kind}, out));
+      markDirty("sessions", s ? s.id : DB.sessions[DB.sessions.length - 1].id);
+      if (out.trainer && !DB.meta.owner) DB.meta.owner = out.trainer;
+      save(); closeSheet(); dtab = "recs"; render(); queueSync(); toast(s ? "直しました" : "記録しました");
+    }
+  });
+  $("#kpick").addEventListener("click", e => {
+    const b = e.target.closest("button[data-k]");
+    if (!b) return;
+    kind = b.dataset.k;
+    $("#kpick").querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", String(x === b)));
+    $("#boardonly").hidden = kind !== "board";
+  });
+  const del = $("#r-del");
+  if (del) del.addEventListener("click", () => {
+    if (!confirm("この記録を削除しますか？")) return;
+    tomb("sessions", s.id);
+    DB.sessions = DB.sessions.filter(x => x.id !== s.id);
+    save(); closeSheet(); render(); queueSync(); toast("削除しました");
+  });
+}
+
+/* ---- 犬ごと削除 ---- */
+function deleteDog(){
+  const d = getDog(curD);
+  if (!d) return;
+  const n = sessionsOf(d.id).length;
+  if (!confirm(`「${dogName(d)}」のカルテと記録${n ? n + "件" : ""}を削除します。元に戻せません。よろしいですか？`)) return;
+  tomb("dogs", d.id);
+  DB.sessions.filter(s => s.dogId === d.id).forEach(s => tomb("sessions", s.id));
+  DB.sessions = DB.sessions.filter(s => s.dogId !== d.id);
+  DB.dogs = DB.dogs.filter(x => x.id !== d.id);
+  save(); curD = null; go("home"); queueSync(); toast("削除しました");
+}
+
+/* ================= スプレッドシート同期 =================
+   犬のカルテは「項目（基本情報・健康…）ごとに最終更新が新しいほう」を採用、
+   記録は「1件ごとに最終更新が新しいほう」を採用する。
+   削除はIDを「削除済み」として覚えておき、全員に伝える。
+   こちらから送るのは、前回の同期のあとで触ったぶんだけ（dirty）。
+   ======================================================== */
+let syncing = false, syncTimer = null;
+
+function markDirty(type, id){ const d = DB.meta.dirty[type]; if (id && !d.includes(id)) d.push(id); }
+function tomb(type, id){
+  if (!id) return;
+  if (!DB.meta.deleted[type].includes(id)) DB.meta.deleted[type].push(id);
+  DB.meta.dirty[type] = DB.meta.dirty[type].filter(x => x !== id);
+}
+function collectPayload(){
+  return {
+    key: DB.meta.syncKey || "",
+    owner: DB.meta.owner || "",
+    since: DB.meta.since || "",
+    dogs: DB.dogs.filter(d => DB.meta.dirty.dogs.includes(d.id)),
+    sessions: DB.sessions.filter(s => DB.meta.dirty.sessions.includes(s.id)),
+    deleted: DB.meta.deleted
+  };
+}
+/* 同期URLを覚える。末尾の ?k=合言葉 は取り出して別に持っておく */
+function setSyncUrl(raw){
+  const url = String(raw || "").trim();
+  DB.meta.syncUrl = url;
+  const m = url.match(/[?&]k=([^&#]+)/);
+  DB.meta.syncKey = m ? decodeURIComponent(m[1]) : "";
+}
+/* 犬のカルテを項目ごとに合流させる。変わったら true */
+function mergeDog(local, inc){
+  let changed = false;
+  ["state", "photo"].concat(SEC_ORDER).forEach(k => {
+    const a = local[k], b = inc[k];
+    if (!b || typeof b !== "object") return;
+    if (!a || !a.u || (b.u && String(b.u) > String(a.u))) { local[k] = b; changed = true; }
+  });
+  if (!local.createdAt && inc.createdAt) local.createdAt = inc.createdAt;
+  return changed;
+}
+/* サーバーから返ってきたぶんを端末に取り込む */
+function applyServer(res, sent){
+  const delD = new Set((res.deleted && res.deleted.dogs) || []);
+  const delS = new Set((res.deleted && res.deleted.sessions) || []);
+  DB.meta.deleted.dogs.forEach(x => delD.add(x));
+  DB.meta.deleted.sessions.forEach(x => delS.add(x));
+  DB.meta.deleted = {dogs: [...delD], sessions: [...delS]};
+
+  DB.dogs = DB.dogs.filter(d => !delD.has(d.id));
+  DB.sessions = DB.sessions.filter(s => !delS.has(s.id) && !delD.has(s.dogId));
+
+  let got = 0;
+  (res.dogs || []).forEach(inc => {
+    if (!inc || !inc.id || delD.has(inc.id)) return;
+    const local = getDog(inc.id);
+    if (!local) { DB.dogs.push(inc); got++; }
+    else if (mergeDog(local, inc)) got++;
+  });
+  (res.sessions || []).forEach(inc => {
+    if (!inc || !inc.id || !inc.dogId || delS.has(inc.id) || delD.has(inc.dogId)) return;
+    const i = DB.sessions.findIndex(s => s.id === inc.id);
+    if (i < 0) { DB.sessions.push(inc); got++; }
+    else if (String(inc.updatedAt || "") > String(DB.sessions[i].updatedAt || "")) { DB.sessions[i] = inc; got++; }
+  });
+  normalize();
+
+  /* 送れたものは「送るリスト」から外す。送ったあとに触ったものは残す */
+  const keep = (type, id, stampOf) => {
+    const cur = type === "dogs" ? getDog(id) : DB.sessions.find(s => s.id === id);
+    if (!cur) return false;
+    if (!(id in sent[type])) return true;
+    return stampOf(cur) !== sent[type][id];
+  };
+  DB.meta.dirty.dogs = DB.meta.dirty.dogs.filter(id => keep("dogs", id, dogStamp));
+  DB.meta.dirty.sessions = DB.meta.dirty.sessions.filter(id => keep("sessions", id, s => String(s.updatedAt || "")));
+
+  if (res.serverTime) DB.meta.since = res.serverTime;
+  DB.meta.lastSync = nowISO();
+  save();
+  return got;
+}
+/* 同期を実行。manual=true なら結果をトーストで知らせる */
+async function doSync(manual){
+  if (DEMO) { if (manual) toast("お試し版ではチーム共有は使えません"); return; }
+  const url = String(DB.meta.syncUrl || "").trim();
+  if (!url) { if (manual) toast("同期先が未設定です"); return; }
+  if (syncing) return;
+  if (navigator.onLine === false) { if (manual) toast("オフラインです。電波のある所でどうぞ"); return; }
+
+  syncing = true;
+  setSyncLabel("同期中…");
+  try {
+    const payload = collectPayload();
+    const sent = {dogs: {}, sessions: {}};
+    payload.dogs.forEach(d => { sent.dogs[d.id] = dogStamp(d); });
+    payload.sessions.forEach(s => { sent.sessions[s.id] = String(s.updatedAt || ""); });
+    const res = await fetch(url, {
+      method: "POST",
+      /* text/plain にしておくと余計な事前確認が飛ばず、GASにそのまま届く */
+      headers: {"Content-Type": "text/plain;charset=utf-8"},
+      body: JSON.stringify(payload),
+      redirect: "follow"
+    });
+    const data = await res.json();
+    if (!data || !data.ok) throw new Error((data && data.error) || "サーバーが受け付けませんでした");
+    const got = applyServer(data, sent);
+    reRender();
+    setSyncLabel("");
+    if (manual) toast(got ? `${got}件を受け取りました` : "最新の状態です");
+  } catch (e) {
+    setSyncLabel("");
+    if (manual) toast(String(e && e.message || "").includes("合言葉") ? "合言葉が違います。URLを確認してください" : "同期できませんでした。URLと電波を確認してください");
+  } finally {
+    syncing = false;
+  }
+}
+/* 記録するたびに呼ばれる。少し待ってからまとめて送る */
+function queueSync(){
+  if (!DB.meta.syncUrl || DB.meta.autoSync === false) return;
+  clearTimeout(syncTimer);
+  syncTimer = setTimeout(() => doSync(false), 3000);
+}
+function setSyncLabel(text){
+  const el = $("#syncState");
+  if (el) el.textContent = text || syncSummary();
+}
+function syncSummary(){
+  if (!DB.meta.syncUrl) return "未設定（ひとりで使うなら不要）";
+  if (!DB.meta.lastSync) return "まだ同期していません";
+  const d = new Date(DB.meta.lastSync);
+  const pending = DB.meta.dirty.dogs.length + DB.meta.dirty.sessions.length;
+  return `最終同期 ${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}${pending ? `（未送信 ${pending}件）` : ""}`;
+}
+window.addEventListener("online", () => queueSync());
+
+/* ---- 開いている間の自動取り込み ----
+   ・アプリに戻ってきた時 ・見ている間は3分おき
+   入力中に横から書き換わらないよう、シートを開いている間は見送る */
+const PULL_EVERY = 3 * 60 * 1000;
+const PULL_GAP   = 30 * 1000;
+let pullTimer = null;
+function autoSyncOn(){ return !!DB.meta.syncUrl && DB.meta.autoSync !== false; }
+function sinceLastSync(){
+  const t = Date.parse(DB.meta.lastSync || "");
+  return isNaN(t) ? Infinity : Date.now() - t;
+}
+function pullNow(){
+  if (!autoSyncOn() || syncing || sheetOpen()) return;
+  if (document.hidden || navigator.onLine === false) return;
+  doSync(false);
+}
+function startPull(){
+  stopPull();
+  if (!autoSyncOn()) return;
+  pullTimer = setInterval(pullNow, PULL_EVERY);
+}
+function stopPull(){ clearInterval(pullTimer); pullTimer = null; }
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) { stopPull(); return; }
+  startPull();
+  if (sinceLastSync() > PULL_GAP) pullNow();
+});
+window.addEventListener("pageshow", e => { if (e.persisted) { startPull(); pullNow(); } });
+
+/* 招待リンク（同期URLを # の後ろに隠して持たせる。サーバーには送られない） */
+function inviteLink(){
+  const u = String(DB.meta.syncUrl || "").trim();
+  if (!u) return "";
+  const base = location.href.split("#")[0].split("?")[0].replace(/index\.html$/, "");
+  const b64 = btoa(unescape(encodeURIComponent(JSON.stringify({u})))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  return base + "setup.html#c=" + b64;
+}
+
+/* ---- はじめての人に出る画面 ---- */
+function welcomeSheet(){
+  DB.meta.welcomed = true; save();
+  openSheet({
+    title: "はじめに",
+    cancel: "あとで",
+    done: "はじめる",
+    html: `
+    <div class="stack">
+      <div class="note"><span>犬ごとにカウンセリング内容・健康・生活・レッスン記録を貯めるアプリです。<br>
+        チームで使う場合は同期URLを入れると<b>全員のカルテが共有</b>されます。</span></div>
+      <div>
+        <span class="label">自分の名前（担当名）</span>
+        <input class="field" id="w-owner" placeholder="例）竹内" autocomplete="off">
+        <p class="tiny" style="margin:7px 3px 0">記録の担当欄に、この名前が最初から入ります。</p>
+      </div>
+      <div>
+        <span class="label">屋号・教室名（任意）</span>
+        <input class="field" id="w-org" placeholder="例）〇〇ドッグスクール" autocomplete="off">
+      </div>
+      <div>
+        <span class="label">同期URL</span>
+        <input class="field" id="w-url" placeholder="管理者から届いたURL" autocomplete="off" spellcheck="false">
+        <button class="btn sm" id="w-paste" style="margin-top:9px">${ICON.copy}クリップボードから貼り付け</button>
+        <p class="tiny" style="margin:8px 3px 0">案内ページで「同期URLをコピー」を押してから、このボタンを押してください。<br>
+          ひとりで使う場合は空のままで大丈夫です（あとから設定できます）。</p>
+      </div>
+    </div>`,
+    onDone: async () => {
+      DB.meta.owner = $("#w-owner").value.trim();
+      DB.meta.org = $("#w-org").value.trim();
+      const u = $("#w-url").value.trim();
+      if (u) setSyncUrl(u);
+      save(); closeSheet(); render();
+      if (u) { await doSync(true); startPull(); } else toast("準備できました");
+    }
+  });
+  bindPaste("#w-paste", "#w-url");
+}
+function bindPaste(btnSel, targetSel){
+  const btn = $(btnSel);
+  if (!btn) return;
+  btn.addEventListener("click", async () => {
+    try {
+      const t = await navigator.clipboard.readText();
+      if (t && t.trim()) { $(targetSel).value = t.trim(); $(targetSel).dispatchEvent(new Event("change")); toast("貼り付けました"); }
+      else toast("クリップボードが空です");
+    } catch (e) {
+      toast("欄を長押しして「ペースト」を選んでください");
+    }
+  });
+}
+
+/* ---- 設定・データ管理 ---- */
+function menuSheet(){
+  openSheet({
+    title: "設定",
+    cancel: "閉じる",
+    html: `
+    <div class="stack">
+      <div>
+        <span class="label">自分の名前（担当名）</span>
+        <input class="field" id="m-owner" value="${esc(DB.meta.owner || "")}" placeholder="例）竹内" autocomplete="off">
+      </div>
+      <div>
+        <span class="label">屋号・教室名</span>
+        <input class="field" id="m-org" value="${esc(DB.meta.org || "")}" placeholder="例）〇〇ドッグスクール" autocomplete="off">
+        <p class="tiny" style="margin:7px 3px 0">トップ画面のタイトルの下に出ます。</p>
+      </div>
+
+      <div class="hairline" style="margin:2px 0"></div>
+
+      <div>
+        <span class="label">チーム共有（スプレッドシート同期）</span>
+        <input class="field" id="m-url" value="${esc(DB.meta.syncUrl || "")}" placeholder="管理者から届いたURL" autocomplete="off" spellcheck="false">
+        <button class="btn sm" id="m-paste" style="margin-top:9px">${ICON.copy}クリップボードから貼り付け</button>
+        <div class="switchrow">
+          <span>自動で同期する</span>
+          <button class="sw" id="m-auto" aria-pressed="${DB.meta.autoSync !== false}">${DB.meta.autoSync !== false ? "ON" : "OFF"}</button>
+        </div>
+        <p class="tiny" style="margin:8px 3px 0">保存した時・アプリに戻ってきた時・見ている間は3分おきに、自動でやりとりします。</p>
+        <button class="btn primary" id="m-sync" style="margin-top:10px">${ICON.sync}今すぐ同期する</button>
+        <p class="tiny" style="margin:8px 3px 0" id="syncState">${syncSummary()}</p>
+        <button class="btn sm" id="m-invite" style="margin-top:10px">${ICON.link}メンバー招待リンクをコピー</button>
+        <p class="tiny" style="margin:7px 3px 0">同じカルテを使う人に送るリンク。開くと手順が出ます。</p>
+      </div>
+
+      <div class="hairline" style="margin:2px 0"></div>
+
+      <div>
+        <span class="label">バックアップ</span>
+        <div class="note" style="margin-bottom:10px"><span>同期していても、端末単体の控えは別で取っておくと安心です。<br>
+          最終バックアップ: <b>${DB.meta.lastBackup ? `${DB.meta.lastBackup}（${daysSince(DB.meta.lastBackup)}日前）` : "まだありません"}</b></span></div>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <button class="btn" id="m-backup">${ICON.save}バックアップを保存</button>
+          <button class="btn" id="m-copy">${ICON.copy}バックアップをコピー</button>
+          <button class="btn" id="m-tsv1">${ICON.table}犬の一覧を表計算に貼る形でコピー</button>
+          <button class="btn" id="m-tsv2">${ICON.table}記録の一覧を表計算に貼る形でコピー</button>
+        </div>
+      </div>
+      <div>
+        <span class="label">復元</span>
+        <textarea class="field" id="m-restore" placeholder="コピーしておいたバックアップを貼り付け"></textarea>
+        <button class="btn" id="m-load" style="margin-top:10px">${ICON.restore}読み込んで復元</button>
+      </div>
+      <p class="tiny" style="margin:0 3px">${APP} ・ 犬${DB.dogs.length}頭 ・ 記録${DB.sessions.length}件</p>
+    </div>`
+  });
+
+  $("#m-owner").addEventListener("change", () => { DB.meta.owner = $("#m-owner").value.trim(); save(); });
+  $("#m-org").addEventListener("change", () => { DB.meta.org = $("#m-org").value.trim(); save(); if (view === "home") renderHome(); });
+  $("#m-url").addEventListener("change", () => { setSyncUrl($("#m-url").value); save(); setSyncLabel(""); startPull(); });
+  bindPaste("#m-paste", "#m-url");
+  $("#m-auto").addEventListener("click", () => {
+    DB.meta.autoSync = !(DB.meta.autoSync !== false);
+    save();
+    const on = DB.meta.autoSync !== false;
+    $("#m-auto").setAttribute("aria-pressed", String(on));
+    $("#m-auto").textContent = on ? "ON" : "OFF";
+    if (on) { startPull(); pullNow(); } else stopPull();
+  });
+  $("#m-sync").addEventListener("click", async () => {
+    DB.meta.owner = $("#m-owner").value.trim();
+    setSyncUrl($("#m-url").value);
+    save();
+    await doSync(true);
+    setSyncLabel("");
+  });
+  $("#m-invite").addEventListener("click", async () => {
+    setSyncUrl($("#m-url").value); save();
+    const link = inviteLink();
+    if (!link) return toast("先に同期URLを入れてください");
+    await copy(link);
+    toast("招待リンクをコピーしました");
+  });
+
+  $("#m-backup").addEventListener("click", async () => {
+    const data = JSON.stringify(DB, null, 2);
+    try {
+      const blob = new Blob([data], {type: "application/json"});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `わんカルテ_${today()}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+      markBackedUp();
+      toast("ファイルに保存しました");
+    } catch (e) {
+      await copy(data); markBackedUp();
+      toast("コピーしました。メモ帳に貼って保存を");
+    }
+  });
+  $("#m-copy").addEventListener("click", async () => {
+    await copy(JSON.stringify(DB));
+    markBackedUp();
+    toast("バックアップをコピーしました");
+  });
+  $("#m-tsv1").addEventListener("click", async () => {
+    const head = ["名前","フリガナ","犬種","性別","去勢・避妊","生年月日","年齢","体重","状態","担当","飼い主","電話","住所","困りごと","目標","咬傷歴","最終記録日","登録日"];
+    const rows = [head.join("\t")];
+    DB.dogs.forEach(d => {
+      const b = d.basic || {}, o = d.owner || {}, h = d.health || {}, i = d.issues || {}, recs = sessionsOf(d.id);
+      rows.push([b.name, b.kana, b.breed, b.sex, b.neutered, b.birth, ageOf(b.birth) || b.ageText, b.weight, statusOf(d).label, b.trainer,
+        o.name, o.tel, o.address, (i.list || []).join("、"), i.goal, h.bite, recs.length ? recs[0].date : "", String(d.createdAt || "").slice(0, 10)]
+        .map(x => String(x ?? "").replace(/\s+/g, " ")).join("\t"));
+    });
+    if (rows.length === 1) return toast("まだ登録がありません");
+    await copy(rows.join("\n"));
+    toast(`${rows.length - 1}頭ぶんコピーしました`);
+  });
+  $("#m-tsv2").addEventListener("click", async () => {
+    const head = ["犬","飼い主","日付","時間","種類","担当","場所","所要(分)","内容","できたこと","課題","宿題","犬の様子","次回","料金","支払い","メモ"];
+    const rows = [head.join("\t")];
+    DB.sessions.slice().sort((a, b) => a.date.localeCompare(b.date)).forEach(s => {
+      const d = getDog(s.dogId);
+      rows.push([d ? dogName(d) : "", d && d.owner ? d.owner.name : "", s.date, s.time, (KD[s.kind] || KD.other).label, s.trainer, s.place, s.dur,
+        s.content, s.good, s.issue, s.homework, (s.mood || []).join("、"), s.next ? s.next + (s.nextTime ? " " + s.nextTime : "") : "", s.fee, s.fee ? (s.paid ? "済" : "未収") : "", s.memo]
+        .map(x => String(x ?? "").replace(/\s+/g, " ")).join("\t"));
+    });
+    if (rows.length === 1) return toast("記録がまだありません");
+    await copy(rows.join("\n"));
+    toast(`${rows.length - 1}件コピーしました`);
+  });
+  $("#m-load").addEventListener("click", () => {
+    const txt = $("#m-restore").value.trim();
+    if (!txt) return toast("バックアップを貼り付けてください");
+    let parsed;
+    try { parsed = JSON.parse(txt); } catch (e) { return toast("形式が違うようです"); }
+    if (!parsed || !Array.isArray(parsed.dogs)) return toast("中身が読み取れませんでした");
+    if (!confirm(`今のデータを、この内容（犬${parsed.dogs.length}頭）に置き換えます。よろしいですか？`)) return;
+    DB = parsed;
+    normalize();
+    /* 復元したものは全部「未送信」扱いにして、次の同期で合流させる */
+    DB.meta.dirty = {dogs: DB.dogs.map(d => d.id), sessions: DB.sessions.map(s => s.id)};
+    DB.meta.since = "";
+    save(); closeSheet(); curD = null; go("home", false); toast("復元しました");
+  });
+}
+async function copy(text){
+  try { await navigator.clipboard.writeText(text); return true; }
+  catch (e) {
+    const ta = document.createElement("textarea");
+    ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
+    document.body.appendChild(ta); ta.select();
+    try { document.execCommand("copy"); } catch (e2) {}
+    document.body.removeChild(ta);
+    return true;
+  }
+}
+
+/* ================= イベント ================= */
+$("#back").innerHTML = ICON.back;
+$("#menu").innerHTML = ICON.more;
+$("#searchIcon").innerHTML = ICON.search;
+$("#newdog").insertAdjacentHTML("afterbegin", ICON.plus);
+$("#newrec").insertAdjacentHTML("afterbegin", ICON.plus);
+
+$("#q").addEventListener("input", renderHome);
+$("#q").addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); $("#q").blur(); } });
+$("#newdog").addEventListener("click", newDogForm);
+$("#newrec").addEventListener("click", () => sessionForm());
+$("#back").addEventListener("click", () => go("home"));
+$("#menu").addEventListener("click", menuSheet);
+$("#hfilters").addEventListener("click", e => {
+  const btn = e.target.closest("button[data-f]");
+  if (!btn) return;
+  filter = btn.dataset.f;
+  renderHome();
+});
+$("#dtabs").addEventListener("click", e => {
+  const btn = e.target.closest("button[data-t]");
+  if (!btn) return;
+  dtab = btn.dataset.t;
+  renderDog();
+});
+document.addEventListener("click", e => {
+  const t = e.target;
+  if (t.closest("#nudgeBtn")) { menuSheet(); return; }
+  if (t.closest("#demoReset")) {
+    if (!confirm("見本の内容に戻します。お試しで入れた内容は消えます。よろしいですか？")) return;
+    DB = demoData(); normalize(); save();
+    curD = null; filter = "all"; $("#q").value = ""; go("home", false); toast("見本に戻しました");
+    return;
+  }
+  const card = t.closest("[data-d]");
+  if (card) { curD = card.dataset.d; dtab = "karte"; go("dog"); return; }
+  const ed = t.closest("[data-edit]");
+  if (ed) { editSection(ed.dataset.edit); return; }
+  const rec = t.closest("[data-rec]");
+  if (rec) { sessionForm(rec.dataset.rec); return; }
+  if (t.closest("#stbtn")) { statusForm(); return; }
+  if (t.closest("#deldog")) { deleteDog(); return; }
+  if (t.closest("#dhead .avatar")) { photoForm(); return; }
+});
+
+/* ================= 起動 ================= */
+load();
+render();
+syncBar();
+if (DB.meta.syncUrl) {
+  if (autoSyncOn()) setTimeout(() => doSync(false), 1200);
+  startPull();
+}
+else if (!DB.meta.welcomed && !DB.dogs.length) setTimeout(welcomeSheet, 600);
+})();
+</script>
+
+<script>
+/* オフライン動作 */
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("./sw.js").catch(() => {});
+  });
+}
+/* 保存領域を「消さないで」とブラウザに申請する */
+if (navigator.storage && navigator.storage.persist) {
+  navigator.storage.persist().catch(() => {});
+}
+</script>
+</body>
+</html>

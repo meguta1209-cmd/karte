@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>わんカルテ はじめかた</title>
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#F4F1EC" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#111013" media="(prefers-color-scheme: dark)">
+<link rel="apple-touch-icon" href="./icons/icon-180.png">
+<link rel="icon" href="./icons/icon-192.png">
+<style>
+:root{
+  --ground:#F4F1EC; --surface:#FFFFFF; --line:rgba(40,30,20,.11); --line-2:rgba(40,30,20,.065);
+  --ink:#1C1713; --ink-2:#625A52; --ink-3:#948B82;
+  --brand:#B8562B; --brand-ink:#FFFFFF; --brand-soft:#F6E4DA;
+  --ok:#0E7A54; --ok-bg:#DEF2E9;
+  --shadow-1:0 1px 2px rgba(28,23,19,.05);
+  --shadow-2:0 2px 6px rgba(28,23,19,.07),0 10px 24px rgba(28,23,19,.06);
+  --font:-apple-system,BlinkMacSystemFont,"SF Pro JP","Hiragino Kaku Gothic ProN","Yu Gothic UI","Noto Sans JP","Segoe UI",sans-serif;
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  --ease:cubic-bezier(.32,.72,0,1);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --ground:#111013; --surface:#1C1A1E; --line:rgba(255,255,255,.10); --line-2:rgba(255,255,255,.06);
+    --ink:#F0ECE6; --ink-2:#B1A99F; --ink-3:#77706A;
+    --brand:#F0A57E; --brand-ink:#1A0E07; --brand-soft:#3A2419;
+    --ok:#45CA92; --ok-bg:#132C24;
+    --shadow-1:0 1px 2px rgba(0,0,0,.4);
+    --shadow-2:0 2px 6px rgba(0,0,0,.4),0 10px 24px rgba(0,0,0,.3);
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#111013; --surface:#1C1A1E; --line:rgba(255,255,255,.10); --line-2:rgba(255,255,255,.06);
+  --ink:#F0ECE6; --ink-2:#B1A99F; --ink-3:#77706A;
+  --brand:#F0A57E; --brand-ink:#1A0E07; --brand-soft:#3A2419;
+  --ok:#45CA92; --ok-bg:#132C24;
+  --shadow-1:0 1px 2px rgba(0,0,0,.4);
+  --shadow-2:0 2px 6px rgba(0,0,0,.4),0 10px 24px rgba(0,0,0,.3);
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{
+  background:var(--ground);color:var(--ink);font-family:var(--font);
+  font-size:15.5px;line-height:1.75;-webkit-text-size-adjust:100%;
+  -webkit-tap-highlight-color:transparent;
+  padding:0 18px calc(56px + env(safe-area-inset-bottom));
+}
+.wrap{max-width:520px;margin:0 auto}
+header{padding:38px 0 26px;text-align:center}
+.mark{
+  width:60px;height:60px;margin:0 auto 16px;border-radius:15px;background:var(--brand);
+  display:grid;place-items:center;color:#fff;box-shadow:var(--shadow-2);
+}
+h1{margin:0;font-size:25px;font-weight:800;letter-spacing:-.025em;line-height:1.3}
+header p{margin:9px 0 0;font-size:13.5px;color:var(--ink-2)}
+.step{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:20px 18px;margin-bottom:14px;box-shadow:var(--shadow-1)}
+.step h2{display:flex;align-items:center;gap:11px;margin:0 0 12px;font-size:16.5px;font-weight:750;letter-spacing:-.01em}
+.step h2 b{flex:0 0 auto;width:27px;height:27px;border-radius:50%;background:var(--brand);color:var(--brand-ink);display:grid;place-items:center;font-size:14px;font-weight:800;font-family:var(--mono)}
+.step p{margin:0 0 12px;font-size:14px;color:var(--ink-2);line-height:1.7}
+.step p:last-child{margin-bottom:0}
+.step ol{margin:10px 0 0;padding-left:1.35em;font-size:14px;color:var(--ink-2);line-height:1.9}
+.step ol b{color:var(--ink);font-weight:700}
+.btn{
+  display:flex;align-items:center;justify-content:center;gap:8px;
+  width:100%;min-height:52px;padding:0 18px;border:none;border-radius:13px;
+  background:var(--brand);color:var(--brand-ink);
+  font:inherit;font-size:16px;font-weight:750;text-decoration:none;
+  box-shadow:var(--shadow-2);cursor:pointer;transition:transform .1s var(--ease),filter .15s;
+}
+.btn:active{transform:scale(.975);filter:brightness(1.08)}
+.btn.copied{background:var(--ok);color:#fff}
+.btn svg{flex:0 0 auto}
+.url{
+  margin-top:11px;padding:11px 13px;border-radius:11px;background:var(--ground);
+  border:1px solid var(--line-2);font-family:var(--mono);font-size:11.5px;
+  color:var(--ink-3);word-break:break-all;line-height:1.6;-webkit-user-select:all;user-select:all;
+}
+.warn{background:var(--brand-soft);border:1px solid var(--line);border-radius:13px;padding:14px 16px;font-size:13.5px;line-height:1.75;color:var(--ink-2);margin-bottom:14px}
+.warn b{color:var(--ink)}
+footer{text-align:center;font-size:12px;color:var(--ink-3);padding:22px 0 0;line-height:1.8}
+.miss{background:var(--surface);border:1px dashed var(--line);border-radius:16px;padding:26px 20px;text-align:center;color:var(--ink-2);font-size:14px;line-height:1.8}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="mark" aria-hidden="true"><svg width="34" height="34" viewBox="0 0 24 24" fill="currentColor"><ellipse cx="7" cy="8.2" rx="1.9" ry="2.5"/><ellipse cx="11" cy="5.6" rx="1.9" ry="2.5"/><ellipse cx="15.5" cy="6.4" rx="1.9" ry="2.5"/><ellipse cx="19" cy="10" rx="1.8" ry="2.3"/><path d="M13 10.5c-3.6 0-6.5 2.9-6.5 5.8 0 1.8 1.3 3 3 3 1.1 0 1.9-.5 3.5-.5s2.4.5 3.5.5c1.7 0 3-1.2 3-3 0-2.9-2.9-5.8-6.5-5.8z"/></svg></div>
+    <h1>わんカルテ<br>はじめかた</h1>
+    <p>3分で終わります。スマホでこのページを見てください。</p>
+  </header>
+
+  <div id="body"></div>
+
+  <footer>
+    うまくいかないときは<br>この案内を送ってくれた人に聞いてください
+  </footer>
+</div>
+
+<script>
+(function(){
+  var APP = "./";
+  var ICON_COPY = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2.5"/><path d="M5.5 15H5a1.5 1.5 0 01-1.5-1.5v-9A1.5 1.5 0 015 3h9A1.5 1.5 0 0115.5 4.5V5"/></svg>';
+  var ICON_CHECK = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12.5l5 5 10-11"/></svg>';
+  var ICON_OPEN = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h6v6M20 4l-9 9"/><path d="M18 14v4.5A1.5 1.5 0 0116.5 20h-11A1.5 1.5 0 014 18.5v-11A1.5 1.5 0 015.5 6H10"/></svg>';
+
+  /* 同期URLはページのアドレスの # のうしろに入っている（サーバーには送られない） */
+  var sync = "";
+  try {
+    var m = location.hash.match(/[#&]c=([^&]+)/);
+    if (m) {
+      var s = m[1].replace(/-/g, "+").replace(/_/g, "/");
+      while (s.length % 4) s += "=";
+      var o = JSON.parse(decodeURIComponent(escape(atob(s))));
+      sync = String(o.u || "");
+    }
+  } catch (e) { sync = ""; }
+
+  var el = document.getElementById("body");
+
+  if (!sync) {
+    el.innerHTML = '<div class="miss">この案内リンクには同期の情報が入っていません。<br>' +
+      '送ってくれた人に、もう一度リンクを送ってもらってください。<br><br>' +
+      '（リンクの末尾に <b>#c=</b> で始まる部分が必要です）</div>';
+    return;
+  }
+
+  el.innerHTML =
+    '<div class="warn">先に<b>アプリをホーム画面に入れて</b>から、あとで同期URLを貼ります。この順番が大事です。</div>' +
+
+    '<div class="step">' +
+      '<h2><b>1</b>アプリをホーム画面に入れる</h2>' +
+      '<p>下のボタンでアプリが開きます。開いたら、そのまま次の操作をしてください。</p>' +
+      '<a class="btn" href="' + APP + '" target="_blank" rel="noopener">' + ICON_OPEN + 'アプリを開く</a>' +
+      '<ol>' +
+        '<li>画面の下にある<b>共有ボタン</b>（□に↑の矢印）を押す</li>' +
+        '<li>メニューを下にスクロールして<b>「ホーム画面に追加」</b></li>' +
+        '<li>右上の<b>「追加」</b>を押す</li>' +
+        '<li>ホーム画面に肉球のアイコンが出たらOK。<b>このページに戻ってきてください</b></li>' +
+      '</ol>' +
+      '<p style="margin-top:12px">※ Androidの方は、Chromeの<b>右上の「⋮」</b>から<b>「アプリをインストール」</b>（または「ホーム画面に追加」）を選んでください。</p>' +
+    '</div>' +
+
+    '<div class="step">' +
+      '<h2><b>2</b>同期URLをコピーする</h2>' +
+      '<p>チーム全員のカルテをつなぐためのURLです。押すだけでコピーされます。</p>' +
+      '<button class="btn" id="copy">' + ICON_COPY + '同期URLをコピー</button>' +
+      '<div class="url" id="urlbox"></div>' +
+      '<p style="margin-top:11px">※ ボタンが効かないときは、上の枠を長押しして「コピー」を選んでください。</p>' +
+    '</div>' +
+
+    '<div class="step">' +
+      '<h2><b>3</b>アプリに貼り付ける</h2>' +
+      '<p>ホーム画面の<b>肉球のアイコン</b>からアプリを開いてください。Safariからではなく、必ずアイコンからです。</p>' +
+      '<ol>' +
+        '<li>「はじめに」の画面が出る</li>' +
+        '<li><b>自分の名前</b>を入れる</li>' +
+        '<li><b>「クリップボードから貼り付け」</b>を押す（同期URLの欄が埋まります）</li>' +
+        '<li>右上の<b>「はじめる」</b>を押す</li>' +
+      '</ol>' +
+      '<p style="margin-top:12px">「◯件を受け取りました」と出たら完了です。おつかれさまでした。</p>' +
+      '<p style="margin-top:12px">※ すでにアプリを使っていて「はじめに」が出ない場合は、右上の「…」→ 設定 → チーム共有の欄に貼り付けてください。</p>' +
+    '</div>' +
+
+    '<div class="warn" style="margin-top:18px">' +
+      '<b>これだけは覚えておいてください</b><br>' +
+      'これ以降は<b>必ずホーム画面のアイコンから</b>開いてください。Safariから開くと記録が別々に貯まってしまいます。<br><br>' +
+      'また、このURLはお客様の情報につながる<b>鍵のようなもの</b>です。関係のない人には送らないでください。' +
+    '</div>';
+
+  document.getElementById("urlbox").textContent = sync;
+
+  var btn = document.getElementById("copy");
+  btn.addEventListener("click", function(){
+    var done = function(){
+      btn.innerHTML = ICON_CHECK + "コピーしました";
+      btn.classList.add("copied");
+      setTimeout(function(){
+        btn.innerHTML = ICON_COPY + "同期URLをコピー";
+        btn.classList.remove("copied");
+      }, 2600);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(sync).then(done, fallback);
+    } else fallback();
+
+    function fallback(){
+      var ta = document.createElement("textarea");
+      ta.value = sync;
+      ta.style.position = "fixed"; ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select(); ta.setSelectionRange(0, sync.length);
+      try { document.execCommand("copy"); done(); }
+      catch (e) { btn.textContent = "上の枠を長押ししてコピーしてください"; }
+      document.body.removeChild(ta);
+    }
+  });
+})();
+</script>
+</body>
+</html>
