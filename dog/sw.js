@@ -1,7 +1,7 @@
 /* わんカルテ — オフライン用サービスワーカー
    アプリを更新したら CACHE の数字を1つ上げること。
    同じサイトに他のアプリも置くので、消すキャッシュは自分の "dog-karte-" だけに限る */
-const CACHE = "dog-karte-v2";
+const CACHE = "dog-karte-v3";
 const ASSETS = [
   "./",
   "./index.html",

@@ -141,5 +141,6 @@ b{font-weight:700;}
 
   <p class="foot">わんカルテ</p>
 </div>
+<script>/* お試し版（?demo）から開いたときは、もどる先もお試し版 */ if (/(^|&)demo(=|&|$)/.test(location.search.slice(1))) document.querySelectorAll('a[href="./"]').forEach(a => a.setAttribute("href", "./?demo"));</script>
 </body>
 </html>

@@ -555,6 +555,25 @@ body{font-size:15.5px}
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .seg{background:#0A0D0B}:root:not([data-theme="light"]) .seg button[aria-pressed="true"]{background:var(--surface-2)}}
 :root[data-theme="dark"] .seg{background:#0A0D0B}
 :root[data-theme="dark"] .seg button[aria-pressed="true"]{background:var(--surface-2)}
+/* メニュー（≡）：右から出る細い面。深緑の見た目にそろえる */
+.dscrim{position:fixed;inset:0;z-index:70;background:var(--scrim);opacity:0;pointer-events:none;transition:opacity .25s var(--ease)}
+.dscrim.on{opacity:1;pointer-events:auto}
+.drawer{position:fixed;top:0;bottom:0;right:0;z-index:80;width:min(300px,82vw);background:var(--ground);
+  padding:calc(14px + env(safe-area-inset-top)) 14px calc(20px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:8px;
+  box-shadow:-12px 0 40px rgba(20,22,28,.18);transform:translateX(102%);transition:transform .32s var(--ease);visibility:hidden}
+.drawer.on{transform:translateX(0);visibility:visible}
+.dr-head{display:flex;align-items:flex-start;gap:10px;padding:6px 4px 14px;border-bottom:1px solid var(--line);margin-bottom:6px}
+.dr-t{flex:1;min-width:0}
+.dr-t b{display:block;font-size:19px;font-weight:800;letter-spacing:-.01em;font-feature-settings:"palt" 1;overflow-wrap:anywhere}
+.dr-t small{display:block;font-size:12px;color:var(--ink-3);margin-top:2px}
+.dr-x{width:36px;height:36px;border-radius:10px;display:grid;place-items:center;color:var(--ink-2);flex:0 0 auto}
+.dr-x:active{background:var(--surface-2)}
+.dr-item{display:flex;align-items:center;gap:12px;width:100%;text-align:left;padding:13px 14px;border-radius:14px;background:var(--surface);
+  box-shadow:var(--shadow-1);color:var(--ink);font-size:15.5px;font-weight:700;text-decoration:none}
+.dr-item svg{color:var(--brand)}
+.dr-item small{display:block;font-size:12px;font-weight:500;color:var(--ink-3);margin-top:1px}
+.dr-item:active{background:var(--brand-soft)}
+.dr-foot{margin:auto 4px 0;font-size:12px;color:var(--ink-3)}
 </style>
 
 <div class="app" id="app" data-view="home">
@@ -562,7 +581,7 @@ body{font-size:15.5px}
     <div class="inner">
       <button class="navbtn" id="back" hidden aria-label="戻る"></button>
       <h1 id="title">わんカルテ</h1>
-      <button class="navbtn" id="menu" aria-label="設定とデータ管理"></button>
+      <button class="navbtn" id="menu" aria-label="メニュー" aria-expanded="false" aria-controls="drawer"></button>
     </div>
   </header>
 
@@ -617,6 +636,16 @@ body{font-size:15.5px}
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
+<!-- メニュー（右上の ≡ で右から出る） -->
+<div class="dscrim" id="dscrim"></div>
+<nav class="drawer" id="drawer" aria-label="メニュー" aria-hidden="true">
+  <div class="dr-head"><div class="dr-t"><b id="drOrg"></b><small id="drSub"></small></div><button class="dr-x" id="drClose" aria-label="メニューを閉じる"></button></div>
+  <a class="dr-item" id="drHelp" href="./help.html"></a>
+  <button class="dr-item" id="drSettings"></button>
+  <a class="dr-item" id="drDemo"></a>
+  <p class="dr-foot" id="drFoot"></p>
+</nav>
+
 <script>
 (() => {
 "use strict";
@@ -625,6 +654,11 @@ body{font-size:15.5px}
 const SVG = d => `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
 const ICON = {
   back:    SVG(`<path d="M15 5l-7 7 7 7"/>`),
+  menu:    SVG(`<path d="M4 7h16M4 12h16M4 17h16"/>`),
+  help:    SVG(`<circle cx="12" cy="12" r="9"/><path d="M9.6 9.3a2.5 2.5 0 0 1 4.8 1c0 1.7-2.4 2.2-2.4 3.7"/><circle cx="12" cy="17.2" r=".6" fill="currentColor"/>`),
+  gear:    SVG(`<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>`),
+  swap:    SVG(`<path d="M7 7h11l-3-3M17 17H6l3 3"/>`),
+  close:   SVG(`<path d="M6 6l12 12M18 6L6 18"/>`),
   chev:    `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.5 5l7 7-7 7"/></svg>`,
   more:    SVG(`<circle cx="5" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.6" fill="currentColor" stroke="none"/>`),
   search:  `<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.6-3.6"/></svg>`,
@@ -1970,7 +2004,6 @@ function menuSheet(){
     cancel: "閉じる",
     html: `
     <div class="stack">
-      <a class="btn" href="./help.html">${ICON.edit}使い方を見る</a>
       <div>
         <span class="label">自分の名前（担当名）</span>
         <input class="field" id="m-owner" value="${esc(DB.meta.owner || "")}" placeholder="例）竹内" autocomplete="off">
@@ -2171,7 +2204,30 @@ async function copyReport(id){
 
 /* ================= イベント ================= */
 $("#back").innerHTML = ICON.back;
-$("#menu").innerHTML = ICON.more;
+/* ---- メニュー（右上の ≡）：右から出る。使い方・設定（名前・屋号・共有・バックアップ）・お試し版／本番の切りかえ ---- */
+function openDrawer(){
+  $("#drOrg").textContent = DB.meta.org || APP;
+  $("#drSub").textContent = DEMO ? "お試し版（見本データ）" : (DB.meta.org ? APP : "ドッグトレーナーのカルテ");
+  $("#drHelp").innerHTML = `${ICON.help}<span>使い方を見る</span>`;
+  $("#drHelp").setAttribute("href", DEMO ? "./help.html?demo" : "./help.html");   /* お試し版から見たら、もどる先もお試し版 */
+  $("#drSettings").innerHTML = `${ICON.gear}<span>設定<small>名前・屋号・共有・バックアップ</small></span>`;
+  $("#drDemo").innerHTML = `${ICON.swap}<span>${DEMO ? "本番の画面にもどる" : "お試し版（見本データ）を見る"}</span>`;
+  $("#drDemo").setAttribute("href", DEMO ? "./" : "./?demo");
+  $("#drFoot").textContent = `犬${DB.dogs.length}頭 ・ 記録${DB.sessions.length}件`;
+  $("#dscrim").classList.add("on"); $("#drawer").classList.add("on");
+  $("#drawer").setAttribute("aria-hidden", "false"); $("#menu").setAttribute("aria-expanded", "true");
+  setTimeout(() => $("#drClose").focus(), 50);
+}
+function closeDrawer(){
+  $("#dscrim").classList.remove("on"); $("#drawer").classList.remove("on");
+  $("#drawer").setAttribute("aria-hidden", "true"); $("#menu").setAttribute("aria-expanded", "false");
+}
+$("#drClose").innerHTML = ICON.close;
+$("#drClose").addEventListener("click", closeDrawer);
+$("#dscrim").addEventListener("click", closeDrawer);
+$("#drSettings").addEventListener("click", () => { closeDrawer(); menuSheet(); });
+document.addEventListener("keydown", e => { if (e.key === "Escape" && $("#drawer").classList.contains("on")) closeDrawer(); });
+$("#menu").innerHTML = ICON.menu;
 $("#searchIcon").innerHTML = ICON.search;
 $("#newdog").insertAdjacentHTML("afterbegin", ICON.plus);
 $("#newrec").insertAdjacentHTML("afterbegin", ICON.plus);
@@ -2181,7 +2237,7 @@ $("#q").addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDef
 $("#newdog").addEventListener("click", newDogForm);
 $("#newrec").addEventListener("click", () => sessionForm());
 $("#back").addEventListener("click", () => go("home"));
-$("#menu").addEventListener("click", menuSheet);
+$("#menu").addEventListener("click", openDrawer);
 $("#hfilters").addEventListener("click", e => {
   const btn = e.target.closest("button[data-f]");
   if (!btn) return;
