@@ -574,6 +574,86 @@ body{font-size:15.5px}
 .dr-item small{display:block;font-size:12px;font-weight:500;color:var(--ink-3);margin-top:1px}
 .dr-item:active{background:var(--brand-soft)}
 .dr-foot{margin:auto 4px 0;font-size:12px;color:var(--ink-3)}
+/* 写真の切り抜き（丸いアイコン） */
+.crop{position:fixed;inset:0;z-index:95;background:rgba(10,14,12,.72);display:grid;place-items:center;padding:16px;opacity:0;transition:opacity .2s var(--ease)}
+.crop.on{opacity:1}
+.cr-box{width:min(340px,100%);background:var(--ground);border-radius:22px;padding:18px 16px 16px;display:flex;flex-direction:column;align-items:center;gap:12px;box-shadow:0 20px 50px rgba(0,0,0,.35)}
+.cr-h{font-size:16px;font-weight:800}
+.cr-view{position:relative;width:260px;height:260px;border-radius:18px;overflow:hidden;background:#111;touch-action:none;cursor:grab}
+.cr-view img{position:absolute;left:50%;top:50%;max-width:none;user-select:none;-webkit-user-drag:none;pointer-events:none}
+.cr-ring{position:absolute;inset:0;border-radius:50%;box-shadow:0 0 0 999px rgba(0,0,0,.5);outline:2px solid rgba(255,255,255,.9);outline-offset:-2px;pointer-events:none}
+.cr-zoom{width:240px;accent-color:var(--brand)}
+.cr-tip{margin:0;font-size:12px;color:var(--ink-3);text-align:center}
+.cr-box .row{width:100%}
+/* 新しい犬の登録：上の丸い写真 */
+.np{display:flex;align-items:center;gap:14px}
+.np-pick{position:relative;width:84px;height:84px;border-radius:50%;flex:0 0 auto;overflow:hidden;cursor:pointer;
+  background:var(--hero);color:var(--brand);display:grid;place-items:center;box-shadow:inset 0 0 0 2px var(--brand-soft)}
+.np-pick img{width:100%;height:100%;object-fit:cover}
+.np-pick input{display:none}
+.np-pick .np-ic{display:flex;flex-direction:column;align-items:center;gap:2px;font-size:11px;font-weight:700}
+.np-t{font-size:13px;color:var(--ink-3);line-height:1.5}
+.np-t b{display:block;font-size:14.5px;color:var(--ink)}
+/* カルテの見出しの丸：写真を変える印 */
+#dhead .avatar.lg{position:relative;cursor:pointer;overflow:visible}
+#dhead .avatar.lg img{border-radius:50%}
+#dhead .avatar.lg::after{content:"";position:absolute;right:2px;bottom:2px;width:28px;height:28px;border-radius:50%;
+  background:var(--brand) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 8.5A1.5 1.5 0 015.5 7H8l1.3-2h5.4L16 7h2.5A1.5 1.5 0 0120 8.5v9a1.5 1.5 0 01-1.5 1.5h-13A1.5 1.5 0 014 17.5z'/%3E%3Ccircle cx='12' cy='13' r='3.2'/%3E%3C/svg%3E") center/15px no-repeat;
+  box-shadow:0 0 0 3px var(--surface)}
+/* トップの見出し（案A） */
+:root{--band:#24493D;--band-2:#2F5A4B}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--band:#163027;--band-2:#1E3D32}}
+:root[data-theme="dark"]{--band:#163027;--band-2:#1E3D32}
+.app.dash #sc-home > .largetitle{display:none}
+.app.dash-a:not(.compact) .bar{background:var(--band)!important}
+.app.dash-a:not(.compact) .bar .navbtn{color:#fff}
+.dband{margin:-4px -16px 0;padding:10px 22px 62px;background:linear-gradient(160deg,var(--band) 0%,var(--band-2) 100%);color:#fff;display:flex;flex-direction:column;gap:2px}
+.db-date{font-size:12.5px;font-weight:700;letter-spacing:.06em;opacity:.75}
+.db-hi{font-size:15px;font-weight:600;margin-top:6px;opacity:.92}
+.db-org{font-size:30px;font-weight:800;letter-spacing:-.02em;line-height:1.15;font-feature-settings:"palt" 1}
+.dtiles{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:-46px 0 0;position:relative}
+.dtiles.small{grid-template-columns:repeat(4,1fr);gap:8px;margin:14px 0 0}
+.dt{background:var(--surface);border-radius:16px;padding:13px 14px 12px;text-align:left;box-shadow:0 1px 2px rgba(20,22,28,.05),0 8px 22px rgba(20,22,28,.08);display:flex;flex-direction:column;gap:4px}
+.dt-k{font-size:12px;font-weight:700;color:var(--ink-3)}
+.dt-v{font-size:26px;font-weight:800;letter-spacing:-.02em;color:var(--ink);font-variant-numeric:tabular-nums;line-height:1.1}
+.dt-v small{font-size:13px;font-weight:700;color:var(--ink-3);margin-left:2px}
+.dt[data-dashf="unpaid"] .dt-v{color:var(--danger)}
+.dtiles.small .dt{padding:10px 6px;align-items:center;text-align:center;box-shadow:var(--shadow-1)}
+.dtiles.small .dt-k{font-size:10.5px}
+.dtiles.small .dt-v{font-size:17px}
+.dq{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:14px 0 0}
+.dq button,.dq a{display:flex;flex-direction:column;align-items:center;gap:6px;padding:12px 6px;border-radius:16px;background:var(--surface);box-shadow:var(--shadow-1);color:var(--ink);font-size:13px;font-weight:700;text-decoration:none}
+.dq svg{width:22px;height:22px;color:var(--brand)}
+.dnext{display:flex;flex-direction:column;gap:8px}
+.dn{display:flex;align-items:center;gap:12px;width:100%;text-align:left;padding:12px 14px;border-radius:16px;background:var(--surface);box-shadow:var(--shadow-1)}
+.dn-when{flex:0 0 66px;white-space:nowrap;display:flex;flex-direction:column;border-right:2px solid var(--brand-soft);padding-right:10px}
+.dn-when b{font-size:17px;font-weight:800;font-variant-numeric:tabular-nums}
+.dn-when small{font-size:11.5px;color:var(--ink-3);font-weight:600}
+.dn .avatar{width:42px;height:42px;font-size:17px}
+.dn-t{flex:1;min-width:0;display:flex;flex-direction:column}
+.dn-n{font-size:16px;font-weight:700}
+.dn-m{font-size:12.5px;color:var(--ink-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dhead{display:flex;flex-direction:column;gap:2px;margin:6px 2px 14px}
+.dhead .db-date{color:var(--ink-3);opacity:1}
+.dhead .db-hi{color:var(--ink-2);opacity:1}
+.dhero{display:flex;flex-direction:column;gap:10px;width:100%;text-align:left;padding:18px 18px 16px;border-radius:22px;color:#fff;
+  background:linear-gradient(150deg,var(--band) 0%,var(--band-2) 100%);box-shadow:0 10px 26px rgba(36,73,61,.28)}
+.dh-top{display:flex;justify-content:space-between;align-items:center}
+.dh-lbl{font-size:12px;font-weight:800;letter-spacing:.08em;background:rgba(255,255,255,.16);padding:3px 10px;border-radius:999px}
+.dh-day{font-size:13px;font-weight:700;opacity:.85}
+.dh-time{font-size:40px;font-weight:800;letter-spacing:-.02em;line-height:1;font-variant-numeric:tabular-nums}
+.dh-dog{display:flex;align-items:center;gap:12px}
+.dh-dog .avatar{width:46px;height:46px;background:rgba(255,255,255,.18)!important;color:#fff}
+.dh-dog b{display:block;font-size:18px}
+.dh-dog small{display:block;font-size:12.5px;opacity:.8}
+.dh-go{align-self:flex-end;display:flex;align-items:center;gap:2px;font-size:13px;font-weight:700;opacity:.9}
+.drow{display:flex;gap:14px;overflow-x:auto;margin:0 -16px;padding:2px 16px 6px;scrollbar-width:none}
+.drow::-webkit-scrollbar{display:none}
+.dr{position:relative;display:flex;flex-direction:column;align-items:center;gap:6px;flex:0 0 auto;width:64px;font-size:12.5px;font-weight:700;color:var(--ink)}
+.dr .avatar{width:60px;height:60px;font-size:22px;box-shadow:0 0 0 2px var(--surface),0 0 0 4px var(--brand-soft)}
+.dr i{position:absolute;top:44px;font-style:normal;font-size:10px;font-weight:800;color:#fff;background:var(--st-boarding);border-radius:999px;padding:1px 6px}
+.app.dash #newdog{margin-top:16px}
+.app.dash #dash{margin-bottom:18px}   /* これからの予定と検索欄のあいだ */
 </style>
 
 <div class="app" id="app" data-view="home">
@@ -588,6 +668,7 @@ body{font-size:15.5px}
   <div class="stage">
     <!-- ========= 犬の一覧 ========= -->
     <section class="screen on" id="sc-home">
+      <div id="dash"></div>
       <h1 class="largetitle"><span class="eyebrow" id="eyebrow"></span><span class="org" id="orgbig">わんカルテ</span><small id="orgname"></small></h1>
       <div class="searchbar">
         <span class="ic" id="searchIcon"></span>
@@ -836,6 +917,11 @@ function normalize(){
     if (!d.createdAt) d.createdAt = nowISO();
   });
   DB.sessions = DB.sessions.filter(s => s && s.id && s.dogId);
+  /* お試し版：前に開いて残っている見本の犬にも、イラストのアイコンを入れる（写真を入れ直した犬はそのまま） */
+  if (DEMO) DB.dogs.forEach(d => {
+    const m = /^demo-(coco|mugi|maron|leo|sora)$/.exec(d.id);
+    if (m && !(d.photo && d.photo.data)) d.photo = {data: `./demo-img/${m[1]}.jpg`, u: d.createdAt, by: "見本"};
+  });
 }
 /* お試し版の見本データ。日付は開いた日を基準に作る（予定が古くならないように）
    全部架空の見本。写真は入れない */
@@ -848,7 +934,7 @@ function demoData(){
   return {v:1, meta:{owner:"", org:"みほんドッグスクール", welcomed:true, autoSync:false, lastBackup:day(0),
       deleted:{dogs:[],sessions:[]}, dirty:{dogs:[],sessions:[]}},
     dogs:[
-      {id:"demo-coco", createdAt:at(-21), state:{status:"active",u,by}, photo:{},
+      {id:"demo-coco", createdAt:at(-21), state:{status:"active",u,by}, photo:{data:"./demo-img/coco.jpg", u, by},
        basic:{name:"ココ", kana:"ココ", breed:"トイプードル", sex:"メス", neutered:"済", birth:day(-910), weight:"4.2", color:"レッド",
               from:"ブリーダー", fromAge:"生後3か月", trainer:"田中", memo:"人なつっこい。来客と物音に弱い。足先を触られるのが苦手なので、触るときは声をかけてから", u, by},
        owner:{name:"山田 花子", kana:"ヤマダ ハナコ", tel:"090-0000-0001", address:"東京都〇〇区〇〇1-2-3 〇〇マンション805",
@@ -863,7 +949,7 @@ function demoData(){
        skills:{map:{sit:"ok", down:"ok", stay:"wip", come:"wip", eye:"ok", touch:"wip", toilet:"ok"}, extra:"お手", u, by},
        visit:{place:"自宅リビング", access:"駅から徒歩10分。マンション裏に来客用1台", notes:"インターホンは鳴らさない。着いたらLINEで連絡", u, by},
        boarding:{}},
-      {id:"demo-mugi", createdAt:at(-10), state:{status:"active",u,by}, photo:{},
+      {id:"demo-mugi", createdAt:at(-10), state:{status:"active",u,by}, photo:{data:"./demo-img/mugi.jpg", u, by},
        basic:{name:"むぎ", kana:"ムギ", breed:"ゴールデンレトリバー", sex:"メス", neutered:"未", birth:day(-150), weight:"12.5", color:"クリーム",
               from:"ブリーダー", fromAge:"生後2か月半", trainer:"佐藤", memo:"よく食べてよく遊ぶ。今のうちに体を触られることに慣らしたい", u, by},
        owner:{name:"佐々木 恵", kana:"ササキ メグミ", tel:"090-0000-0004", address:"東京都〇〇区〇〇4-5-6",
@@ -877,7 +963,7 @@ function demoData(){
        skills:{map:{sit:"ok", come:"wip", toilet:"wip"}, u, by},
        visit:{place:"自宅リビング", access:"一戸建て。家の前に1台とめてよい", notes:"子犬なので、レッスンは長くて40分まで", u, by},
        boarding:{}},
-      {id:"demo-maron", createdAt:at(-12), state:{status:"boarding",u,by}, photo:{},
+      {id:"demo-maron", createdAt:at(-12), state:{status:"boarding",u,by}, photo:{data:"./demo-img/maron.jpg", u, by},
        basic:{name:"マロン", kana:"マロン", breed:"柴犬", sex:"オス", neutered:"未", birth:day(-335), weight:"8.5", color:"赤", trainer:"佐藤",
               memo:"警戒心が強い。触るときは横から、手の甲を見せてから", u, by},
        owner:{name:"鈴木 健", kana:"スズキ ケン", tel:"090-0000-0002", contact:"電話", u, by},
@@ -888,7 +974,7 @@ function demoData(){
        skills:{map:{sit:"ok", house:"ok", heel:"wip", eye:"wip"}, u, by}, visit:{},
        boarding:{type:"合宿", from:day(-3), to:day(4), pickup:"18時に飼い主がお迎え", items:["フード","リード・首輪（ハーネス）","薬","ワクチン証明書","タオル・毛布"],
                  meals:"朝夕60g", care:"雷が苦手なので、天気が悪い日はクレートを布で覆う。いつもの毛布をクレートに入れておく", u, by}},
-      {id:"demo-leo", createdAt:at(-120), state:{status:"done",u,by}, photo:{},
+      {id:"demo-leo", createdAt:at(-120), state:{status:"done",u,by}, photo:{data:"./demo-img/leo.jpg", u, by},
        basic:{name:"レオ", breed:"MIX", sex:"オス", neutered:"済", ageText:"5歳くらい", weight:"9.8", from:"保護犬", fromAge:"4歳くらい", trainer:"田中", u, by},
        owner:{name:"高橋 美咲", kana:"タカハシ ミサキ", tel:"090-0000-0003", contact:"LINE", u, by},
        health:{vet:"さくら動物病院", vaccine:day(-100), rabies:day(-90), bite:"なし", u, by},
@@ -897,7 +983,7 @@ function demoData(){
                goal:"留守番中に静かに過ごせる", u, by},
        skills:{map:{sit:"ok", down:"ok", stay:"ok", house:"ok", eye:"ok"}, u, by},
        visit:{place:"自宅", u, by}, boarding:empty()},
-      {id:"demo-sora", createdAt:at(-75), state:{status:"paused",u,by}, photo:{},
+      {id:"demo-sora", createdAt:at(-75), state:{status:"paused",u,by}, photo:{data:"./demo-img/sora.jpg", u, by},
        basic:{name:"ソラ", breed:"ミニチュアダックス", sex:"オス", neutered:"済", birth:day(-2600), weight:"5.6", trainer:"田中",
               memo:"飼い主さんの引っ越しで、来月まで休止。再開の連絡待ち", u, by},
        owner:{name:"伊藤 誠", kana:"イトウ マコト", tel:"090-0000-0005", contact:"SMS", u, by},
@@ -1164,6 +1250,66 @@ function unpaidList(){
     .sort((a, b) => String(b.date).localeCompare(String(a.date)));
 }
 
+/* ---- トップの見出し（2026-10-20 社長：案A＝深緑の帯・まとめのタイル・よく使う操作・これからの予定）。案Bの形も残してある（V を "b" に） ---- */
+function renderDash(plans, t){
+  const V = "a";
+  $("#app").classList.add("dash", "dash-" + V);
+  const iso = x => `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, "0")}-${String(x.getDate()).padStart(2, "0")}`;
+  const n = new Date(), hr = n.getHours();
+  const greet = hr < 11 ? "おはようございます" : hr < 17 ? "こんにちは" : "おつかれさまです";
+  const wd = s => { const p = s.split("-"); const x = new Date(+p[0], +p[1] - 1, +p[2]); return `${x.getMonth() + 1}/${x.getDate()} ${"日月火水木金土"[x.getDay()]}`; };
+  const in7 = new Date(); in7.setDate(in7.getDate() + 7);
+  const lessons = plans.filter(p => !/期限/.test(p.what));
+  const week = lessons.filter(p => p.date >= t && p.date <= iso(in7)).length;
+  const board = DB.dogs.filter(d => statusOf(d).k === "boarding").length;
+  const unpaid = unpaidList().reduce((a, s) => a + (Number(s.fee) || 0), 0);
+  const vac = DB.dogs.filter(d => statusOf(d).k !== "done" && vacDue(d).some(v => v.days <= 30)).length;
+  const next = lessons.filter(p => p.date >= t).slice(0, 3);
+  const tm = p => (p.what.match(/(\d{1,2}:\d{2})/) || p.what.match(/(\d{1,2}時)/) || [""])[0];
+  const kindOf = p => p.what.replace(/\s*\d{1,2}:\d{2}.*$/, "").replace(/^次回/, "").replace(/\s.*$/, "");
+  const place = p => (p.d.visit && p.d.visit.place) || (p.d.boarding && p.d.boarding.type) || "";
+  const dateLine = `${n.getMonth() + 1}月${n.getDate()}日 ${"日月火水木金土"[n.getDay()]}曜日`;
+  const tile = (label, val, unit, f) => `<button class="dt" data-dashf="${f}"><span class="dt-k">${label}</span><span class="dt-v">${val}<small>${unit}</small></span></button>`;
+  const tiles = tile("今週の予定", week, "件", "all") + tile("預かり中", board, "頭", "boarding") +
+    tile("未収", "¥" + unpaid.toLocaleString(), "", "unpaid") + tile("ワクチン期限", vac, "頭", "vac");
+  const card = p => `<button class="dn" data-d="${esc(p.d.id)}">
+      <span class="dn-when"><b>${esc(tm(p) || "—")}</b><small>${esc(wd(p.date))}</small></span>
+      ${avatarHtml(p.d)}
+      <span class="dn-t"><span class="dn-n">${esc(dogName(p.d))}</span><span class="dn-m">${esc([kindOf(p), place(p)].filter(Boolean).join(" ・ "))}</span></span>
+      <span class="chev">${ICON.chev}</span></button>`;
+  const quick = `<div class="dq">
+      <button data-dashq="new">${ICON.plus}<span>新しい犬</span></button>
+      <button data-dashq="unpaid">${ICON.copy}<span>未収を見る</span></button>
+      <a href="./help.html${DEMO ? "?demo" : ""}">${ICON.help}<span>使い方</span></a></div>`;
+  const org = esc(DB.meta.org || APP);
+  if (V === "a") {
+    $("#dash").innerHTML = `<div class="dband"><span class="db-date">${esc(dateLine)}</span>
+        <span class="db-hi">${greet}</span><span class="db-org">${org}</span></div>
+      <div class="dtiles">${tiles}</div>
+      ${quick}
+      <div class="grouphead"><h2>これからの予定</h2><span class="n">${lessons.filter(p => p.date >= t).length}件</span></div>
+      <div class="dnext">${next.length ? next.map(card).join("") : `<div class="dn">予定はありません</div>`}</div>`;
+  } else {
+    const f = next[0];
+    const dogs = DB.dogs.filter(d => statusOf(d).k !== "done");
+    $("#dash").innerHTML = `<div class="dhead"><span class="db-date">${esc(dateLine)}</span>
+        <span class="db-hi">${greet}</span><span class="db-org">${org}</span></div>
+      ${f ? `<button class="dhero" data-d="${esc(f.d.id)}">
+          <span class="dh-top"><span class="dh-lbl">次の予定</span><span class="dh-day">${esc(wd(f.date))}</span></span>
+          <span class="dh-time">${esc(tm(f) || "")}</span>
+          <span class="dh-dog">${avatarHtml(f.d)}<span><b>${esc(dogName(f.d))}</b><small>${esc([kindOf(f), place(f), f.d.owner && f.d.owner.name ? f.d.owner.name + "様" : ""].filter(Boolean).join(" ・ "))}</small></span></span>
+          <span class="dh-go">カルテを開く ${ICON.chev}</span></button>` : ""}
+      <div class="dtiles small">${tiles}</div>
+      <div class="grouphead"><h2>犬</h2><span class="n">${dogs.length}頭</span></div>
+      <div class="drow">${dogs.map(d => `<button class="dr" data-d="${esc(d.id)}">${avatarHtml(d)}<span>${esc(dogName(d))}</span>${statusOf(d).k === "boarding" ? `<i>預かり</i>` : ""}</button>`).join("")}</div>
+      ${next.length > 1 ? `<div class="grouphead"><h2>そのあとの予定</h2></div><div class="dnext">${next.slice(1).map(card).join("")}</div>` : ""}`;
+  }
+  $("#dash").querySelectorAll("[data-dashf]").forEach(b => b.addEventListener("click", () => {
+    const f = b.dataset.dashf; if (f === "vac") return toast("ワクチンの期限が近い犬は、予定とカルテに出ます");
+    filter = f; renderHome(); }));
+  $("#dash").querySelectorAll("[data-dashq]").forEach(b => b.addEventListener("click", () => {
+    if (b.dataset.dashq === "new") $("#newdog").click(); else { filter = "unpaid"; renderHome(); } }));
+}
 /* ---- 犬の一覧 ---- */
 function renderHome(){
   $("#title").textContent = DB.meta.org || APP;   /* 下へ動かした時の上の帯も屋号 */
@@ -1217,6 +1363,8 @@ function renderHome(){
         <span class="chev">${ICON.chev}</span>
       </button>`).join("")}</div>` : "");
 
+  if (!q && filter === "all") { renderDash(plans, t); $("#plan").innerHTML = demoBanner() + nudge; }
+  else if ($("#dash")) { $("#dash").innerHTML = ""; $("#app").classList.remove("dash", "dash-a", "dash-b"); }
   /* 未収：料金が入っていて「済」でない記録と合計。押すとその犬の記録 */
   if (filter === "unpaid") {
     const u = unpaidList().filter(s => !q || searchText(getDog(s.dogId)).includes(q));
@@ -1392,8 +1540,10 @@ function sheetOpen(){ const s = $("#sheet"); return !!s && s.classList.contains(
 /* 入力中に外側を押した・Escを押したとき：入力が変わっていたら確かめてから閉じる（長いカウンセリングが消えないように） */
 let sheetSnap = "";
 const sheetState = () => [...document.querySelectorAll("#sheetBody input, #sheetBody textarea, #sheetBody select")].map(x => x.type === "file" ? "" : x.value).join("\u0001")
-  + "\u0002" + [...document.querySelectorAll("#sheetBody [aria-pressed]")].map(x => x.getAttribute("aria-pressed")).join("");
+  + "\u0002" + [...document.querySelectorAll("#sheetBody [aria-pressed]")].map(x => x.getAttribute("aria-pressed")).join("")
+  + "\u0003" + [...document.querySelectorAll("#sheetBody .np-pick img")].map(x => x.src.length).join(",");   /* 写真だけ選んだ時も「変わった」にする */
 function closeSheetSafely(){
+  if (document.querySelector(".crop")) return;   /* 写真の切り抜き中は、後ろのシートを閉じない */
   if (sheetOpen() && sheetDoneFn && sheetState() !== sheetSnap && !confirm("入力した内容を保存せずに閉じますか？")) return;
   closeSheet();
 }
@@ -1529,10 +1679,15 @@ const NEW_FIELDS = [
   {k:"trainer", label:"担当トレーナー", ph:"例）竹内", chips:() => knownOwners()}
 ];
 function newDogForm(){
+  let newPhoto = "";
   openSheet({
     title: "新しい犬を登録",
     done: "登録",
     html: `<div class="stack">
+      <div class="np">
+        <label class="np-pick" id="np-pick" aria-label="写真を入れる"><span class="np-ic">${ICON.camera}写真</span><input type="file" id="np-file" accept="image/*"></label>
+        <span class="np-t"><b>写真を入れる（あとからでもOK）</b>選ぶか撮ると、丸く切り抜いて、この犬のアイコンになります。</span>
+      </div>
       ${NEW_FIELDS.map(f => fieldHtml("new", f, f.k === "trainer" ? (DB.meta.owner || "") : "")).join("")}
       <p class="tiny" style="margin:-4px 3px 0">名前だけで登録してもOK。健康・生活・困りごとなどは、カルテの各項目からあとで足せます。</p>
     </div>`,
@@ -1546,7 +1701,7 @@ function newDogForm(){
         state: {status: "active", u, by},
         basic: {name: v.name, breed: v.breed, sex: v.sex, birth: v.birth, trainer: v.trainer, u, by},
         owner: {name: v.oname, tel: v.otel, u, by},
-        photo: {}, health: {}, life: {}, issues: {}, skills: {}, visit: {}, boarding: {}
+        photo: newPhoto ? {data: newPhoto, u, by} : {}, health: {}, life: {}, issues: {}, skills: {}, visit: {}, boarding: {}
       };
       DB.dogs.push(d);
       markDirty("dogs", d.id);
@@ -1556,6 +1711,18 @@ function newDogForm(){
       go("dog"); queueSync();
       toast(`${v.name}を登録しました`);
     }
+  });
+  $("#np-file").addEventListener("change", e => {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = "";
+    if (!file) return;
+    cropPhoto(file).then(data => {
+      if (!data) return;
+      newPhoto = data;
+      const box = $("#np-pick");
+      box.querySelectorAll("img, .np-ic").forEach(x => x.remove());
+      box.insertAdjacentHTML("afterbegin", `<img alt="" src="${esc(data)}">`);
+    }).catch(() => toast("この写真は読み込めませんでした"));
   });
 }
 
@@ -1580,7 +1747,9 @@ function photoForm(){
   $("#ph-file").addEventListener("change", e => {
     const file = e.target.files && e.target.files[0];
     if (!file) return;
-    shrinkImage(file).then(data => {
+    e.target.value = "";
+    cropPhoto(file).then(data => {
+      if (!data) return;   /* やめた */
       d.photo = {data, u: nowISO(), by: DB.meta.owner || ""};
       markDirty("dogs", d.id);
       save(); closeSheet(); render(); queueSync(); toast("写真を保存しました");
@@ -1591,6 +1760,84 @@ function photoForm(){
     d.photo = {data: "", u: nowISO(), by: DB.meta.owner || ""};
     markDirty("dogs", d.id);
     save(); closeSheet(); render(); queueSync(); toast("写真を消しました");
+  });
+}
+/* 写真を丸く切り抜く画面：指で動かす・2本指かつまみで大きさ → 256px の正方形 JPEG（丸く見せるのは表示のほう）。
+   やめたら reject しない（null を返す） */
+const ICON_PX = 256;
+function cropPhoto(file){
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("decode")); };
+    img.onload = () => {
+      const W = img.naturalWidth, H = img.naturalHeight;
+      const ov = document.createElement("div");
+      ov.className = "crop";
+      ov.innerHTML = `<div class="cr-box" role="dialog" aria-modal="true" aria-label="写真の位置を合わせる">
+          <div class="cr-h">写真の位置を合わせる</div>
+          <div class="cr-view"><img alt="" draggable="false"><div class="cr-ring"></div></div>
+          <input type="range" class="cr-zoom" min="1" max="4" step="0.01" value="1" aria-label="大きさ">
+          <p class="cr-tip">指で動かして、2本指か下のつまみで大きさを合わせます</p>
+          <div class="row"><button type="button" class="btn" data-cr="no">やめる</button><button type="button" class="btn primary" data-cr="ok">この形で使う</button></div>
+        </div>`;
+      document.body.appendChild(ov);
+      requestAnimationFrame(() => ov.classList.add("on"));
+      const view = ov.querySelector(".cr-view"), im = ov.querySelector("img"), zoom = ov.querySelector(".cr-zoom");
+      im.src = url;
+      const V = view.clientWidth || 260;
+      const s0 = V / Math.min(W, H);
+      let z = 1, x = 0, y = 0;
+      const clamp = () => {
+        const s = s0 * z, mx = Math.max(0, (W * s - V) / 2), my = Math.max(0, (H * s - V) / 2);
+        x = Math.min(mx, Math.max(-mx, x)); y = Math.min(my, Math.max(-my, y));
+      };
+      const apply = () => {
+        clamp();
+        const s = s0 * z;
+        im.style.width = W * s + "px"; im.style.height = H * s + "px";
+        im.style.transform = `translate(${x - W * s / 2}px, ${y - H * s / 2}px)`;
+        zoom.value = String(z);
+      };
+      apply();
+      const pts = new Map();
+      let pinch0 = 0, z0 = 1;
+      const dist = () => { const p = [...pts.values()]; return Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y); };
+      view.addEventListener("pointerdown", e => {
+        view.setPointerCapture(e.pointerId); pts.set(e.pointerId, {x: e.clientX, y: e.clientY});
+        if (pts.size === 2) { pinch0 = dist(); z0 = z; }
+      });
+      view.addEventListener("pointermove", e => {
+        const p = pts.get(e.pointerId);
+        if (!p) return;
+        if (pts.size === 1) { x += e.clientX - p.x; y += e.clientY - p.y; }
+        p.x = e.clientX; p.y = e.clientY;
+        if (pts.size === 2 && pinch0) z = Math.min(4, Math.max(1, z0 * dist() / pinch0));
+        apply();
+      });
+      const up = e => { pts.delete(e.pointerId); if (pts.size < 2) pinch0 = 0; };
+      view.addEventListener("pointerup", up); view.addEventListener("pointercancel", up);
+      view.addEventListener("wheel", e => { e.preventDefault(); z = Math.min(4, Math.max(1, z * (e.deltaY < 0 ? 1.08 : 0.93))); apply(); }, {passive: false});
+      zoom.addEventListener("input", () => { z = Number(zoom.value) || 1; apply(); });
+      const done = out => {
+        ov.classList.remove("on");
+        setTimeout(() => { ov.remove(); URL.revokeObjectURL(url); }, 200);
+        resolve(out);
+      };
+      ov.querySelector('[data-cr="no"]').addEventListener("click", () => done(null));
+      ov.querySelector('[data-cr="ok"]').addEventListener("click", () => {
+        const s = s0 * z, left = V / 2 - W * s / 2 + x, top = V / 2 - H * s / 2 + y;
+        const c = document.createElement("canvas");
+        c.width = c.height = ICON_PX;
+        const g = c.getContext("2d");
+        g.fillStyle = "#fff"; g.fillRect(0, 0, ICON_PX, ICON_PX);
+        g.drawImage(img, -left / s, -top / s, V / s, V / s, 0, 0, ICON_PX, ICON_PX);
+        let q = 0.85, out = c.toDataURL("image/jpeg", q);
+        while (out.length > PHOTO_CHARS && q > 0.35) { q -= 0.1; out = c.toDataURL("image/jpeg", q); }
+        done(out);
+      });
+    };
+    img.src = url;
   });
 }
 /* 画像を小さくして、文字数が収まるまで画質を落とす */
