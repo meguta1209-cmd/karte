@@ -1735,8 +1735,23 @@ function taskOf(snap) {
     memo: {shop: d.shop || "", tel: d.tel || "", text: d.text || "", when: tsd(d.when), remind: d.remind !== false}};
 }
 function rebuildPending() {
-  pendMine = recPendMine.concat(taskMine);
+  pendMine = recPendMine.concat(taskMine).concat(autoPre());
   renderAfterPending(); maybeDaySum();
+}
+/* 前確の自動の予定（v77・2026-10-21 社長「アポの前日の、約束の時刻に前確を促して」）：
+   自分が取ったアポの「前日の同じ時刻」に、前確の予定を作って並べる（データは増やさない＝今あるアポから毎回作る）。
+   前確が入っていれば出さない。商談の時刻を過ぎたもの・取り消したもの・営業結果シートだけの案件・日時のないものは出さない。
+   通知（帯・音）・リマインド・自分のリマインドに出る。押すとそのアポの詳細（①前確の欄） */
+function autoPre() {
+  const now = new Date();
+  /* 前確の時刻：前日の同じ時刻。月曜の商談だけは、日曜が休みなので前の土曜の同じ時刻（社長 2026-10-21）。題・帯は「明日」か「月曜」 */
+  const preAt = w => { const d = new Date(w.getTime()); d.setDate(d.getDate() - (w.getDay() === 1 ? 2 : 1)); return d; };
+  const dayWord = w => w.getDay() === 1 ? "月曜" : "明日";
+  return recPendMine.filter(r => r.r === "アポ" && r.uid === U && !r.canceled && !isSheetRec(r) && r.memo && r.memo.when && r.memo.when > now && !((resOf(r) || {}).pre)
+      && preAt(r.memo.when) > r.t)   // 前確の時刻より後に取ったアポ（その日のうち・前日の夜に取った翌朝など）は出さない（テスター 2026-10-21）
+    .map(r => ({id: "pre_" + r.id, auto: true, rec: r, isTask: true, uid: U, by: U, r: "前確", done: false, t: r.t, preDay: dayWord(r.memo.when),
+      title: "前確（" + dayWord(r.memo.when) + " " + hm(r.memo.when) + " のアポ）",
+      memo: {shop: r.memo.shop || "", tel: r.memo.tel || "", text: "", when: preAt(r.memo.when), remind: r.memo.remind !== false}}));
 }
 const canEditTask = t => t.uid === U || t.by === U || (me && me.role === "admin");
 const itemLabel = r => r.isTask ? (r.title || r.r) : r.r;
@@ -1784,7 +1799,7 @@ function renderRemind() {
       const meta = r.isTask
         ? `担当 ${esc(nameOf(r.uid))}${r.by && r.by !== r.uid ? " ・ 作成 " + esc(nameOf(r.by)) : ""}`
         : `担当 ${esc(nameOf(r.uid))}${r.r === "アポ" && r.memo.closer ? " ・ クローザー " + esc(CNAME(r.memo.closer)) : ""} ・ ${md(r.t)} に${r.r === "アポ" ? "獲得" : "架電"}`;
-      const btns = r.isTask && canEditTask(r) ? `<button class="done">${r.r === "再架電" ? "かけた" : "完了"}</button><button class="later">明日へ</button>`
+      const btns = r.auto ? `<button class="done">前確を入れる</button>` : r.isTask && canEditTask(r) ? `<button class="done">${r.r === "再架電" ? "かけた" : "完了"}</button><button class="later">明日へ</button>`
         : r.r === "再架電" && mine ? `<button class="done">かけた</button><button class="later">明日へ</button>` : `<button class="edit">詳細</button>`;
       row.innerHTML = `<div class="time">${hm(r.memo.when)}<small>${md(r.memo.when)}</small></div>
         <div class="info"><div class="shop">${head}${late ? `<span class="badge late">期限切れ</span>` : ""}</div>
@@ -1820,6 +1835,7 @@ function setCalMode(m) {
 }
 $("calMode").onclick = e => { const b = e.target.closest("button"); if (!b) return; myWk = 0; setCalMode(b.dataset.m); };
 function mrBtn(r) {
+  if (r.auto) return "前確を入れる";   // v77
   if (r.isTask) return canEditTask(r) ? (r.r === "再架電" || r.r === "折り返し待ち" ? "かけた" : "完了") : "";
   if (!r.memo || !r.memo.when) return "日時を入れる";   // 日時未定のアポ
   return r.r === "再架電" ? "かけた" : "詳細";
@@ -1972,6 +1988,7 @@ function undoDone(r) {
   p.then(() => { doneCache = {at: 0, list: []}; histLoadedAt = 0; if (curTab === "remind") renderRemind(); toast(nw ? "今日 " + hm(nw) + " の予定に戻しました（元は " + md(w) + "）" : "リマインドに戻しました"); }).catch(e => toast(errMsg(e)));
 }
 function markDone(r) {
+  if (r && r.auto) { openDetail(r.rec); return; }   // 前確の自動の予定（v77）：そのアポの詳細（①前確の欄）を開く
   doneCache = {at: 0, list: []};   // かけ済みを次に開いたとき読み直す
   if (r.isTask) {   // 予定は架電ではないので、終わりにするだけ（再架電の予定は、このあと結果ボタンで数える）
     updateDoc(doc(db, "tasks", r.id), {done: true, doneAt: serverTimestamp()}).catch(e => toast(errMsg(e)));
@@ -1984,6 +2001,7 @@ function markDone(r) {
   showTab("count"); toast("今回の結果のボタンを押してください");
 }
 function postpone(r) {
+  if (r && r.auto) { openDetail(r.rec); return; }   // 自動の前確は延ばせない（アポの日時から決まる）
   refreshHistSoon();
   const now = new Date();
   const w = addDays(dayStart(r.memo.when < now ? now : r.memo.when), 1); w.setHours(r.memo.when.getHours(), r.memo.when.getMinutes());
@@ -2000,6 +2018,7 @@ const telHref = t => "tel:" + String(t || "").replace(/[^\d+]/g, "");
 let detailRec = null, detailBack = null;
 function openDetail(r, cal) {
   if (!r) return;
+  if (r.auto) r = r.rec;   // 前確の自動の予定（v77）は、そのアポの詳細を開く
   detailRec = r; detailBack = (cal && cal.back) || null;
   const m = r.memo || {}, mine = r.isTask ? canEditTask(r) : r.uid === U, w = m.when, now = new Date();
   $("rdTitle").innerHTML = resChip(r.r) + " " + esc(r.isTask ? ([r.title, m.shop].filter(Boolean).join(" ") || r.r) : (m.shop || "（店名なし）"));
@@ -2279,12 +2298,13 @@ function showAlert(rec, mode, force) {
   const kind = rec.isTask ? rec.r : rec.r === "アポ" ? "商談" : "再架電";
   const canDone = rec.r === "再架電" || rec.isTask;
   $("alertBar").classList.toggle("now", now);
-  $("alTag").textContent = now ? kind + "の時間です" : kind + "まで あと15分";
+  $("alTag").textContent = rec.auto ? "前確をお願いします（" + rec.preDay + "の商談）" : now ? kind + "の時間です" : kind + "まで あと15分";
   $("alTime").textContent = hm(rec.memo.when);
   $("alShop").textContent = rec.isTask ? ([rec.title, rec.memo.shop].filter(Boolean).join(" ") || rec.r) : (rec.memo.shop || "（店名なし）");
   $("alMemo").textContent = rec.memo.text || ""; $("alMemo").hidden = !rec.memo.text;
   $("alDone").hidden = !now || !canDone; $("alSnooze").hidden = !now;
-  $("alDone").textContent = rec.isTask && rec.r !== "再架電" ? "完了" : "かけた";
+  $("alDone").textContent = rec.auto ? "前確を入れる" : rec.isTask && rec.r !== "再架電" ? "完了" : "かけた";
+  if (rec.auto) { $("alTime").textContent = rec.preDay + " " + hm(rec.rec.memo.when); $("alSnooze").hidden = true; }   // v77：時刻は商談の時刻
   $("alOpen").classList.toggle("primary", !now || !canDone);
   $("alertBar").hidden = false;
   beep(now ? 3 : 2);
@@ -2310,7 +2330,7 @@ function checkNotifs() {
     const w = r.memo.when.getTime(), k = r.id + "@" + w;
     if (snoozed[r.id] && now >= snoozed[r.id]) { delete snoozed[r.id]; showAlert(r, "now"); return; }
     if (!fired[k + ":now"] && now >= w && now < w + 30 * 6e4) { fired[k + ":now"] = 1; fired[k + ":pre"] = 1; lsSet(key, fired); showAlert(r, "now"); return; }
-    if (!fired[k + ":pre"] && now >= w - 15 * 6e4 && now < w) { fired[k + ":pre"] = 1; lsSet(key, fired); showAlert(r, "pre"); return; }
+    if (!fired[k + ":pre"] && !r.auto && now >= w - 15 * 6e4 && now < w) { fired[k + ":pre"] = 1; lsSet(key, fired); showAlert(r, "pre"); return; }   // 自動の前確は「ちょうど」だけ（v77）
   }
 }
 
