@@ -1757,8 +1757,10 @@ const canEditTask = t => t.uid === U || t.by === U || (me && me.role === "admin"
 const itemLabel = r => r.isTask ? (r.title || r.r) : r.r;
 function todayMine() { const T = today(), E = addDays(T, 1); return visiblePending(pendMine).filter(r => r.memo.when >= T && r.memo.when < E).sort((a, b) => a.memo.when - b.memo.when); }
 function renderAfterPending() { renderNext(); if (curTab === "remind") renderRemind(); if (curTab === "cal" && calMode === "me") renderMyRm(); updateRmDot(); }
+const isPastApo = (r, now) => !r.isTask && r.r === "アポ" && r.memo && r.memo.when && r.memo.when < now;   // 時刻を過ぎた商談（v78）
 function updateRmDot() {
-  const n = visiblePending(pendMine).filter(r => r.memo.when < addDays(today(), 1)).length + myResPending().length;   // ＋商談の結果まだ（v66）
+  const now = new Date();
+  const n = visiblePending(pendMine).filter(r => r.memo.when < addDays(today(), 1) && !isPastApo(r, now)).length + myResPending().length;   // ＋商談の結果まだ（v66）。過ぎた商談は結果まだの側だけで数える（v78：二重に数えない）
   $("rmDot").hidden = !n; $("rmDot").textContent = n;
 }
 function renderNext() {
@@ -1781,7 +1783,8 @@ setInterval(() => { if (started) { renderNext(); updateRmDot(); } }, 60000);   /
 /* v74：リマインドは自分の分だけ（「チーム全員」は外した。再架電と予定は本人だけが読める） */
 function renderRemind() {
   const now = new Date(), tmr = addDays(today(), 1);
-  const list = visiblePending(pendMine).sort((a, b) => a.memo.when - b.memo.when);
+  /* v78（社長 2026-10-22）：過ぎた商談は、結果が入るまで「過ぎている予定」に残し（35日まで・取った人とクローザー）、ボタンは［商談結果を入れる］。結果が入ったらすぐ消す */
+  const list = visiblePending(pendMine).filter(r => !isPastApo(r, now)).concat(myResPending().filter(r => r.memo.when < now)).sort((a, b) => a.memo.when - b.memo.when);
   const groups = [["過ぎている予定", list.filter(r => r.memo.when < now)], ["今日", list.filter(r => r.memo.when >= now && r.memo.when < tmr)], ["明日以降", list.filter(r => r.memo.when >= tmr)]];
   const body = $("rmBody"); body.innerHTML = "";
   renderResTodo(body);   // 商談の結果まだ（v66）
@@ -1800,7 +1803,8 @@ function renderRemind() {
         ? `担当 ${esc(nameOf(r.uid))}${r.by && r.by !== r.uid ? " ・ 作成 " + esc(nameOf(r.by)) : ""}`
         : `担当 ${esc(nameOf(r.uid))}${r.r === "アポ" && r.memo.closer ? " ・ クローザー " + esc(CNAME(r.memo.closer)) : ""} ・ ${md(r.t)} に${r.r === "アポ" ? "獲得" : "架電"}`;
       const btns = r.auto ? `<button class="done">前確を入れる</button>` : r.isTask && canEditTask(r) ? `<button class="done">${r.r === "再架電" ? "かけた" : "完了"}</button><button class="later">明日へ</button>`
-        : r.r === "再架電" && mine ? `<button class="done">かけた</button><button class="later">明日へ</button>` : `<button class="edit">詳細</button>`;
+        : r.r === "再架電" && mine ? `<button class="done">かけた</button><button class="later">明日へ</button>`
+        : isPastApo(r, now) && resPending(r) && canResult(r) ? `<button class="edit res-go">商談結果を入れる</button>` : `<button class="edit">詳細</button>`;   // v78
       row.innerHTML = `<div class="time">${hm(r.memo.when)}<small>${md(r.memo.when)}</small></div>
         <div class="info"><div class="shop">${head}${late ? `<span class="badge late">期限切れ</span>` : ""}</div>
         <div class="meta">${meta}</div>
@@ -1860,7 +1864,7 @@ function mrItem(r, late) {
 function renderMyRm() {
   const box = $("myRm"); if (!box || box.hidden) return;
   const T = today(), from = addDays(T, myWk * 7), to = addDays(from, 7);
-  const list = visiblePending(pendMine).sort((a, b) => a.memo.when - b.memo.when);
+  const list = visiblePending(pendMine).filter(r => !(isPastApo(r, new Date()) && !resPending(r))).sort((a, b) => a.memo.when - b.memo.when);   // v78：結果が入った商談は出さない
   const late = list.filter(r => r.memo.when < T), noDate = undated.filter(r => r.uid === U);
   box.innerHTML = `<p class="mr-note">自分の再架電（日時を入れたもの）・アポ・予定だけが出ます。ほかの人には見えません。</p>
     <button class="mr-add" type="button" data-newtask="1">＋ リマインドを入れる（再架電・折り返し・前確・その他）</button>`;
