@@ -1022,3 +1022,12 @@ button.res-tile:hover{border-color:var(--rule2);}
 .mr-item .k{font-size:11px; font-weight:700; border-radius:4px; padding:1px 6px; margin-right:4px;}
 .mr-item .go{font-size:12px; font-weight:700; color:var(--blue); border:1px solid var(--blue); border-radius:6px; padding:5px 9px; background:var(--card);}
 .mr-empty{font-size:12.5px; color:var(--ink3); padding:4px 2px;}
+
+/* v79（2026-10-23 社長 案B）：クローザーのほかの予定（Googleカレンダー）は、枠の右の細い線だけ（色＝その人）。
+   文字・斜線は出さない（押したときの中身・入れられない時間の決まりは今まで通り）。3人重なるときは線の間をあけて並べる */
+.cal .sl{position:relative;}
+.cal .gbusy{position:absolute !important; right:3px; top:1px; bottom:1px; width:5px; min-height:0 !important; padding:0 !important;
+  border:0 !important; border-radius:3px; background:var(--pc, #9AA6B8) !important; font-size:0 !important; flex:none; pointer-events:none;}
+.cal .gbusy > *{display:none !important;}
+.cal .gb-row{position:absolute; right:3px; top:1px; bottom:1px; display:flex; flex-direction:row-reverse; gap:3px; flex:none; pointer-events:none;}
+.cal .gb-row .gbusy{position:static !important; width:4px; height:auto;}
