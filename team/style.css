@@ -1026,8 +1026,15 @@ button.res-tile:hover{border-color:var(--rule2);}
 /* v79（2026-10-23 社長 案B）：クローザーのほかの予定（Googleカレンダー）は、枠の右の細い線だけ（色＝その人）。
    文字・斜線は出さない（押したときの中身・入れられない時間の決まりは今まで通り）。3人重なるときは線の間をあけて並べる */
 .cal .sl{position:relative;}
-.cal .gbusy{position:absolute !important; right:3px; top:1px; bottom:1px; width:5px; min-height:0 !important; padding:0 !important;
+.cal:not(.solo) .gbusy{position:absolute !important; right:3px; top:1px; bottom:1px; width:5px; min-height:0 !important; padding:0 !important;
   border:0 !important; border-radius:3px; background:var(--pc, #9AA6B8) !important; font-size:0 !important; flex:none; pointer-events:none;}
-.cal .gbusy > *{display:none !important;}
-.cal .gb-row{position:absolute; right:3px; top:1px; bottom:1px; display:flex; flex-direction:row-reverse; gap:3px; flex:none; pointer-events:none;}
-.cal .gb-row .gbusy{position:static !important; width:4px; height:auto;}
+.cal:not(.solo) .gbusy > *{display:none !important;}
+.cal:not(.solo) .gb-row{position:absolute; right:3px; top:1px; bottom:1px; display:flex; flex-direction:row-reverse; gap:3px; flex:none; pointer-events:none;}
+.cal:not(.solo) .gb-row .gbusy{position:static !important; width:4px; height:auto;}
+/* v80：続いた予定の線を1本につなげる（枠の上の線1pxの上まで伸ばし、角を丸めない）。1人に絞った週（.solo）は前の「予定あり」の形のまま */
+.cal:not(.solo) .gbusy, .cal:not(.solo) .gb-row{top:-1px; bottom:0; border-radius:0;}
+.cal:not(.solo) .gb-row .gbusy{border-radius:0;}
+/* v80：1人に絞った週は「予定あり」を1行で枠の中に収める（細い列で縦1文字ずつに折れて、上下の枠にはみ出していた）。
+   1人だけを見ているので頭の字は出さない（色の斜線と左の線で、その人と分かる） */
+.cal.solo .gbusy.wk.pp{justify-content:center; white-space:nowrap; overflow:hidden; font-size:9.5px; letter-spacing:-.2px; padding:2px 1px 2px 2px; min-width:0;}
+.cal.solo .gbusy.wk.pp b{display:none;}

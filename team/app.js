@@ -1401,7 +1401,7 @@ function renderCal() {
   const viewTap = c => toast(c.name + "さんの予定を見るだけの列です（アポはクローザーの列から入れてください）");
   $("calView").querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", b.dataset.v === calView));
   const cal = $("cal"); cal.innerHTML = "";
-  cal.className = "cal " + calView;
+  cal.className = "cal " + calView + (calView === "week" && calCloser !== "all" ? " solo" : "");   // v80：1人に絞った週は前の「予定あり」の形
   let free = 0, count = 0;
 
   if (calView === "day") {
@@ -1411,7 +1411,7 @@ function renderCal() {
     $("wkLbl").textContent = md(day);
     $("calFilter").hidden = true;
     $("legend").innerHTML = `<span><i style="background:transparent;outline:2px solid #FFD54F;outline-offset:-2px"></i>自分が取ったアポ</span><span>列＝クローザー（1人1枠）</span>` +
-      `<span><i class="lg-dot"></i>点線＝ここから始めると、ほかの商談と重なる</span><span><i class="lg-hatch"></i>斜線＝過ぎた時間　右の細い線＝ほかの予定（色＝人）</span><span><em class="gc ok">G</em>＝Googleカレンダー連携中（<em class="gc ng">G</em>＝まだ共有されていない）</span>` + availLegend(cls) +
+      `<span><i class="lg-dot"></i>点線＝ここから始めると、ほかの商談と重なる</span><span><i class="lg-hatch"></i>斜線＝過ぎた時間　右の細い線＝ほかの予定（色＝人）</span><span><em class="gc ok">G</em>＝Googleカレンダー連携中</span><span><em class="gc ng">G</em>＝まだ共有されていない</span>` + availLegend(cls) +
       (vws.length ? `<span><em class="ext-tag">閲覧</em>＝予定を見るだけの列（予定ありの時間だけ出る・アポは入らない）</span>` : "");
     cal.style.gridTemplateColumns = `50px repeat(${cls.length + vws.length}, minmax(92px, 1fr))`;
     cal.insertAdjacentHTML("beforeend", `<div class="hd corner"></div>` + cls.map(c => {
@@ -1488,8 +1488,9 @@ function renderCal() {
     $("calFilter").innerHTML = [{id: "all", name: "クローザー全員"}, ...cls, ...vws].map(c =>
       `<button class="chip-btn" data-c="${esc(c.id)}" aria-pressed="${calCloser === c.id}">${c.id !== "all" ? `<i class="dot-c" style="background:${c.color}"></i>` : ""}${esc(c.name)}${c.view ? "（閲覧）" : ""}</button>`).join("");
     $("legend").innerHTML = `<span>色＝クローザー</span>` + cls.map(c => `<span><i style="background:${c.color}"></i>${esc(c.name)}${c.ext ? "（外部）" : ""}</span>`).join("") +
-      `<span><i style="background:transparent;outline:2px solid #FFD54F;outline-offset:-2px"></i>自分が取ったアポ</span><span><i class="lg-hatch"></i>斜線＝過ぎた時間　右の細い線＝クローザーのほかの予定（Googleカレンダー）</span>` +
-      `<span>線の色＝だれの予定か（帯も同じ色）</span>` +
+      `<span><i style="background:transparent;outline:2px solid #FFD54F;outline-offset:-2px"></i>自分が取ったアポ</span>` +
+      (calCloser === "all" ? `<span><i class="lg-hatch"></i>斜線＝過ぎた時間　右の細い線＝クローザーのほかの予定（Googleカレンダー）</span><span>線の色＝だれの予定か（帯も同じ色）</span>`
+        : `<span><i class="lg-hatch"></i>斜線＝過ぎた時間</span><span>「予定あり」＝ほかの予定（Googleカレンダー）</span>`) +
       (cls.concat(vws).some(c => busyMap[c.id] && busyMap[c.id].deals && busyMap[c.id].deals.length) ? `<span>外部の人のカレンダーの【商談】も、アポと同じ帯で出ます（押すと中身）</span>` : "") +
       availLegend(calCloser === "all" ? cls : cls.filter(c => c.id === calCloser));
     cal.style.gridTemplateColumns = "";
