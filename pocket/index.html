@@ -16,7 +16,7 @@
 <link rel="manifest" href="./manifest.webmanifest">
 <link rel="apple-touch-icon" href="./icons/icon-180.png">
 <link rel="icon" href="./icons/icon-192.png">
-<link rel="stylesheet" href="./style.css?v=4">
+<link rel="stylesheet" href="./style.css?v=5">
 </head>
 <body>
 <!-- 入口：社長のGoogleでログイン -->
@@ -33,7 +33,7 @@
   <section class="view" id="v-task" hidden>
     <div class="nav"><span></span><button class="navbtn" id="taskAdd" aria-label="タスクを足す">＋</button></div>
     <h1 class="large">タスク</h1>
-    <div class="seg" id="taskSeg" role="tablist"><button data-f="quad" aria-pressed="true">4マス</button><button data-f="list" aria-pressed="false">リスト</button><button data-f="done" aria-pressed="false">完了</button></div>
+    <div class="seg" id="taskSeg" role="tablist"><button data-f="quad" aria-pressed="true">4マス</button><button data-f="list" aria-pressed="false">リスト</button><button data-f="wait" aria-pressed="false">社長待ち</button><button data-f="done" aria-pressed="false">完了</button></div>
     <div id="taskBody"></div>
   </section>
   <!-- 予定 -->
@@ -70,7 +70,7 @@
 
 <nav class="tabbar" id="tabs">
   <button data-go="today" aria-current="page"><svg class="off" viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3.5" y="5.5" width="19" height="16" rx="3.5"/></svg><svg class="on" viewBox="0 0 26 26" fill="currentColor"><rect x="3" y="5" width="20" height="17" rx="3.5"/></svg>今日</button>
-  <button data-go="task"><svg class="off" viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3.5" y="3.5" width="8" height="8" rx="2"/><rect x="14.5" y="3.5" width="8" height="8" rx="2"/><rect x="3.5" y="14.5" width="8" height="8" rx="2"/><rect x="14.5" y="14.5" width="8" height="8" rx="2"/></svg><svg class="on" viewBox="0 0 26 26" fill="currentColor"><rect x="3" y="3" width="9" height="9" rx="2.4"/><rect x="14" y="3" width="9" height="9" rx="2.4"/><rect x="3" y="14" width="9" height="9" rx="2.4"/><rect x="14" y="14" width="9" height="9" rx="2.4"/></svg>タスク</button>
+  <button data-go="task"><i class="tdot" id="waitDot" hidden></i><svg class="off" viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3.5" y="3.5" width="8" height="8" rx="2"/><rect x="14.5" y="3.5" width="8" height="8" rx="2"/><rect x="3.5" y="14.5" width="8" height="8" rx="2"/><rect x="14.5" y="14.5" width="8" height="8" rx="2"/></svg><svg class="on" viewBox="0 0 26 26" fill="currentColor"><rect x="3" y="3" width="9" height="9" rx="2.4"/><rect x="14" y="3" width="9" height="9" rx="2.4"/><rect x="3" y="14" width="9" height="9" rx="2.4"/><rect x="14" y="14" width="9" height="9" rx="2.4"/></svg>タスク</button>
   <button data-go="cal"><svg class="off" viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3.5" y="5.5" width="19" height="17" rx="3"/><path d="M3.5 10.5h19M8.5 3v5M17.5 3v5"/></svg><svg class="on" viewBox="0 0 26 26" fill="currentColor"><rect x="3" y="5" width="20" height="18" rx="3"/><rect x="7.6" y="2.5" width="2" height="5" rx="1"/><rect x="16.4" y="2.5" width="2" height="5" rx="1"/><rect x="3" y="11" width="20" height="1.5" fill="var(--bar-solid)"/></svg>予定</button>
   <button data-go="memo"><svg class="off" viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="5" y="3.5" width="16" height="19" rx="3"/><path d="M9 9h8M9 13h8M9 17h5"/></svg><svg class="on" viewBox="0 0 26 26" fill="currentColor"><rect x="4.5" y="3" width="17" height="20" rx="3.2"/><path d="M9 9h8M9 13h8M9 17h5" stroke="var(--bar-solid)" stroke-width="1.8"/></svg>メモ</button>
   <button data-go="ai"><svg class="off" viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 12a9 8 0 1 1 4 6.6L4 21l1.2-4.2A7.6 7.6 0 0 1 4 12z"/></svg><svg class="on" viewBox="0 0 26 26" fill="currentColor"><path d="M4 12a9 8 0 1 1 4 6.6L4 21l1.2-4.2A7.6 7.6 0 0 1 4 12z"/></svg>秘書</button>
@@ -84,6 +84,6 @@
   <div class="sbody" id="sheetBody"></div>
 </div>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
-<script type="module" src="./app.js?v=4"></script>
+<script type="module" src="./app.js?v=5"></script>
 </body>
 </html>
