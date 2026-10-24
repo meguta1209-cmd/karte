@@ -217,7 +217,7 @@ textarea.field.big { min-height: 46dvh; font-size: 17px; }
 .ev2.long span { writing-mode: vertical-rl; letter-spacing: 1px; white-space: nowrap; }
 .chev { color: var(--circle); font-size: 18px; flex: none; }
 /* v4：仕事／プライベート／すべて（いちばん上）・30分ほどの短い予定は1行 */
-.seg.area { margin: 8px 0 0; max-width: 300px; }
+.seg.area { margin: 8px 0 0; }   /* 画面の幅いっぱい（左に寄って見えた。社長 2026-10-24） */
 .seg.area [data-a="private"][aria-pressed="true"] { color: var(--green); }
 .seg.area [data-a="work"][aria-pressed="true"] { color: var(--blue); }
 .ev2.tiny { display: flex; align-items: center; gap: 4px; white-space: nowrap; padding-top: 1px; padding-bottom: 1px; }
