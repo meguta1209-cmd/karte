@@ -244,3 +244,29 @@ button.hisho { width: 100%; text-align: left; }
 /* v5.2：音声メモ（聞いている間は赤） */
 .chip.micchip { font-size: 15px; padding: 8px 14px; }
 .chip.micchip.rec { background: var(--red); color: #fff; animation: pulse 1s infinite; }
+/* v6：くり返しタスク（↻）・毎月の日にち */
+.rep { color: var(--sub); font-size: 13px; margin-left: 5px; }
+.frow select.sel { background: var(--fill); border: 0; border-radius: 7px; padding: 6px 8px; font-size: 16px; color: var(--text); font-family: inherit; }
+/* v6：日報（17時からは上に大きく・できたら緑） */
+.nippoBig { display: block; width: 100%; margin-top: 10px; background: var(--blue); color: #fff; border-radius: 12px; padding: 13px 16px; text-align: left; }
+.nippoBig .t { display: block; font-size: 17px; font-weight: 600; }
+.nippoBig .s2 { display: block; font-size: 12px; opacity: .85; margin-top: 3px; }
+.nippoBig.done { background: var(--green); }
+.nippoBig:active { opacity: .8; }
+.lab.nlab { display: flex; align-items: center; justify-content: space-between; margin-right: 4px; }
+.chip.micchip.sm { padding: 3px 10px; font-size: 14px; }
+.field.nfield { min-height: 64px; font-size: 16px; line-height: 1.45; resize: vertical; font-family: inherit; }
+.msg.nippo { font-size: 14px; line-height: 1.5; }
+.copyBtn { align-self: flex-start; margin: -2px 0 4px 6px; color: var(--blue); font-size: 14px; font-weight: 600; background: var(--card); border-radius: 14px; padding: 6px 16px; }
+.nippoOut { background: var(--card); border-radius: 12px; padding: 14px 16px; font-size: 15px; line-height: 1.65; white-space: pre-wrap; word-break: break-word; -webkit-user-select: text; user-select: text; }
+/* v6：商談の準備チェック */
+.prep { background: var(--card); border-radius: 12px; margin-top: 20px; padding: 10px 0 4px; box-shadow: inset 3px 0 0 var(--purple); }
+.prep .ph { display: flex; justify-content: space-between; align-items: baseline; padding: 0 16px 2px; font-size: 14px; font-weight: 700; color: var(--purple); }
+.prep .ph b { color: var(--sub); font-weight: 600; font-size: 13px; }
+.prep .pm { padding: 4px 16px 0; font-size: 13px; color: var(--sub); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.prep .pi { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; padding: 9px 16px; min-height: 42px; font-size: 16px; }
+.prep .pi:active { background: var(--fill); }
+.prep .pi .box { width: 22px; height: 22px; border-radius: 6px; border: 1.6px solid var(--circle); flex: none; position: relative; }
+.prep .pi.on { color: var(--sub); }
+.prep .pi.on .box { background: var(--green); border-color: var(--green); }
+.prep .pi.on .box::after { content: ""; position: absolute; left: 6.5px; top: 2.5px; width: 5px; height: 10px; border: solid #fff; border-width: 0 2px 2px 0; transform: rotate(45deg); }

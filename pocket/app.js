@@ -1,10 +1,11 @@
-/* ポケノート v2（2026-10-24）：社長専用のタスク・予定・メモ＋秘書。
+/* ポケノート v6（2026-10-24：くり返しタスク・日報・商談の準備チェック。v2 からの作り）：社長専用のタスク・予定・メモ＋秘書。
    データは結果カウンターと同じ Firebase（kekka-counter-2026）の hub/<社長のuid>/…（ルールで社長本人だけ・ほかのメンバーは読めない）。
    端末にも写しを持つので、圏外でも使えて、つながったら自動で送る。v1 でスマホの中（localStorage "pocket-v1"）に入れた分は、最初のログインで移す。
-     tasks:  {id, title, note, imp(重要), urg(急ぎ), due:"YYYY-MM-DD"|null, time:"HH:MM"|"", done, doneAt, createdAt, updatedAt, src:"me"}
+     tasks:  {id, title, note, imp(重要), urg(急ぎ), due:"YYYY-MM-DD"|null, time:"HH:MM"|"", done, doneAt, createdAt, updatedAt, src:"me",
+              repeat:{type:"daily"|"weekday"|"weekly"|"monthly", dow:0-6, dom:1-31}|null（v6 くり返し）, repFrom(前の回のid), repNext(作った次の回のid)}
      events: {id, title, date:"YYYY-MM-DD", allDay, start:"HH:MM", end:"HH:MM", note, color, createdAt, updatedAt, src:"me"}
      memos:  {id, text, status:"wait"(振り分け待ち)|"memo"(メモのまま)|"done"(振り分け済み), result:{kind,label}|null, createdAt, updatedAt}
-     chat:   {id, role:"me"|"ai", text, at, status:"wait"(PCの秘書がまだ読んでいない)}
+     chat:   {id, role:"me"|"ai", text, at, status:"wait"(PCの秘書がまだ読んでいない), kind:"nippo"(v6 日報の材料／できた日報), nippo:{…}(材料の中身), replyTo}
      meta/brief {text, at}＝秘書のひと言（PCの秘書が書く）／meta/pc {at}＝PCの秘書が最後に動いた時刻
    結果カウンターの自分のアポ・前確・再架電・予定（records・tasks の uid＝自分）も読んで、今日と予定に出す（見るだけ） */
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
@@ -94,7 +95,7 @@ $("logoutBtn2").onclick = () => signOut(auth);
 onAuthStateChanged(auth, u => {
   unsubs.forEach(f => f()); unsubs = []; U = null;
   kpiUnsubs.forEach(f => f()); kpiUnsubs = []; kpiDays = {}; kpiFor = "";
-  COLS.forEach(c => { db[c] = []; shadow[c].clear(); }); kcRecs = []; kcTasks = []; brief = null; pcAt = null;
+  COLS.forEach(c => { db[c] = []; shadow[c].clear(); }); kcRecs = []; kcTasks = []; brief = null; pcAt = null; prep = {};
   if (!u) { gate("Googleアカウントでログインしてください（社長のアカウント）。", true, false); return; }
   if (String(u.email || "").toLowerCase() !== OWNER_EMAIL) { gate("このアプリは社長専用です（" + (u.email || "") + "）。", false, true); return; }
   U = u.uid; $("gate").hidden = true; start();
@@ -107,6 +108,7 @@ function start() {
     if ($("sheet").hidden) render();
   }, err({tasks: "タスク", events: "予定", memos: "メモ", chat: "秘書の会話"}[col]))));
   unsubs.push(onSnapshot(doc(fs, P("meta"), "brief"), s => { brief = s.exists() ? s.data() : null; if (view === "today" && $("sheet").hidden) render(); }, () => {}));
+  unsubs.push(onSnapshot(doc(fs, P("meta"), "prep"), s => { prep = s.exists() && s.data().items || {}; if (view === "today" && $("sheet").hidden) render(); }, () => {}));
   unsubs.push(onSnapshot(doc(fs, P("meta"), "pc"), s => { const a = s.exists() ? s.data().at : null; pcAt = a ? tsd(a) || new Date(a) : null; if (view === "ai" && $("sheet").hidden) render(); }, () => {}));
   /* 結果カウンターの自分の分（ルールで読める：uid＝自分）。見るだけ */
   unsubs.push(onSnapshot(query(collection(fs, "records"), where("uid", "==", U), where("pending", "==", true)), s => {
@@ -211,11 +213,32 @@ function dueLabel(t) {
 }
 const byDue = (a, b) => (a.due ? dueAt(a) : Infinity) - (b.due ? dueAt(b) : Infinity) || String(a.createdAt).localeCompare(String(b.createdAt));
 function taskCell(t, withPill) {
-  const q = quadOf(t), over = isOver(t);
+  const q = quadOf(t), over = isOver(t), rl = repLabel(t.repeat);
   return `<div class="cell${t.done ? " strike" : ""}" data-tedit="${esc(t.id)}"><button class="circle${t.done ? " done" : ""}" data-tdone="${esc(t.id)}" aria-label="${t.done ? "未完了に戻す" : "完了にする"}"></button>
-    <div class="grow"><div class="t">${esc(t.title || "（題なし）")}</div>${t.due || t.note ? `<div class="s${over ? " over" : ""}">${esc([dueLabel(t), t.note ? t.note.split("\n")[0] : ""].filter(Boolean).join(" ・ "))}</div>` : ""}</div>
+    <div class="grow"><div class="t">${esc(t.title || "（題なし）")}</div>${t.due || t.note || rl ? `<div class="s${over ? " over" : ""}">${esc([dueLabel(t), rl ? "↻" + rl : "", t.note ? t.note.split("\n")[0] : ""].filter(Boolean).join(" ・ "))}</div>` : ""}</div>
     ${withPill && q.pill && !t.done ? `<span class="pill ${q.pill}">${q.name}</span>` : ""}</div>`;
 }
+
+/* ---------- くり返しタスク（v6・社長「毎日17:30 日報」「毎週月曜 KPI報告」） ----------
+   repeat:{type:"daily"(毎日)|"weekday"(平日＝月〜金)|"weekly"(毎週・dow 0日〜6土)|"monthly"(毎月・dom 1〜31。その月に無い日は末日)}。
+   完了にすると、次の回を新しいタスクとして入れる（題・メモ・4マス・区分・時刻・くり返しを引き継ぐ）。
+   次の回の期限＝今の期限より後で、今日より前ではない最初の日（遅れて済ませても、たまった回は作らない）。完了を戻すと、作った次の回（まだ手を付けていない物）を消す */
+const REP_TYPES = [["", "なし"], ["daily", "毎日"], ["weekday", "平日"], ["weekly", "毎週"], ["monthly", "毎月"]];
+const repOk = r => !!r && ["daily", "weekday", "weekly", "monthly"].includes(r.type);
+const repDow = r => { const n = parseInt(r.dow, 10); return n >= 0 && n <= 6 ? n : 1; };   // 無い・変な値は月曜
+const repDom = r => Math.min(31, Math.max(1, Number(r.dom) || 1));
+const repLabel = r => !repOk(r) ? "" : r.type === "daily" ? "毎日" : r.type === "weekday" ? "平日" : r.type === "weekly" ? "毎週" + WD[repDow(r)] + "曜" : "毎月" + repDom(r) + "日";
+const lastDom = d => new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+function repHit(r, d) {
+  const w = d.getDay();
+  if (r.type === "daily") return true;
+  if (r.type === "weekday") return w >= 1 && w <= 5;
+  if (r.type === "weekly") return w === repDow(r);
+  return d.getDate() === Math.min(repDom(r), lastDom(d));
+}
+/* from の日（その日も入れる）から先で、最初に当たる日 */
+function repFirst(r, from) { let d = new Date(from); for (let i = 0; i < 400; i++, d = addDays(d, 1)) if (repHit(r, d)) return ymd(d); return ymd(from); }
+const repNextDue = t => { const T = parseYmd(todayStr()), after = t.due ? addDays(parseYmd(t.due), 1) : addDays(T, 1); return repFirst(t.repeat, after > T ? after : T); };
 
 /* ---------- スマホの通知（v5・Firebase Cloud Messaging） ----------
    「オンにする」を押す（iPhone はホーム画面に追加したアプリで）→ 通知の許可 → この端末の宛先（トークン）を hub/<社長>/meta/push の devices に保存。
@@ -292,6 +315,113 @@ function eventCell(e) {
     <div class="grow"><div class="t">${esc(e.title || "（予定）")}</div>${e.note ? `<div class="s">${esc(e.note.split("\n")[0])}</div>` : ""}</div></div>`;
 }
 
+/* ---------- 日報（v6・社長 2026-10-24） ----------
+   今日の画面（仕事）に「日報を書く」。17時から上の方に大きく出す。押すと材料の入力（意識した事・どうだった・よかった・課題・明日・ひとこと。数字は結果カウンターから自動）。
+   送ると chat に {role:"me", kind:"nippo", text:＜日報の材料＞の文, nippo:{date, focus, result, good, issue, tomorrow, note, kpi:{n, ans, apo, week, goal}}, status:"wait"}。
+   PCの秘書が AIメグタ（社長の文体）で日報にして {role:"ai", kind:"nippo", replyTo, text:日報の本文} を返す → 秘書の画面と今日の画面でコピーできる。
+   書きかけは端末に覚える（閉じても消えない） */
+const NIPPO_HOUR = 17, NIPPO_LS = "pocket-nippo";
+const NIPPO_F = [["focus", "意識した事"], ["result", "どうだった"], ["good", "よかった"], ["issue", "課題"], ["tomorrow", "明日"], ["note", "ひとこと"]];
+const nippoDraft = () => { try { const x = JSON.parse(localStorage.getItem(NIPPO_LS) || "null"); return x && x.date === todayStr() ? x.f || {} : null; } catch (e) { return null; } };
+const nippoKeep = f => { try { localStorage.setItem(NIPPO_LS, JSON.stringify({date: todayStr(), f})); } catch (e) {} };
+/* 今日送った材料（いちばん新しい物）と、その返事 */
+function nippoToday() {
+  const T = todayStr(), byAt = (a, b) => String(b.at).localeCompare(String(a.at));
+  const sent = db.chat.filter(c => c.role === "me" && c.kind === "nippo" && c.nippo && c.nippo.date === T).sort(byAt);
+  const ids = new Set(sent.map(c => c.id));
+  const reply = db.chat.filter(c => c.role !== "me" && c.kind === "nippo" && ids.has(c.replyTo)).sort(byAt)[0] || null;
+  return {sent: sent[0] || null, reply};
+}
+/* text は AIメグタの「材料の型」（SNS営業ツール\AIメグタ\材料の型.md）と同じ9行＝そのまま貼れる。空の所は空のまま（AIメグタが【社長に聞く】にする。テスター） */
+const NIPPO_HEAD = {focus: "意識"};
+function nippoText(x) {
+  const k = x.kpi, d = parseYmd(x.date), v = s => String(s || "").trim();
+  return ["＜日報の材料＞", "日付：" + (d.getMonth() + 1) + "/" + d.getDate(), "時間：" + v(x.hours), `数字：コール${k.n} 対応${k.ans} アポ${k.apo}（今週 ${k.week}/${k.goal}）`,
+    ...NIPPO_F.map(([id, l]) => (NIPPO_HEAD[id] || l) + "：" + v(x[id]))].join("\n");
+}
+function nippoForm() {
+  const {sent} = nippoToday(), d = nippoDraft() || (sent ? sent.nippo : {}) || {}, k = kpiNow();
+  openSheet("今日の日報", `
+    <div class="kpi1" style="margin-top:0"><span><b>${k.n}</b>コール</span><span><b>${k.ans}</b>対応</span><span><b>${k.apo}</b>アポ</span><span><b>${k.week}</b>/${WEEK_GOAL} 週</span></div>
+    <p class="note" style="margin-top:6px">数字は結果カウンターから自動で入ります</p>
+    <div class="lab">時間</div><input class="field" id="n_hours" placeholder="いつもの10時〜18時テレアポなら空でOK" value="${esc(d.hours || "")}" autocomplete="off" enterkeyhint="done">
+    ${NIPPO_F.map(([id, l]) => `<div class="lab nlab"><span>${l}</span><button type="button" class="chip micchip sm" data-nmic="${id}" aria-pressed="false" aria-label="${l}を話して書く">🎤</button></div>
+      <textarea class="field nfield" id="n_${id}" rows="2" placeholder="${l === "ひとこと" ? "（なくてもOK）" : ""}">${esc(d[id] || "")}</textarea>`).join("")}
+    <p class="note">送ると、PCの秘書が社長の文体（AIメグタ）で日報にして返します。返事は秘書の画面に届き、コピーできます。${sent ? "<br>今日はもう送っています（直して送ると、新しい材料で作り直します）。" : ""}</p>`, sendNippo, "秘書に送る");
+  const keep = () => { nippoKeep(readNippo()); sheetSnap = sheetState(); };   // 書きかけは覚えるので、閉じる時に聞かない
+  ["hours", ...NIPPO_F.map(x => x[0])].forEach(id => $("n_" + id).addEventListener("input", keep));
+  $("sheetBody").querySelectorAll("[data-nmic]").forEach(b => b.onclick = () => dictate($("n_" + b.dataset.nmic), b, keep));
+}
+const readNippo = () => Object.fromEntries(["hours", ...NIPPO_F.map(x => x[0])].map(id => [id, ($("n_" + id) ? $("n_" + id).value : "").trim()]));
+function sendNippo() {
+  const f = readNippo();
+  if (!NIPPO_F.some(([id]) => f[id])) { toast("どれか1つは書いてください"); return; }
+  const k = kpiNow(), nippo = Object.assign({date: todayStr()}, f, {kpi: {n: k.n, ans: k.ans, apo: k.apo, week: k.week, goal: WEEK_GOAL}});
+  nippoKeep(f);
+  db.chat.push({id: newId(), role: "me", kind: "nippo", text: nippoText(nippo), nippo, at: nowIso(), status: "wait"});
+  save(); closeSheet(); go("ai"); toast("日報の材料を秘書に送りました");
+}
+/* できた日報：全部の文とコピー */
+function nippoOut(c) {
+  openSheet("今日の日報", `<div class="nippoOut">${esc(c.text)}</div><button type="button" class="btn" id="nCopy" style="font-weight:600">コピー</button><button type="button" class="btn" id="nEdit">材料を直して送り直す</button>`);
+  $("nCopy").onclick = () => copyText(c.text);
+  $("nEdit").onclick = () => nippoForm();
+}
+async function copyText(s) {
+  try { await Promise.race([navigator.clipboard.writeText(s), new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 1500))]); toast("コピーしました"); return; } catch (e) {}
+  try {   // 古いやり方（クリップボードが使えない時）
+    const ta = document.createElement("textarea"); ta.value = s; ta.setAttribute("readonly", ""); ta.style.position = "fixed"; ta.style.opacity = "0"; document.body.appendChild(ta); ta.select(); ta.setSelectionRange(0, s.length);
+    const okc = document.execCommand("copy"); ta.remove(); toast(okc ? "コピーしました" : "コピーできませんでした（長押しで選んでください）");
+  } catch (e) { toast("コピーできませんでした（長押しで選んでください）"); }
+}
+/* 今日の画面の「日報」の行。17時からは上の方に大きく */
+function nippoRow(big) {
+  const {sent, reply} = nippoToday();
+  const label = reply ? "📝 日報ができました（押すとコピー）" : sent ? "📝 日報：秘書が作っています…" : "📝 今日の日報を書く";
+  const sub = reply ? "" : sent ? "送った材料を直して送り直せます" : "数字は結果カウンターから自動で入ります";
+  return big ? `<button class="nippoBig${reply ? " done" : ""}" data-nippo="1"><span class="t">${label}</span>${sub ? `<span class="s2">${sub}</span>` : ""}</button>`
+    : `<div class="group" style="margin-top:22px"><button class="cell plain more" data-nippo="1"><div class="grow"><div class="t">${label}</div></div></button></div>`;
+}
+
+/* ---------- 商談の準備チェック（v6・社長の反省 2026-10-20「資料を増やすより、前日の相手役の練習・最初の3行・同席者との出番決め」） ----------
+   明日（月曜の商談は土曜から）商談がある時、今日の画面に「明日の商談の準備」と3つのチェック。商談の当日も始まるまでは出す。
+   商談＝結果カウンターの自分のアポ／ポケノートの予定で題に「商談」が入る物。
+   チェックは hub/<社長>/meta/prep {items:{<key>:{c:[練習, 最初の3行, 出番], day:商談の日, at}}}（ほかの端末ともそろう）。終わった日の物は、書く時に片づける */
+const PREP = ["前日の相手役の練習", "最初の3行を決める", "同席者と出番を決める"];
+let prep = {};
+function prepTargets() {
+  const now = new Date(), T = parseYmd(todayStr()), out = [];
+  const add = (key, w, title) => {
+    const day = parseYmd(ymd(w)), from = addDays(day, w.getDay() === 1 ? -2 : -1);   // 月曜の商談は土曜から
+    if (w > now && from <= T) out.push({key, w, day: ymd(w), title});
+  };
+  if (showWork()) kcRecs.forEach(r => { if (r.r === "アポ" && r.memo && r.memo.when && !r.canceled) add("apo:" + r.id + "@" + ymd(r.memo.when), r.memo.when, "商談：" + (r.memo.shop || "（店名なし）")); });
+  db.events.filter(e => !e.deleted && inArea(e) && /商談/.test(e.title || "") && e.date).forEach(e => {
+    const w = new Date(parseYmd(e.date).getTime() + (e.allDay ? 24 * 60 - 1 : toMin(e.start)) * 6e4);
+    add("ev:" + e.id + "@" + e.date, w, e.title);
+  });
+  return out.sort((a, b) => a.w - b.w);
+}
+function prepCard() {
+  const list = prepTargets(); if (!list.length) return "";
+  const T = todayStr(), tm = ymd(addDays(parseYmd(T), 1));
+  const when = x => x.day === T ? "今日" : x.day === tm ? "明日" : mdw(x.day);
+  const head = list.every(x => x.day === T) ? "今日の商談の準備" : list.every(x => x.day !== T) && list.every(x => x.day === tm) ? "明日の商談の準備" : "商談の準備";
+  const cnt = list.reduce((a, x) => a + ((prep[x.key] && prep[x.key].c) || []).filter(Boolean).length, 0);
+  return `<div class="prep"><div class="ph"><span>🤝 ${head}</span><b>${cnt}/${list.length * PREP.length}</b></div>${list.map(x => {
+    const c = (prep[x.key] && prep[x.key].c) || [];
+    return `<div class="pm">${esc(when(x) + " " + hm(x.w) + "　" + x.title)}</div>` + PREP.map((l, i) => `<button class="pi${c[i] ? " on" : ""}" data-prep="${esc(x.key)}" data-pi="${i}" data-pday="${x.day}" aria-pressed="${!!c[i]}"><span class="box"></span>${l}</button>`).join("");
+  }).join("")}</div>`;
+}
+function togglePrep(key, i, day) {
+  const T = todayStr(), items = {};
+  Object.entries(prep).forEach(([k, v]) => { if (v && v.day >= T) items[k] = v; });   // 終わった日の物は片づける
+  const cur = items[key] ? {...items[key], c: (items[key].c || []).slice()} : {c: [false, false, false], day};
+  while (cur.c.length < PREP.length) cur.c.push(false);
+  cur.c[i] = !cur.c[i]; cur.at = nowIso(); items[key] = cur; prep = items; render();
+  setDoc(doc(fs, P("meta"), "prep"), {items}).catch(e => { console.error(e); toast("保存できませんでした"); });
+}
+
 /* ---------- 今日 ---------- */
 function renderToday() {
   const n = new Date(), T = todayStr();
@@ -313,7 +443,7 @@ function renderToday() {
   /* v5.1（社長「文字が多くてごちゃごちゃ」）：iPhone 純正の「今日」くらいの文字の量に。
      各行は題1行だけ（説明・手順・小さい字は押すと出る）・見出しは少なく・空の欄は出さない・秘書のひと言は2行で切って押すと全部 */
   const nowMin = n.getHours() * 60 + n.getMinutes();
-  const miniTask = t => `<div class="cell" data-tedit="${esc(t.id)}"><button class="circle" data-tdone="${esc(t.id)}" aria-label="${isWait(t) ? "済みにする" : "完了にする"}"></button><div class="grow"><div class="t${isOver(t) ? " overT" : ""}">${esc(t.title || "（題なし）")}</div></div></div>`;
+  const miniTask = t => `<div class="cell" data-tedit="${esc(t.id)}"><button class="circle" data-tdone="${esc(t.id)}" aria-label="${isWait(t) ? "済みにする" : "完了にする"}"></button><div class="grow"><div class="t${isOver(t) ? " overT" : ""}">${esc(t.title || "（題なし）")}${repOk(t.repeat) ? `<span class="rep" aria-label="くり返し">↻</span>` : ""}</div></div></div>`;
   const miniEvent = e => `<div class="cell" ${evAttr(e)}><div class="time">${e.allDay ? "終日" : esc(e.start)}</div><div class="bar" style="background:${colorOf(e)[0]}"></div><div class="grow"><div class="t">${esc(e.title || "（予定）")}</div></div></div>`;
   const more = (n2, attr) => `<button class="cell plain more" ${attr}><div class="grow"><div class="t">ほか ${n2}件</div></div></button>`;
   let h = "";
@@ -323,8 +453,13 @@ function renderToday() {
   if (kpiFor !== T && U) subscribeKpi();   // 日付が変わったら読み直す
   const k = kpiNow();
   if (showWork()) h += `<button class="kpi1" data-kc="1"><span><b>${k.n}</b>コール</span><span><b>${k.ans}</b>対応</span><span><b>${k.apo}</b>アポ</span><span><b>${k.week}</b>/${WEEK_GOAL} 週</span></button>`;
+  /* 日報（17時からは上に大きく） */
+  const eve = n.getHours() >= NIPPO_HOUR;
+  if (showWork() && eve) h += nippoRow(true);
   /* 社長待ち（期限の近い順に3件） */
   if (waits.length) h += `<div class="sec bell"><span>🔔 社長待ち</span><button data-gotask="wait">${waits.length}件</button></div><div class="group wait">${waits.slice(0, 3).map(miniTask).join("")}${waits.length > 3 ? more(waits.length - 3, `data-gotask="wait"`) : ""}</div>`;
+  /* 明日の商談の準備 */
+  h += prepCard();
   /* 予定（これからの物を3件・結果カウンターは1行） */
   const mine = evs.filter(e => !e.kc), kcs = evs.filter(e => e.kc);
   const coming = mine.filter(e => e.allDay || toMin(e.end || e.start) > nowMin), shown = coming.slice(0, 3), rest = mine.length - shown.length;
@@ -344,6 +479,7 @@ function renderToday() {
   const th = list.map(miniTask).join("") + preRows.join("");
   if (th) h += `<div class="sec"><span>タスク</span><button data-goto="task">すべて</button></div><div class="group">${th}</div>`;
   if (!waits.length && !eh && !th) h += `<div class="group" style="margin-top:22px"><div class="empty">今日の予定・タスクはありません</div></div>`;
+  if (showWork() && !eve) h += nippoRow(false);   // 17時までは下に小さく
   /* 通知：オンになっていれば出さない */
   const pl = pushLabel();
   if (pl !== "オン") h += `<div class="group" style="margin-top:22px"><div class="cell plain"><div class="grow"><div class="t" style="font-size:15px">🔔 通知：${esc(pl)}</div></div>${pushBtn()}</div></div>`;
@@ -368,7 +504,7 @@ function renderTasks() {
     $("taskBody").innerHTML = `<div class="quad">${QUADS.map(q => {
       const items = open.filter(t => quadOf(t) === q).sort(byDue);
       return `<div class="q"><div class="qh"><span class="dot" style="background:${q.color}"></span>${q.name}<span class="qn">${items.length}</span></div>
-        ${items.map(t => `<div class="qi" data-tedit="${esc(t.id)}"><button class="circle" data-tdone="${esc(t.id)}" aria-label="完了にする"></button><div>${esc(t.title || "（題なし）")}${t.due ? `<small class="${isOver(t) ? "over" : ""}">${esc(dueLabel(t))}</small>` : ""}</div></div>`).join("")}
+        ${items.map(t => `<div class="qi" data-tedit="${esc(t.id)}"><button class="circle" data-tdone="${esc(t.id)}" aria-label="完了にする"></button><div>${esc(t.title || "（題なし）")}${t.due || repOk(t.repeat) ? `<small class="${isOver(t) ? "over" : ""}">${esc([dueLabel(t), repOk(t.repeat) ? "↻" + repLabel(t.repeat) : ""].filter(Boolean).join(" "))}</small>` : ""}</div></div>`).join("")}
         <button class="qadd" data-qadd="${q.k}">＋ 足す</button></div>`;
     }).join("")}</div>`;
   } else if (taskF === "list") {
@@ -388,8 +524,25 @@ function renderTasks() {
 }
 function toggleTask(id) {
   const t = db.tasks.find(x => x.id === id); if (!t) return;
-  t.done = !t.done; t.doneAt = t.done ? nowIso() : null; t.updatedAt = nowIso(); save(); render();
-  toast(t.done ? (isWait(t) ? "済みにしました（チームに伝わります）" : "完了にしました") : "未完了に戻しました");
+  t.done = !t.done; t.doneAt = t.done ? nowIso() : null; t.updatedAt = nowIso();
+  let msg = t.done ? (isWait(t) ? "済みにしました（チームに伝わります）" : "完了にしました") : "未完了に戻しました";
+  if (!isWait(t) && repOk(t.repeat)) {
+    if (t.done) {   // くり返し：次の回を入れる（もう作ってあれば作らない）
+      let nx = db.tasks.find(x => x.repFrom === t.id && !x.done);
+      if (!nx) {
+        const ts = nowIso();
+        nx = {id: newId(), title: t.title, note: t.note || "", imp: !!t.imp, urg: !!t.urg, due: repNextDue(t), time: t.time || "", area: areaOfX(t), repeat: plain(t.repeat),
+          done: false, doneAt: null, createdAt: ts, updatedAt: ts, src: "me", repFrom: t.id};
+        db.tasks.push(nx);
+      }
+      t.repNext = nx.id; msg = "完了にしました。次の回（" + mdw(nx.due) + (nx.time ? " " + nx.time : "") + "）を入れました";
+    } else if (t.repNext) {   // 完了を戻した：作った次の回を消す（直していない・済んでいない物だけ）
+      const nx = db.tasks.find(x => x.id === t.repNext);
+      if (nx && !nx.done && nx.updatedAt === nx.createdAt) { db.tasks = db.tasks.filter(x => x !== nx); msg = "未完了に戻しました（次の回は消しました）"; }
+      t.repNext = null;
+    }
+  }
+  save(); render(); toast(msg);
 }
 
 /* ---------- 予定 ---------- */
@@ -501,7 +654,8 @@ function renderAi() {
     const d = new Date(c.at), day = ymd(d);
     const stamp = day === todayStr() ? "今日 " + hm(d) : (d.getMonth() + 1) + "月" + d.getDate() + "日 " + hm(d);
     if (day + pad(d.getHours()) !== last) { h += `<div class="when">${stamp}</div>`; last = day + pad(d.getHours()); }
-    h += `<div class="msg ${c.role === "me" ? "me" : "ai"}">${esc(c.text)}</div>`;
+    h += `<div class="msg ${c.role === "me" ? "me" : "ai"}${c.kind === "nippo" ? " nippo" : ""}">${esc(c.text)}</div>`;
+    if (c.role !== "me" && c.kind === "nippo") h += `<button class="copyBtn" data-copy="${esc(c.id)}">コピー</button>`;   // 秘書が作った日報
     if (c.role !== "me" && Array.isArray(c.items) && c.items.length) h += `<div class="card2">${c.items.map(x => { const ic = ICON[x.kind] || ICON.memo; return `<div class="row2"><span class="ico" style="background:${ic[0]}">${ic[1]}</span><span class="grow">${esc(x.label)}</span><span class="state">${esc(x.state || "")}</span></div>`; }).join("")}</div>`;
     if (c.role === "me" && (c.status === "wait" || c.status === "doing")) {
       const later = list.slice(i + 1).some(x => x.role === "me");   // 続けて送った分は、いちばん下だけに出す
@@ -599,11 +753,12 @@ function taskForm(t, pre) {
     <div class="lab">期限</div>
     <div class="fgroup"><div class="frow">日付<input type="date" id="fDate" value="${esc(v.due || "")}"></div><div class="frow">時刻（なくてもOK）<input type="time" id="fTime" value="${esc(v.time || "")}"></div></div>
     <div class="chips" id="fQuick">${quick.map(([l, d]) => `<button type="button" class="chip" data-q="${d}" aria-pressed="${(v.due || "") === d}">${l}</button>`).join("")}</div>
+    ${t && isWait(t) ? "" : repBox(v)}
     <div class="lab">メモ</div>
     <textarea class="field" id="fNote" placeholder="（なくてもOK）">${esc(v.note || "")}</textarea>
     ${t && isWait(t) ? "" : areaChips(t ? areaOfX(t) : (v.area || newArea()))}
     ${t ? `<button type="button" class="btn" id="fDone">${t.done ? "未完了に戻す" : "完了にする"}</button><button type="button" class="btn danger" id="fDel">このタスクを消す</button>` : ""}`, () => saveTask(t, v));
-  wireAreaChips();
+  wireAreaChips(); wireRep();
   $("fQuick").addEventListener("click", e => { const b = e.target.closest("[data-q]"); if (!b) return; $("fDate").value = b.dataset.q; if (!b.dataset.q) $("fTime").value = ""; $("fQuick").querySelectorAll("[data-q]").forEach(x => x.setAttribute("aria-pressed", String(x === b))); });
   $("fDate").addEventListener("input", () => $("fQuick").querySelectorAll("[data-q]").forEach(x => x.setAttribute("aria-pressed", String(x.dataset.q === $("fDate").value))));
   if (t) {
@@ -613,15 +768,49 @@ function taskForm(t, pre) {
       try { await Promise.race([navigator.clipboard.writeText(t.link), new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 1500))]); toast("コピーしました"); }
       catch (e) { toast("コピーできませんでした（長押しで選んでください）"); }
     };
-    $("fDel").onclick = () => { if (!confirm("このタスクを消します。よろしいですか？")) return; db.tasks = db.tasks.filter(x => x.id !== t.id); save(); closeSheet(); render(); toast("消しました"); };
+    $("fDel").onclick = () => { if (!confirm(repOk(t.repeat) && !t.done ? "このくり返しタスクを消します（次の回も作られなくなります）。よろしいですか？" : "このタスクを消します。よろしいですか？")) return; db.tasks = db.tasks.filter(x => x.id !== t.id); save(); closeSheet(); render(); toast("消しました"); };
   } else setTimeout(() => $("fTitle").focus(), 80);
+}
+/* くり返しの入力：なし／毎日／平日／毎週（曜日）／毎月（日にち）。毎週・毎月の初めの値は、期限の日（無ければ今日）から */
+function repBox(v) {
+  const r = repOk(v.repeat) ? v.repeat : null, base = v.due ? parseYmd(v.due) : parseYmd(todayStr());
+  const dow = r && r.type === "weekly" ? repDow(r) : base.getDay(), dom = r && r.type === "monthly" ? repDom(r) : base.getDate();
+  return `<div class="lab">くり返し</div>
+    <div class="chips" id="fRep">${REP_TYPES.map(([k, l]) => `<button type="button" class="chip" data-rep="${k}" aria-pressed="${(r ? r.type : "") === k}">${l}</button>`).join("")}</div>
+    <div class="chips" id="fRepW"${r && r.type === "weekly" ? "" : " hidden"}>${[1, 2, 3, 4, 5, 6, 0].map(i => `<button type="button" class="chip" data-dow="${i}" aria-pressed="${dow === i}">${WD[i]}</button>`).join("")}</div>
+    <div class="fgroup" id="fRepM" style="margin-top:10px"${r && r.type === "monthly" ? "" : " hidden"}><div class="frow">毎月<select id="fDom" class="sel">${Array.from({length: 31}, (_, i) => `<option value="${i + 1}"${dom === i + 1 ? " selected" : ""}>${i + 1}日${i + 1 >= 29 ? "（無い月は末日）" : ""}</option>`).join("")}</select></div></div>
+    <p class="note" id="fRepNote"${r ? "" : " hidden"}>完了にすると、次の回を自動で入れます（期限が空なら、最初の回の日を期限にします）</p>`;
+}
+function wireRep() {
+  const box = $("fRep"); if (!box) return;
+  const pick = (sel, b) => $(sel).querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", String(x === b)));
+  box.addEventListener("click", e => {
+    const b = e.target.closest("[data-rep]"); if (!b) return;
+    pick("fRep", b); const k = b.dataset.rep;
+    $("fRepW").hidden = k !== "weekly"; $("fRepM").hidden = k !== "monthly"; $("fRepNote").hidden = !k;
+    const d = $("fDate").value ? parseYmd($("fDate").value) : null;   // 期限の日を先に入れていれば、その曜日・日にちに合わせる
+    if (d && k === "weekly") pick("fRepW", $("fRepW").querySelector(`[data-dow="${d.getDay()}"]`));
+    if (d && k === "monthly") $("fDom").value = String(d.getDate());
+  });
+  $("fRepW").addEventListener("click", e => { const b = e.target.closest("[data-dow]"); if (b) pick("fRepW", b); });
+}
+function readRep() {
+  const b = $("fRep") && $("fRep").querySelector('[aria-pressed="true"]'), type = b ? b.dataset.rep : "";
+  if (!type) return null;
+  const r = {type};
+  if (type === "weekly") { const w = $("fRepW").querySelector('[aria-pressed="true"]'); r.dow = w ? Number(w.dataset.dow) : 1; }
+  if (type === "monthly") r.dom = Number($("fDom").value) || 1;
+  return r;
 }
 function saveTask(t, v) {
   const title = $("fTitle").value.trim();
   if (!title) { toast("やることを入れてください"); return; }
-  const due = $("fDate").value || null, time = due ? $("fTime").value || "" : "";
+  const rep = t && isWait(t) ? undefined : readRep();
+  let due = $("fDate").value || null;
+  if (rep && !due) due = repFirst(rep, parseYmd(todayStr()));   // くり返しで期限が空 → 今日から先で最初に当たる日
+  const time = due ? $("fTime").value || "" : "";
   const data = {title, note: $("fNote").value.trim(), imp: $("fImp").checked, urg: $("fUrg").checked, due, time, updatedAt: nowIso()};
-  if (!(t && isWait(t))) data.area = pickedArea();
+  if (!(t && isWait(t))) { data.area = pickedArea(); data.repeat = rep; }
   if (t) Object.assign(t, data);
   else {
     const nt = Object.assign({id: newId(), done: false, doneAt: null, createdAt: nowIso(), src: "me"}, data);
@@ -716,6 +905,9 @@ document.addEventListener("click", e => {
   const pu = t.closest("[data-push]"); if (pu) { enablePush(); return; }
   const hs = t.closest("[data-hisho]"); if (hs) { hishoOpen = !hishoOpen; render(); return; }
   const kt = t.closest("[data-kctoggle]"); if (kt) { kcOpen = !kcOpen; render(); return; }
+  const np = t.closest("[data-nippo]"); if (np) { const r = nippoToday().reply; if (r) nippoOut(r); else nippoForm(); return; }
+  const cp = t.closest("[data-copy]"); if (cp) { const c = db.chat.find(x => x.id === cp.dataset.copy); if (c) copyText(c.text); return; }
+  const pr = t.closest("[data-prep]"); if (pr) { togglePrep(pr.dataset.prep, Number(pr.dataset.pi), pr.dataset.pday); return; }
   const gd = t.closest("[data-gotoday]"); if (gd) { calDate = parseYmd(todayStr()); calMode = "day"; $("calMode").querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", String(x.dataset.m === "day"))); go("cal"); return; }
   const gk = t.closest("[data-gotask]"); if (gk) { taskF = gk.dataset.gotask; $("taskSeg").querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", String(x.dataset.f === taskF))); go("task"); return; }
   const dn = t.closest("[data-tdone]"); if (dn) { e.stopPropagation(); toggleTask(dn.dataset.tdone); return; }
