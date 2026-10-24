@@ -292,3 +292,9 @@ body.kb .sheet { bottom: var(--kb, 0px); max-height: calc(var(--vvh, 100dvh) - 8
 .tabbar .tdot { top: -2px; right: -3px; width: 9px; height: 9px; border: 1.5px solid var(--navbg); }
 .tabbar [aria-current] .tdot { border-color: var(--tabsel); }
 @media (prefers-reduced-motion: reduce) { .tabbar button, .tabbar .lb { transition: none; } }
+/* v6.4：上の［仕事］［プライベート］［すべて］を時計・電池の帯から少し離す（社長「高すぎ。もうちょっとだけ下げて」）。
+   その分、下の見出しとの間（.nav の行）を詰めて、見出しは 8px 下がるだけにする。右上の＋・✎は押せる大きさ（44px）のまま */
+.seg.area { margin: 22px 0 4px; }
+.nav { height: 34px; }
+.nav { position: relative; z-index: 1; }   /* ボタンの押せる所（下に少しはみ出す）が見出しより上に来るように */
+.nav .navbtn { margin: -4px 0 -6px; }
