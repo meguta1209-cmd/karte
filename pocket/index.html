@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ポケノート</title>
+<meta name="description" content="社長のタスク・予定・メモ（＋秘書）">
+<meta name="theme-color" content="#f2f2f7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="ポケノート">
+<meta name="format-detection" content="telephone=no">
+<meta name="robots" content="noindex">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="apple-touch-icon" href="./icons/icon-180.png">
+<link rel="icon" href="./icons/icon-192.png">
+<link rel="stylesheet" href="./style.css?v=1">
+</head>
+<body>
+<main id="main">
+  <!-- 今日 -->
+  <section class="view" id="v-today">
+    <div class="nav"><span></span><span></span></div>
+    <h1 class="large">今日</h1>
+    <div class="date" id="tDate"></div>
+    <div id="todayBody"></div>
+  </section>
+  <!-- タスク -->
+  <section class="view" id="v-task" hidden>
+    <div class="nav"><span></span><button class="navbtn" id="taskAdd" aria-label="タスクを足す">＋</button></div>
+    <h1 class="large">タスク</h1>
+    <div class="seg" id="taskSeg" role="tablist"><button data-f="quad" aria-pressed="true">4マス</button><button data-f="list" aria-pressed="false">リスト</button><button data-f="done" aria-pressed="false">完了</button></div>
+    <div id="taskBody"></div>
+  </section>
+  <!-- 予定 -->
+  <section class="view" id="v-cal" hidden>
+    <div class="nav"><button class="navbtn" id="calToday">‹ <span id="calMonth"></span></button><span class="navr"><span class="seg mini" id="calMode"><button data-m="day" aria-pressed="true">日</button><button data-m="week" aria-pressed="false">週</button></span><button class="navbtn" id="evAdd" aria-label="予定を足す">＋</button></span></div>
+    <h1 class="large mid" id="calTitle"></h1>
+    <div class="week" id="weekStrip"></div>
+    <div id="calBody"></div>
+  </section>
+  <!-- メモ -->
+  <section class="view" id="v-memo" hidden>
+    <div class="nav"><span></span><button class="navbtn" id="memoAdd" aria-label="メモを書く">✎</button></div>
+    <h1 class="large">メモ</h1>
+    <input class="search" id="memoSearch" type="search" placeholder="⌕ 検索" autocomplete="off">
+    <div id="memoBody"></div>
+  </section>
+  <!-- 秘書 -->
+  <section class="view" id="v-ai" hidden>
+    <div class="nav"><span></span><span></span></div>
+    <h1 class="large">秘書</h1>
+    <div class="pc" id="pcState"></div>
+    <div class="chat" id="chatBody"></div>
+  </section>
+</main>
+
+<!-- どの画面にも出る入力欄（秘書の画面では送る欄） -->
+<form class="ask" id="ask" autocomplete="off">
+  <input id="askIn" type="text" placeholder="秘書に頼む・メモする…" enterkeyhint="send" aria-label="秘書に頼む・メモする">
+  <button type="button" class="mic" id="askMic" aria-label="話して入れる"><svg width="14" height="18" viewBox="0 0 14 18" fill="#fff"><rect x="4" y="0" width="6" height="11" rx="3"/><path d="M1 8a6 6 0 0 0 12 0" stroke="#fff" stroke-width="1.6" fill="none"/><rect x="6.2" y="13.5" width="1.6" height="4"/></svg></button>
+  <button type="submit" class="mic send" id="askSend" aria-label="送る" hidden><svg width="14" height="14" viewBox="0 0 14 14" fill="#fff"><path d="M7 1l5 5H8.5v7h-3V6H2z"/></svg></button>
+</form>
+
+<nav class="tabbar" id="tabs">
+  <button data-go="today" aria-current="page"><svg class="off" viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3.5" y="5.5" width="19" height="16" rx="3.5"/></svg><svg class="on" viewBox="0 0 26 26" fill="currentColor"><rect x="3" y="5" width="20" height="17" rx="3.5"/></svg>今日</button>
+  <button data-go="task"><svg class="off" viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3.5" y="3.5" width="8" height="8" rx="2"/><rect x="14.5" y="3.5" width="8" height="8" rx="2"/><rect x="3.5" y="14.5" width="8" height="8" rx="2"/><rect x="14.5" y="14.5" width="8" height="8" rx="2"/></svg><svg class="on" viewBox="0 0 26 26" fill="currentColor"><rect x="3" y="3" width="9" height="9" rx="2.4"/><rect x="14" y="3" width="9" height="9" rx="2.4"/><rect x="3" y="14" width="9" height="9" rx="2.4"/><rect x="14" y="14" width="9" height="9" rx="2.4"/></svg>タスク</button>
+  <button data-go="cal"><svg class="off" viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3.5" y="5.5" width="19" height="17" rx="3"/><path d="M3.5 10.5h19M8.5 3v5M17.5 3v5"/></svg><svg class="on" viewBox="0 0 26 26" fill="currentColor"><rect x="3" y="5" width="20" height="18" rx="3"/><rect x="7.6" y="2.5" width="2" height="5" rx="1"/><rect x="16.4" y="2.5" width="2" height="5" rx="1"/><rect x="3" y="11" width="20" height="1.5" fill="var(--bar-solid)"/></svg>予定</button>
+  <button data-go="memo"><svg class="off" viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="5" y="3.5" width="16" height="19" rx="3"/><path d="M9 9h8M9 13h8M9 17h5"/></svg><svg class="on" viewBox="0 0 26 26" fill="currentColor"><rect x="4.5" y="3" width="17" height="20" rx="3.2"/><path d="M9 9h8M9 13h8M9 17h5" stroke="var(--bar-solid)" stroke-width="1.8"/></svg>メモ</button>
+  <button data-go="ai"><svg class="off" viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 12a9 8 0 1 1 4 6.6L4 21l1.2-4.2A7.6 7.6 0 0 1 4 12z"/></svg><svg class="on" viewBox="0 0 26 26" fill="currentColor"><path d="M4 12a9 8 0 1 1 4 6.6L4 21l1.2-4.2A7.6 7.6 0 0 1 4 12z"/></svg>秘書</button>
+</nav>
+
+<!-- 下から出る入力 -->
+<div class="scrim" id="scrim" hidden></div>
+<div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle" hidden>
+  <div class="grab"></div>
+  <div class="shead"><button type="button" id="sheetCancel">キャンセル</button><b id="sheetTitle"></b><button type="button" class="done" id="sheetDone">保存</button></div>
+  <div class="sbody" id="sheetBody"></div>
+</div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<script src="./app.js?v=1"></script>
+</body>
+</html>
