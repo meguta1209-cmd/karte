@@ -223,3 +223,21 @@ textarea.field.big { min-height: 46dvh; font-size: 17px; }
 .ev2.tiny { display: flex; align-items: center; gap: 4px; white-space: nowrap; padding-top: 1px; padding-bottom: 1px; }
 .ev2.tiny small { display: inline; }
 .chip.ar[aria-pressed="true"][data-ar="private"] { background: var(--green); }
+/* v5.1：今日をすっきり（題1行・見出し少なく・余白多め）・下の入力欄は複数行で自動で伸びる */
+#todayBody .cell .t { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#todayBody .t.overT { color: var(--red); }
+#todayBody .sec { margin-top: 26px; }
+#todayBody .group + .group { margin-top: 10px; }
+.sec button.count { color: var(--sub); }
+button.hisho { width: 100%; text-align: left; }
+.hisho .t.clamp2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.kpi1 { display: flex; width: 100%; justify-content: space-around; background: var(--card); border-radius: 12px; padding: 9px 6px; margin-top: 10px; font-size: 12px; color: var(--sub); }
+.kpi1 b { font-size: 17px; color: var(--text); margin-right: 3px; font-variant-numeric: tabular-nums; }
+.cell.more .t { color: var(--blue); font-size: 15px; }
+.note.foot { text-align: center; margin-top: 26px; }
+/* 入力欄（textarea）：16px（iPhone で拡大されない）・最大6行・中を動かせる */
+.ask { height: auto; min-height: 44px; align-items: flex-end; padding-top: 6px; padding-bottom: 6px; }
+.ask textarea { flex: 1; min-width: 0; border: 0; background: transparent; font-size: 16px; line-height: 22px; outline: none; resize: none; padding: 5px 0; max-height: 142px; overflow-y: auto; font-family: inherit; color: inherit; }
+.ask textarea::placeholder { color: var(--sub); }
+.ask.chatbar { height: auto; min-height: 52px; }
+.ask.chatbar textarea { border: 1px solid var(--circle); border-radius: 18px; background: var(--card); padding: 6px 14px; }

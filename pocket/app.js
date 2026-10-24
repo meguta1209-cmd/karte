@@ -149,6 +149,7 @@ const openKC = () => window.open(KC_URL, "_blank", "noopener");
 
 /* ---------- 今日の数字（結果カウンターの stats から。今週＝月曜から） ---------- */
 let kcOpen = false;   // 今日の画面で、結果カウンターの行を開いているか
+let hishoOpen = false;   // 今日の画面で、秘書のひと言を全部出しているか
 const WEEK_GOAL = 20, NO_ANSWER = ["留守", "繋がらない", "使われてない"];
 let kpiFor = "", kpiUnsubs = [], kpiDays = {};
 function subscribeKpi() {
@@ -182,7 +183,7 @@ function go(v) {
   const ai = v === "ai";
   $("ask").classList.toggle("chatbar", ai);
   $("askIn").placeholder = ai ? "秘書に頼む…" : "秘書に頼む・メモする…";
-  $("memoFab").hidden = v !== "memo";
+  syncFab();
   $("areaSeg").hidden = v === "ai";
   syncAskBtn();
   if (v === "cal") calScrolled = false;
@@ -309,34 +310,43 @@ function renderToday() {
   /* 秘書のひと言：PCの秘書が今日書いた物があればそれ、なければ自動のまとめ */
   const bAt = brief && brief.at ? tsd(brief.at) || new Date(brief.at) : null;
   const useBrief = showWork() && brief && brief.text && bAt && ymd(bAt) === T;   // プライベートの時は自動のまとめ
-  /* いちばん上：チームが社長を待っている作業（無い時は出さない） */
-  /* 期限の近い順に3件だけ＋「ほか n件」（社長「タスクぱんぱんになっちゃう」） */
-  let h = waits.length ? `<div class="sec bell"><span>🔔 チームが社長を待っています（${waits.length}）</span><button data-gotask="wait">すべて</button></div><div class="group wait">${waits.slice(0, 3).map(waitCell).join("")}${waits.length > 3 ? `<button class="cell plain" data-gotask="wait"><div class="grow"><div class="t" style="color:var(--blue);font-size:15px">ほか ${waits.length - 3}件を見る</div></div></button>` : ""}</div><div style="height:14px"></div>` : "";
-  h += `<div class="hisho"><div class="av">秘</div><div class="grow"><div class="t">${esc(useBrief ? brief.text : say)}</div><div class="s">${useBrief ? "秘書 ・ " + hm(bAt) : "ポケノートのまとめ ・ " + hm(n)}</div></div></div>`;
+  /* v5.1（社長「文字が多くてごちゃごちゃ」）：iPhone 純正の「今日」くらいの文字の量に。
+     各行は題1行だけ（説明・手順・小さい字は押すと出る）・見出しは少なく・空の欄は出さない・秘書のひと言は2行で切って押すと全部 */
+  const nowMin = n.getHours() * 60 + n.getMinutes();
+  const miniTask = t => `<div class="cell" data-tedit="${esc(t.id)}"><button class="circle" data-tdone="${esc(t.id)}" aria-label="${isWait(t) ? "済みにする" : "完了にする"}"></button><div class="grow"><div class="t${isOver(t) ? " overT" : ""}">${esc(t.title || "（題なし）")}</div></div></div>`;
+  const miniEvent = e => `<div class="cell" ${evAttr(e)}><div class="time">${e.allDay ? "終日" : esc(e.start)}</div><div class="bar" style="background:${colorOf(e)[0]}"></div><div class="grow"><div class="t">${esc(e.title || "（予定）")}</div></div></div>`;
+  const more = (n2, attr) => `<button class="cell plain more" ${attr}><div class="grow"><div class="t">ほか ${n2}件</div></div></button>`;
+  let h = "";
+  /* 秘書のひと言（2行で切る・押すと全部） */
+  h += `<button class="hisho" data-hisho="1"><div class="av">秘</div><div class="grow"><div class="t${hishoOpen ? "" : " clamp2"}">${esc(useBrief ? brief.text : say)}</div>${hishoOpen ? `<div class="s">${useBrief ? "秘書 ・ " + hm(bAt) : "ポケノートのまとめ ・ " + hm(n)}</div>` : ""}</div></button>`;
+  /* 今日の数字（小さい1段・押すと結果カウンター） */
   if (kpiFor !== T && U) subscribeKpi();   // 日付が変わったら読み直す
   const k = kpiNow();
-  if (showWork()) h += `<div class="sec"><span>今日の数字（結果カウンター）</span><button data-kc="1">開く</button></div><div class="kpi" data-kc="1"><div><b>${k.n}</b><span>コール</span></div><div><b>${k.ans}</b><span>対応</span></div><div><b>${k.apo}</b><span>アポ</span></div><div><b>${k.week}<small style="font-size:13px;color:var(--sub)">/${WEEK_GOAL}</small></b><span>今週のアポ</span></div></div>`;
-  /* 予定：これからの物を3件＋「ほか n件」（社長「全部入れるとパンパンで醜い」）。結果カウンターの分は1行にまとめて、押すと開く */
-  const nowMin = n.getHours() * 60 + n.getMinutes();
+  if (showWork()) h += `<button class="kpi1" data-kc="1"><span><b>${k.n}</b>コール</span><span><b>${k.ans}</b>対応</span><span><b>${k.apo}</b>アポ</span><span><b>${k.week}</b>/${WEEK_GOAL} 週</span></button>`;
+  /* 社長待ち（期限の近い順に3件） */
+  if (waits.length) h += `<div class="sec bell"><span>🔔 社長待ち</span><button data-gotask="wait">${waits.length}件</button></div><div class="group wait">${waits.slice(0, 3).map(miniTask).join("")}${waits.length > 3 ? more(waits.length - 3, `data-gotask="wait"`) : ""}</div>`;
+  /* 予定（これからの物を3件・結果カウンターは1行） */
   const mine = evs.filter(e => !e.kc), kcs = evs.filter(e => e.kc);
   const coming = mine.filter(e => e.allDay || toMin(e.end || e.start) > nowMin), shown = coming.slice(0, 3), rest = mine.length - shown.length;
-  let eh = shown.map(eventCell).join("");
-  if (!mine.length && !kcs.length) eh = `<div class="empty">今日の予定はありません</div>`;
-  else if (!shown.length && mine.length) eh = `<div class="empty">今日の予定は終わりました</div>`;
-  if (rest > 0) eh += `<button class="cell plain" data-gotoday="1"><div class="grow"><div class="t" style="color:var(--blue);font-size:15px">ほか ${rest}件を見る${coming.length < mine.length ? "（終わった予定も）" : ""}</div></div></button>`;
+  let eh = shown.map(miniEvent).join("");
+  if (rest > 0) eh += more(rest, `data-gotoday="1"`);
   if (kcs.length) {
-    const cnt = k => kcs.filter(e => e.id.indexOf("kc:" + k + ":") === 0).length;
-    const parts = [["apo", "商談"], ["call", "再架電"], ["task", "予定"]].map(([k, l]) => cnt(k) ? l + cnt(k) : "").filter(Boolean).join("・");
-    const kNext = kcs.find(e => toMin(e.end || e.start) > nowMin);
-    eh += `<button class="cell" data-kctoggle="1"><div class="time" style="color:var(--orange)">結果</div><div class="bar" style="background:var(--orange)"></div><div class="grow"><div class="t">結果カウンター：${esc(parts)}</div><div class="s">${kNext ? "次は " + esc(kNext.start + " " + kNext.title) : "今日の分は終わりました"}</div></div><span class="chev">${kcOpen ? "⌃" : "⌄"}</span></button>`;
-    if (kcOpen) eh += kcs.map(eventCell).join("");
+    const cnt = k2 => kcs.filter(e => e.id.indexOf("kc:" + k2 + ":") === 0).length;
+    const parts = [["apo", "商談"], ["call", "再架電"], ["task", "予定"]].map(([k2, l]) => cnt(k2) ? l + cnt(k2) : "").filter(Boolean).join("・");
+    eh += `<button class="cell" data-kctoggle="1"><div class="time" style="color:var(--orange)">結果</div><div class="bar" style="background:var(--orange)"></div><div class="grow"><div class="t">結果カウンター：${esc(parts)}</div></div><span class="chev">${kcOpen ? "⌃" : "⌄"}</span></button>`;
+    if (kcOpen) eh += kcs.map(miniEvent).join("");
   }
-  h += `<div class="sec"><span>予定</span><button data-goto="cal">すべて</button></div><div class="group">${eh}</div>`;
-  const list = [...over.sort(byDue), ...todays.sort(byDue), ...doneToday];
-  const preRows = pres.map(p => `<div class="cell" data-kc="1"><span class="circle" style="opacity:.35"></span><div class="grow"><div class="t">${esc(p.title)}</div><div class="s${p.when < n ? " over" : ""}">${esc((ymd(p.when) === T ? "今日 " : mdw(ymd(p.when)) + " ") + hm(p.when) + "まで ・ " + p.sub)}</div></div><span class="pill orange">前確</span></div>`);
-  h += `<div class="sec"><span>今日のタスク</span><button data-goto="task">すべて</button></div><div class="group">${list.map(t => taskCell(t, true)).join("") + preRows.join("") || `<div class="empty">今日のタスクはありません</div>`}</div>`;
-  h += `<div class="sec"><span>通知</span></div><div class="group"><div class="cell plain"><div class="grow"><div class="t" style="font-size:15px">🔔 スマホの通知：${esc(pushLabel())}</div><div class="s">秘書の返事・社長待ち・今日が期限のタスク（朝8時）・予定の15分前。23時〜7時は送りません</div></div>${pushBtn()}</div></div>`;
-  h += `<p class="note">橙＝結果カウンターの予定（押すと結果カウンターが開きます）。ログイン中：${esc(auth.currentUser ? auth.currentUser.email : "")} ・ <button class="linkbtn" data-logout="1">ログアウト</button></p>`;
+  if (eh) h += `<div class="sec"><span>予定</span><button data-goto="cal">すべて</button></div><div class="group">${eh}</div>`;
+  /* タスク（期限切れ・今日・前確。済んだ物は出さない） */
+  const list = [...over.sort(byDue), ...todays.sort(byDue)];
+  const preRows = pres.map(p => `<div class="cell" data-kc="1"><span class="circle" style="opacity:.35"></span><div class="grow"><div class="t${p.when < n ? " overT" : ""}">${esc(p.title)}</div></div></div>`);
+  const th = list.map(miniTask).join("") + preRows.join("");
+  if (th) h += `<div class="sec"><span>タスク</span><button data-goto="task">すべて</button></div><div class="group">${th}</div>`;
+  if (!waits.length && !eh && !th) h += `<div class="group" style="margin-top:22px"><div class="empty">今日の予定・タスクはありません</div></div>`;
+  /* 通知：オンになっていれば出さない */
+  const pl = pushLabel();
+  if (pl !== "オン") h += `<div class="group" style="margin-top:22px"><div class="cell plain"><div class="grow"><div class="t" style="font-size:15px">🔔 通知：${esc(pl)}</div></div>${pushBtn()}</div></div>`;
+  h += `<p class="note foot">${esc(auth.currentUser ? auth.currentUser.email : "")} ・ <button class="linkbtn" data-logout="1">ログアウト</button></p>`;
   $("todayBody").innerHTML = h;
 }
 
@@ -502,12 +512,17 @@ function renderAi() {
 
 /* ---------- 入力欄（どの画面にも） ---------- */
 function syncAskBtn() { const has = !!$("askIn").value.trim(); $("askSend").hidden = !has && view !== "ai"; $("askMic").hidden = has || view === "ai"; }
-$("askIn").addEventListener("input", syncAskBtn);
+/* 下の入力欄は複数行（textarea）：書いた分だけ高さが伸びる（最大6行・それより長い時は中を動かす）。改行キーは改行、送るのはボタン（社長「改行されず打ちにくい」） */
+/* メモの画面の大きい書くボタンは、下の欄で打っている間（中身がある・カーソルがある）は隠す（伸びた欄と重なるため。テスター） */
+function syncFab() { const el = $("askIn"); $("memoFab").hidden = view !== "memo" || document.activeElement === el || !!el.value.trim(); }
+$("askIn").addEventListener("focus", syncFab); $("askIn").addEventListener("blur", () => setTimeout(syncFab, 0));
+function growAsk() { const el = $("askIn"); el.style.height = "auto"; el.style.height = Math.min(el.scrollHeight, 142) + "px"; }
+$("askIn").addEventListener("input", () => { syncAskBtn(); growAsk(); syncFab(); });
 $("ask").addEventListener("submit", e => {
   e.preventDefault();
   const text = $("askIn").value.trim(); if (!text) return;
-  if (view === "ai") { db.chat.push({id: newId(), role: "me", text, at: nowIso(), status: "wait"}); save(); $("askIn").value = ""; syncAskBtn(); render(); setTimeout(() => window.scrollTo(0, document.body.scrollHeight), 0); return; }
-  addMemo(text); $("askIn").value = ""; syncAskBtn(); $("askIn").blur(); render(); toast("メモに入れました");
+  if (view === "ai") { db.chat.push({id: newId(), role: "me", text, at: nowIso(), status: "wait"}); save(); $("askIn").value = ""; syncAskBtn(); growAsk(); syncFab(); render(); setTimeout(() => window.scrollTo(0, document.body.scrollHeight), 0); return; }
+  addMemo(text); $("askIn").value = ""; syncAskBtn(); growAsk(); syncFab(); $("askIn").blur(); render(); toast("メモに入れました");
 });
 let rec = null;
 $("askMic").onclick = () => {
@@ -671,6 +686,7 @@ document.addEventListener("click", e => {
   const t = e.target;
   const gt = t.closest("[data-goto]"); if (gt) { go(gt.dataset.goto); return; }
   const pu = t.closest("[data-push]"); if (pu) { enablePush(); return; }
+  const hs = t.closest("[data-hisho]"); if (hs) { hishoOpen = !hishoOpen; render(); return; }
   const kt = t.closest("[data-kctoggle]"); if (kt) { kcOpen = !kcOpen; render(); return; }
   const gd = t.closest("[data-gotoday]"); if (gd) { calDate = parseYmd(todayStr()); calMode = "day"; $("calMode").querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", String(x.dataset.m === "day"))); go("cal"); return; }
   const gk = t.closest("[data-gotask]"); if (gk) { taskF = gk.dataset.gotask; $("taskSeg").querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", String(x.dataset.f === taskF))); go("task"); return; }

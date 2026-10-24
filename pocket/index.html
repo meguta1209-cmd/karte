@@ -16,7 +16,7 @@
 <link rel="manifest" href="./manifest.webmanifest">
 <link rel="apple-touch-icon" href="./icons/icon-180.png">
 <link rel="icon" href="./icons/icon-192.png">
-<link rel="stylesheet" href="./style.css?v=9">
+<link rel="stylesheet" href="./style.css?v=10">
 </head>
 <body>
 <!-- 入口：社長のGoogleでログイン -->
@@ -65,7 +65,7 @@
 <button type="button" class="fab" id="memoFab" aria-label="新しいメモを書く" hidden><svg width="26" height="26" viewBox="0 0 26 26" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M16.5 4.5l5 5L9 22H4v-5z"/><path d="M14 7l5 5"/></svg></button>
 <!-- どの画面にも出る入力欄（秘書の画面では送る欄） -->
 <form class="ask" id="ask" autocomplete="off">
-  <input id="askIn" type="text" placeholder="秘書に頼む・メモする…" enterkeyhint="send" aria-label="秘書に頼む・メモする">
+  <textarea id="askIn" rows="1" placeholder="秘書に頼む・メモする…" enterkeyhint="enter" aria-label="秘書に頼む・メモする"></textarea>
   <button type="button" class="mic" id="askMic" aria-label="話して入れる"><svg width="14" height="18" viewBox="0 0 14 18" fill="#fff"><rect x="4" y="0" width="6" height="11" rx="3"/><path d="M1 8a6 6 0 0 0 12 0" stroke="#fff" stroke-width="1.6" fill="none"/><rect x="6.2" y="13.5" width="1.6" height="4"/></svg></button>
   <button type="submit" class="mic send" id="askSend" aria-label="送る" hidden><svg width="14" height="14" viewBox="0 0 14 14" fill="#fff"><path d="M7 1l5 5H8.5v7h-3V6H2z"/></svg></button>
 </form>
@@ -86,6 +86,6 @@
   <div class="sbody" id="sheetBody"></div>
 </div>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
-<script type="module" src="./app.js?v=9"></script>
+<script type="module" src="./app.js?v=10"></script>
 </body>
 </html>
