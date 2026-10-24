@@ -10,6 +10,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, collection, doc, query, where, onSnapshot, setDoc, deleteDoc, writeBatch } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { getMessaging, getToken, isSupported } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging.js";
 import { firebaseConfig } from "./firebase-config.js";
 
 const OWNER_EMAIL = "meguta1209@gmail.com";
@@ -215,6 +216,39 @@ function taskCell(t, withPill) {
     ${withPill && q.pill && !t.done ? `<span class="pill ${q.pill}">${q.name}</span>` : ""}</div>`;
 }
 
+/* ---------- スマホの通知（v5・Firebase Cloud Messaging） ----------
+   「オンにする」を押す（iPhone はホーム画面に追加したアプリで）→ 通知の許可 → この端末の宛先（トークン）を hub/<社長>/meta/push の devices に保存。
+   送るのは社長の Google で動く GAS（朝8時・予定の15分前）と、PC の秘書の道具（返事・社長待ち）。受けて出すのは sw.js */
+const VAPID_KEY = "BKzGnPVZTWr1OYlDMsoSal70yYhh_16VvR7NKcfGH4GE5bjDi9fUTBvXV6I6UTROm6wSI024-sMhQK7mQaIXfdY";   // Firebase のコンソールで作った「ウェブプッシュの鍵」（公開鍵・2026-10-24 秘書が社長の代わりに作成）
+const PUSH_LS = "pocket-push";
+const pushSaved = () => { try { return localStorage.getItem(PUSH_LS) || ""; } catch (e) { return ""; } };
+function pushLabel() {
+  if (!("Notification" in window) || !("serviceWorker" in navigator)) return "このブラウザでは使えません（ホーム画面に追加したポケノートで開いてください）";
+  if (Notification.permission === "denied") return "止まっています（iPhone の 設定 → ポケノート → 通知 で許可してください）";
+  if (Notification.permission === "granted" && pushSaved()) return "オン";
+  return VAPID_KEY ? "オフ" : "準備中（鍵を作ったあとで使えます）";
+}
+const pushBtn = () => !VAPID_KEY || !("Notification" in window) || Notification.permission === "denied" ? "" :
+  `<button type="button" class="pill blue" data-push="1" style="padding:6px 12px;font-size:13px">${Notification.permission === "granted" && pushSaved() ? "つなぎ直す" : "オンにする"}</button>`;
+const hashStr = s => { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return "d" + (h >>> 0).toString(36); };
+async function enablePush() {
+  if (!VAPID_KEY) { toast("通知の準備中です"); return; }
+  try {
+    /* 許可を聞くのは、押した直後のいちばん最初に（iPhone は押した直後でないと聞けない） */
+    const perm = await Notification.requestPermission();
+    if (perm !== "granted") { toast("通知が許可されませんでした"); render(); return; }
+    if (!(await isSupported())) { toast("このブラウザでは通知が使えません（ホーム画面のポケノートで開いてください）"); return; }
+    const reg = await navigator.serviceWorker.register("./sw.js");
+    await navigator.serviceWorker.ready;
+    const token = await getToken(getMessaging(fb), {vapidKey: VAPID_KEY, serviceWorkerRegistration: reg});
+    if (!token) { toast("通知の宛先を作れませんでした"); return; }
+    const id = hashStr(token);
+    await setDoc(doc(fs, P("meta"), "push"), {devices: {[id]: {token, ua: navigator.userAgent.slice(0, 160), at: nowIso()}}}, {merge: true});
+    try { localStorage.setItem(PUSH_LS, id); } catch (e) {}
+    toast("通知をオンにしました"); render();
+  } catch (e) { console.error(e); toast("通知をオンにできませんでした（" + (e.code || e.message || "") + "）"); }
+}
+
 /* ---------- 仕事／プライベート（v4・社長 2026-10-24） ----------
    tasks・events・memos に area:"work"|"private"（無い古い物は仕事）。結果カウンター・今日の数字・社長待ちはいつも仕事。
    いちばん上の切り替え（端末に覚える）で見る物を絞る。アプリで新しく入れる物は今選んでいる方（「すべて」なら仕事）。入力の画面でワンタップで変えられる */
@@ -301,6 +335,7 @@ function renderToday() {
   const list = [...over.sort(byDue), ...todays.sort(byDue), ...doneToday];
   const preRows = pres.map(p => `<div class="cell" data-kc="1"><span class="circle" style="opacity:.35"></span><div class="grow"><div class="t">${esc(p.title)}</div><div class="s${p.when < n ? " over" : ""}">${esc((ymd(p.when) === T ? "今日 " : mdw(ymd(p.when)) + " ") + hm(p.when) + "まで ・ " + p.sub)}</div></div><span class="pill orange">前確</span></div>`);
   h += `<div class="sec"><span>今日のタスク</span><button data-goto="task">すべて</button></div><div class="group">${list.map(t => taskCell(t, true)).join("") + preRows.join("") || `<div class="empty">今日のタスクはありません</div>`}</div>`;
+  h += `<div class="sec"><span>通知</span></div><div class="group"><div class="cell plain"><div class="grow"><div class="t" style="font-size:15px">🔔 スマホの通知：${esc(pushLabel())}</div><div class="s">秘書の返事・社長待ち・今日が期限のタスク（朝8時）・予定の15分前。23時〜7時は送りません</div></div>${pushBtn()}</div></div>`;
   h += `<p class="note">橙＝結果カウンターの予定（押すと結果カウンターが開きます）。ログイン中：${esc(auth.currentUser ? auth.currentUser.email : "")} ・ <button class="linkbtn" data-logout="1">ログアウト</button></p>`;
   $("todayBody").innerHTML = h;
 }
@@ -635,6 +670,7 @@ function markMemo(id, kind, label) { const m = db.memos.find(x => x.id === id); 
 document.addEventListener("click", e => {
   const t = e.target;
   const gt = t.closest("[data-goto]"); if (gt) { go(gt.dataset.goto); return; }
+  const pu = t.closest("[data-push]"); if (pu) { enablePush(); return; }
   const kt = t.closest("[data-kctoggle]"); if (kt) { kcOpen = !kcOpen; render(); return; }
   const gd = t.closest("[data-gotoday]"); if (gd) { calDate = parseYmd(todayStr()); calMode = "day"; $("calMode").querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", String(x.dataset.m === "day"))); go("cal"); return; }
   const gk = t.closest("[data-gotask]"); if (gk) { taskF = gk.dataset.gotask; $("taskSeg").querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", String(x.dataset.f === taskF))); go("task"); return; }
