@@ -181,7 +181,7 @@ function go(v) {
   VIEWS.forEach(x => $("v-" + x).hidden = x !== v);
   $("tabs").querySelectorAll("button").forEach(b => b.dataset.go === v ? b.setAttribute("aria-current", "page") : b.removeAttribute("aria-current"));
   const ai = v === "ai";
-  $("ask").classList.toggle("chatbar", ai);
+  /* 下の欄は、秘書の画面もほかの画面と同じ形（マイクが欄の中の右）。社長「秘書の画面の同じ位置にない」 */
   $("askIn").placeholder = ai ? "秘書に頼む…" : "秘書に頼む・メモする…";
   syncFab();
   $("areaSeg").hidden = v === "ai";
@@ -329,7 +329,8 @@ function renderToday() {
   const mine = evs.filter(e => !e.kc), kcs = evs.filter(e => e.kc);
   const coming = mine.filter(e => e.allDay || toMin(e.end || e.start) > nowMin), shown = coming.slice(0, 3), rest = mine.length - shown.length;
   let eh = shown.map(miniEvent).join("");
-  if (rest > 0) eh += more(rest, `data-gotoday="1"`);
+  /* これからの予定が無い時は「ほか n件」ではなく「今日の予定は終わりました（n件）」（テスター） */
+  if (rest > 0) eh += shown.length ? more(rest, `data-gotoday="1"`) : `<button class="cell plain more" data-gotoday="1"><div class="grow"><div class="t">今日の予定は終わりました（${mine.length}件）</div></div></button>`;
   if (kcs.length) {
     const cnt = k2 => kcs.filter(e => e.id.indexOf("kc:" + k2 + ":") === 0).length;
     const parts = [["apo", "商談"], ["call", "再架電"], ["task", "予定"]].map(([k2, l]) => cnt(k2) ? l + cnt(k2) : "").filter(Boolean).join("・");
