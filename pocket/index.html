@@ -16,9 +16,11 @@
 <link rel="manifest" href="./manifest.webmanifest">
 <link rel="apple-touch-icon" href="./icons/icon-180.png">
 <link rel="icon" href="./icons/icon-192.png">
-<link rel="stylesheet" href="./style.css?v=1">
+<link rel="stylesheet" href="./style.css?v=2">
 </head>
 <body>
+<!-- 入口：社長のGoogleでログイン -->
+<div class="gate" id="gate"><div class="gate-box"><img src="./icons/icon-192.png" alt=""><h1>ポケノート</h1><p id="gateMsg">読み込み中…</p><button type="button" class="btn primary" id="loginBtn" hidden>Googleでログイン</button><button type="button" class="btn" id="logoutBtn2" hidden>別のアカウントでログイン</button></div></div>
 <main id="main">
   <!-- 今日 -->
   <section class="view" id="v-today">
@@ -80,6 +82,6 @@
   <div class="sbody" id="sheetBody"></div>
 </div>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
-<script src="./app.js?v=1"></script>
+<script type="module" src="./app.js?v=2"></script>
 </body>
 </html>

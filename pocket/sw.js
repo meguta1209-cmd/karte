@@ -1,7 +1,7 @@
-/* ポケノート：オフラインでも開けるように、画面の部品だけを端末にとっておく（データは localStorage）。
+/* ポケノート：オフラインでも開けるように、画面の部品だけを端末にとっておく（データは Firebase。端末にも写しがある）。
    まず通信で最新を取りにいき、つながらない時だけ、とっておいた物を使う */
-const VER = "pocket-v1";
-const FILES = ["./", "./index.html", "./style.css?v=1", "./app.js?v=1", "./manifest.webmanifest", "./icons/icon-180.png", "./icons/icon-192.png", "./icons/icon-512.png"];
+const VER = "pocket-v2";
+const FILES = ["./", "./index.html", "./style.css?v=2", "./app.js?v=2", "./firebase-config.js", "./manifest.webmanifest", "./icons/icon-180.png", "./icons/icon-192.png", "./icons/icon-512.png"];
 self.addEventListener("install", e => { e.waitUntil(caches.open(VER).then(c => c.addAll(FILES)).then(() => self.skipWaiting())); });
 /* 消すのはポケノートの古い箱だけ（キャッシュは同じドメインの他のアプリと共通なので、名前で絞る。テスター 2026-10-24） */
 self.addEventListener("activate", e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k.startsWith("pocket-") && k !== VER).map(k => caches.delete(k)))).then(() => self.clients.claim())); });

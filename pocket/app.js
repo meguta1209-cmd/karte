@@ -1,13 +1,22 @@
-/* ポケノート v1（2026-10-24）：社長専用のタスク・予定・メモ＋秘書。
-   いまは「スマホの中だけ」（localStorage）に保存する。あとで Firebase（kekka-counter-2026 の hub/<社長のuid>/…）へ
-   そのまま移せるように、1件＝1つの入れ物（id つき・日時は文字）で持つ。
+/* ポケノート v2（2026-10-24）：社長専用のタスク・予定・メモ＋秘書。
+   データは結果カウンターと同じ Firebase（kekka-counter-2026）の hub/<社長のuid>/…（ルールで社長本人だけ・ほかのメンバーは読めない）。
+   端末にも写しを持つので、圏外でも使えて、つながったら自動で送る。v1 でスマホの中（localStorage "pocket-v1"）に入れた分は、最初のログインで移す。
      tasks:  {id, title, note, imp(重要), urg(急ぎ), due:"YYYY-MM-DD"|null, time:"HH:MM"|"", done, doneAt, createdAt, updatedAt, src:"me"}
      events: {id, title, date:"YYYY-MM-DD", allDay, start:"HH:MM", end:"HH:MM", note, color, createdAt, updatedAt, src:"me"}
      memos:  {id, text, status:"wait"(振り分け待ち)|"memo"(メモのまま)|"done"(振り分け済み), result:{kind,label}|null, createdAt, updatedAt}
-     chat:   {id, role:"me"|"ai", text, at, status:"wait"(PCの秘書がまだ読んでいない)} */
-(function () {
-"use strict";
-const KEY = "pocket-v1";
+     chat:   {id, role:"me"|"ai", text, at, status:"wait"(PCの秘書がまだ読んでいない)}
+     meta/brief {text, at}＝秘書のひと言（PCの秘書が書く）／meta/pc {at}＝PCの秘書が最後に動いた時刻
+   結果カウンターの自分のアポ・前確・再架電・予定（records・tasks の uid＝自分）も読んで、今日と予定に出す（見るだけ） */
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, collection, doc, query, where, onSnapshot, setDoc, deleteDoc, writeBatch } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { firebaseConfig } from "./firebase-config.js";
+
+const OWNER_EMAIL = "meguta1209@gmail.com";
+const KC_URL = "https://meguta1209-cmd.github.io/karte/team/";
+const KEY = "pocket-v1", MOVED = "pocket-v1-moved";
+const fb = initializeApp(firebaseConfig), auth = getAuth(fb);
+const fs = initializeFirestore(fb, {localCache: persistentLocalCache({tabManager: persistentMultipleTabManager()})});
 const $ = id => document.getElementById(id);
 const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
 const pad = n => String(n).padStart(2, "0");
@@ -22,21 +31,136 @@ const hm = d => pad(d.getHours()) + ":" + pad(d.getMinutes());
 const toMin = t => { const [h, m] = String(t || "0:0").split(":").map(Number); return h * 60 + m; };
 const fromMin = n => pad(Math.floor(n / 60) % 24) + ":" + pad(n % 60);
 const mdw = s => { const d = parseYmd(s); return (d.getMonth() + 1) + "/" + d.getDate() + "（" + WD[d.getDay()] + "）"; };
+const tsd = v => v && typeof v.toDate === "function" ? v.toDate() : v instanceof Date ? v : null;
 let tt = null;
 function toast(msg) { const el = $("toast"); el.textContent = msg; el.classList.add("on"); clearTimeout(tt); tt = setTimeout(() => el.classList.remove("on"), 2400); }
 
-/* ---------- 保存（スマホの中） ---------- */
-let canSave = true;
-function load() {
-  try { const x = JSON.parse(localStorage.getItem(KEY)); if (x && x.v === 1) return Object.assign({tasks: [], events: [], memos: [], chat: []}, x); }
-  catch (e) { canSave = false; }
-  return {v: 1, tasks: [], events: [], memos: [], chat: []};
-}
-const db = load();
+/* ---------- 保存（Firebase）----------
+   画面の作りは v1 のまま：db の中身を直してから save() を呼ぶ。save() は「前に送った形」と比べて、変わった物だけを書き、消えた物を消す */
+const COLS = ["tasks", "events", "memos", "chat"];
+const db = {tasks: [], events: [], memos: [], chat: []};
+const shadow = {tasks: new Map(), events: new Map(), memos: new Map(), chat: new Map()};
+let U = null, unsubs = [], canSave = true, brief = null, pcAt = null, kcRecs = [], kcTasks = [];
+const P = col => `hub/${U}/${col}`;
+const plain = o => JSON.parse(JSON.stringify(o));
 function save() {
-  try { localStorage.setItem(KEY, JSON.stringify(db)); canSave = true; }
-  catch (e) { canSave = false; toast("保存できませんでした（このブラウザでは保存が使えません）"); }
+  if (!U) return;
+  COLS.forEach(col => {
+    const seen = new Set();
+    db[col].forEach(o => {
+      seen.add(o.id);
+      const s = JSON.stringify(o);
+      if (shadow[col].get(o.id) === s) return;
+      shadow[col].set(o.id, s);
+      setDoc(doc(fs, P(col), o.id), plain(o)).catch(e => { console.error(e); toast("保存できませんでした"); });
+    });
+    [...shadow[col].keys()].filter(id => !seen.has(id)).forEach(id => {
+      shadow[col].delete(id);
+      deleteDoc(doc(fs, P(col), id)).catch(e => { console.error(e); toast("消せませんでした"); });
+    });
+  });
 }
+/* v1 でスマホの中に入れた分を、最初のログインで移す（同じ id で書くので、2回動いても増えない）。元の中身は控えとして残す */
+async function moveLocal() {
+  let x = null;
+  try { if (localStorage.getItem(MOVED)) return; x = JSON.parse(localStorage.getItem(KEY) || "null"); } catch (e) { return; }
+  const items = x && x.v === 1 ? COLS.flatMap(col => (x[col] || []).filter(o => o && o.id).map(o => [col, o])) : [];
+  if (items.length) {
+    try {
+      for (let i = 0; i < items.length; i += 400) {
+        const b = writeBatch(fs);
+        items.slice(i, i + 400).forEach(([col, o]) => b.set(doc(fs, P(col), o.id), plain(o)));
+        await b.commit();
+      }
+      toast("スマホの中の " + items.length + "件をクラウドに移しました");
+    } catch (e) { console.error(e); toast("スマホの中の分を移せませんでした（あとでもう一度）"); return; }
+  }
+  try { localStorage.setItem(MOVED, nowIso()); } catch (e) {}
+}
+
+/* ---------- ログイン（社長だけ） ---------- */
+function gate(msg, login, other) { $("gate").hidden = false; $("gateMsg").textContent = msg; $("loginBtn").hidden = !login; $("logoutBtn2").hidden = !other; }
+$("loginBtn").onclick = async () => { try { await signInWithPopup(auth, new GoogleAuthProvider()); } catch (e) { toast("ログインできませんでした"); } };
+$("logoutBtn2").onclick = () => signOut(auth);
+onAuthStateChanged(auth, u => {
+  unsubs.forEach(f => f()); unsubs = []; U = null;
+  kpiUnsubs.forEach(f => f()); kpiUnsubs = []; kpiDays = {}; kpiFor = "";
+  COLS.forEach(c => { db[c] = []; shadow[c].clear(); }); kcRecs = []; kcTasks = []; brief = null; pcAt = null;
+  if (!u) { gate("Googleアカウントでログインしてください（社長のアカウント）。", true, false); return; }
+  if (String(u.email || "").toLowerCase() !== OWNER_EMAIL) { gate("このアプリは社長専用です（" + (u.email || "") + "）。", false, true); return; }
+  U = u.uid; $("gate").hidden = true; start();
+});
+function start() {
+  const err = what => e => { console.error(what, e); toast(what + "を読み込めませんでした"); };
+  COLS.forEach(col => unsubs.push(onSnapshot(collection(fs, P(col)), s => {
+    db[col] = s.docs.map(d => ({...d.data(), id: d.id}));
+    shadow[col] = new Map(db[col].map(o => [o.id, JSON.stringify(o)]));
+    if ($("sheet").hidden) render();
+  }, err({tasks: "タスク", events: "予定", memos: "メモ", chat: "秘書の会話"}[col]))));
+  unsubs.push(onSnapshot(doc(fs, P("meta"), "brief"), s => { brief = s.exists() ? s.data() : null; if (view === "today" && $("sheet").hidden) render(); }, () => {}));
+  unsubs.push(onSnapshot(doc(fs, P("meta"), "pc"), s => { const a = s.exists() ? s.data().at : null; pcAt = a ? tsd(a) || new Date(a) : null; if (view === "ai" && $("sheet").hidden) render(); }, () => {}));
+  /* 結果カウンターの自分の分（ルールで読める：uid＝自分）。見るだけ */
+  unsubs.push(onSnapshot(query(collection(fs, "records"), where("uid", "==", U), where("pending", "==", true)), s => {
+    kcRecs = s.docs.map(x => { const d = x.data(); const m = d.memo ? {...d.memo, when: tsd(d.memo.when)} : null; return {id: x.id, ...d, t: tsd(d.t), memo: m}; });
+    if ($("sheet").hidden) render();
+  }, e => console.error("結果カウンター", e)));
+  unsubs.push(onSnapshot(query(collection(fs, "tasks"), where("uid", "==", U), where("done", "==", false)), s => {
+    kcTasks = s.docs.map(x => { const d = x.data(); return {id: x.id, ...d, when: tsd(d.when)}; });
+    if ($("sheet").hidden) render();
+  }, e => console.error("結果カウンターの予定", e)));
+  subscribeKpi();
+  moveLocal();
+  render();
+}
+
+/* ---------- 結果カウンターの予定（見るだけ）を、予定の形に ----------
+   アポ＝商談の時刻から90分、再架電＝15分、予定（前確など）＝30分。前確は前日の同じ時刻（月曜の商談は土曜）＝今日のタスクに出す */
+function kcEvents() {
+  const out = [];
+  const add = (key, when, mins, title, note) => { if (!when) return; out.push({id: "kc:" + key, kc: true, title, date: ymd(when), allDay: false, start: hm(when), end: fromMin(Math.min(23 * 60 + 59, toMin(hm(when)) + mins)), note, color: "orange"}); };
+  kcRecs.forEach(r => {
+    if (!r.memo || !r.memo.when || r.canceled) return;
+    if (r.r === "アポ") add("apo:" + r.id, r.memo.when, 90, "商談：" + (r.memo.shop || "（店名なし）"), "結果カウンター");
+    else if (r.r === "再架電") add("call:" + r.id, r.memo.when, 15, "再架電：" + (r.memo.shop || "（店名なし）"), "結果カウンター" + (r.memo.tel ? " ・ " + r.memo.tel : ""));
+  });
+  kcTasks.forEach(t => add("task:" + t.id, t.when, 30, (t.kind || "予定") + "：" + (t.title || t.shop || ""), "結果カウンター"));
+  return out;
+}
+function kcPres() {
+  const now = new Date(), out = [];
+  kcRecs.forEach(r => {
+    if (r.r !== "アポ" || !r.memo || !r.memo.when || r.canceled) return;
+    const w = r.memo.when, pre = new Date(w); pre.setDate(pre.getDate() - (w.getDay() === 1 ? 2 : 1));
+    const res = r.res && tsd(r.res.w) && +tsd(r.res.w) === +w ? r.res : null;
+    if (w > now && !(res && res.pre) && (!r.t || pre > r.t)) out.push({id: r.id, when: pre, w, title: "前確：" + (r.memo.shop || "（店名なし）"), sub: (w.getDay() === 1 ? "月曜" : "明日") + " " + hm(w) + " の商談 ・ 結果カウンター"});
+  });
+  return out;
+}
+const openKC = () => window.open(KC_URL, "_blank", "noopener");
+
+/* ---------- 今日の数字（結果カウンターの stats から。今週＝月曜から） ---------- */
+const WEEK_GOAL = 20, NO_ANSWER = ["留守", "繋がらない", "使われてない"];
+let kpiFor = "", kpiUnsubs = [], kpiDays = {};
+function subscribeKpi() {
+  kpiUnsubs.forEach(f => f()); kpiUnsubs = []; kpiDays = {};
+  const T = parseYmd(todayStr()), mon = addDays(T, -((T.getDay() + 6) % 7));
+  kpiFor = todayStr();
+  for (let d = new Date(mon); d <= T; d = addDays(d, 1)) {
+    const key = ymd(d);
+    kpiUnsubs.push(onSnapshot(doc(fs, "stats", key), s => {
+      const c = s.exists() && s.data().c && s.data().c[U] ? s.data().c[U] : {};
+      kpiDays[key] = c;
+      if (view === "today" && $("sheet").hidden) render();
+    }, () => {}));
+  }
+}
+function kpiNow() {
+  const c = kpiDays[todayStr()] || {}, n = Object.values(c).reduce((a, v) => a + (Number(v) || 0), 0);
+  const ans = n - NO_ANSWER.reduce((a, k) => a + (Number(c[k]) || 0), 0);
+  const week = Object.values(kpiDays).reduce((a, x) => a + (Number(x["アポ"]) || 0), 0);
+  return {n, ans, apo: Number(c["アポ"]) || 0, week};
+}
+
 
 /* ---------- 画面の切りかえ ---------- */
 let view = "today";
@@ -83,9 +207,11 @@ function taskCell(t, withPill) {
 /* ---------- 予定の部品 ---------- */
 const COLORS = {blue: ["var(--blue)", "rgba(0,122,255,.14)"], orange: ["var(--orange)", "rgba(255,149,0,.16)"], purple: ["var(--purple)", "rgba(175,82,222,.14)"], green: ["var(--green)", "rgba(52,199,89,.16)"], red: ["var(--red)", "rgba(255,59,48,.14)"]};
 const colorOf = e => COLORS[e.color] || COLORS.blue;
-const eventsOn = s => db.events.filter(e => e.date === s).sort((a, b) => (b.allDay ? 1 : 0) - (a.allDay ? 1 : 0) || toMin(a.start) - toMin(b.start));
+/* 自分で入れた予定＋結果カウンターの予定（見るだけ・橙） */
+const eventsOn = s => [...db.events, ...kcEvents()].filter(e => e.date === s).sort((a, b) => (b.allDay ? 1 : 0) - (a.allDay ? 1 : 0) || toMin(a.start) - toMin(b.start));
+const evAttr = e => e.kc ? `data-kc="1"` : `data-eedit="${esc(e.id)}"`;
 function eventCell(e) {
-  return `<div class="cell" data-eedit="${esc(e.id)}"><div class="time">${e.allDay ? "終日" : esc(e.start)}${e.allDay ? "" : `<small>${esc(e.end)}</small>`}</div><div class="bar" style="background:${colorOf(e)[0]}"></div>
+  return `<div class="cell" ${evAttr(e)}><div class="time">${e.allDay ? "終日" : esc(e.start)}${e.allDay ? "" : `<small>${esc(e.end)}</small>`}</div><div class="bar" style="background:${colorOf(e)[0]}"></div>
     <div class="grow"><div class="t">${esc(e.title || "（予定）")}</div>${e.note ? `<div class="s">${esc(e.note.split("\n")[0])}</div>` : ""}</div></div>`;
 }
 
@@ -98,15 +224,24 @@ function renderToday() {
   const over = open.filter(isOver), todays = open.filter(t => isToday(t) && !isOver(t));
   const doneToday = db.tasks.filter(t => t.done && t.doneAt && ymd(new Date(t.doneAt)) === T);
   const waiting = db.memos.filter(m => m.status === "wait").length;
+  /* 結果カウンターの前確：前確の日が今日まで（商談の前まで）の分を、今日のタスクに */
+  const E = addDays(parseYmd(T), 1), pres = kcPres().filter(p => p.when < E).sort((a, b) => a.when - b.when);
   const next = evs.find(e => !e.allDay && toMin(e.end || e.start) > n.getHours() * 60 + n.getMinutes());
   const hello = n.getHours() < 11 ? "おはようございます。" : n.getHours() < 18 ? "おつかれさまです。" : "おつかれさまでした。";
-  const say = hello + `今日は予定が${evs.length}件、今日のタスクが${todays.length}件です。` + (over.length ? `期限切れのタスクが${over.length}件あります。` : "") +
+  const say = hello + `今日は予定が${evs.length}件、今日のタスクが${todays.length + pres.length}件です。` + (over.length ? `期限切れのタスクが${over.length}件あります。` : "") +
     (next ? `次は ${next.start}「${next.title}」。` : "") + (waiting ? `振り分け待ちのメモが${waiting}件。` : "");
-  let h = `<div class="hisho"><div class="av">秘</div><div class="grow"><div class="t">${esc(say)}</div><div class="s">ポケノートのまとめ ・ ${hm(n)}</div></div></div>`;
+  /* 秘書のひと言：PCの秘書が今日書いた物があればそれ、なければ自動のまとめ */
+  const bAt = brief && brief.at ? tsd(brief.at) || new Date(brief.at) : null;
+  const useBrief = brief && brief.text && bAt && ymd(bAt) === T;
+  let h = `<div class="hisho"><div class="av">秘</div><div class="grow"><div class="t">${esc(useBrief ? brief.text : say)}</div><div class="s">${useBrief ? "秘書 ・ " + hm(bAt) : "ポケノートのまとめ ・ " + hm(n)}</div></div></div>`;
+  if (kpiFor !== T && U) subscribeKpi();   // 日付が変わったら読み直す
+  const k = kpiNow();
+  h += `<div class="sec"><span>今日の数字（結果カウンター）</span><button data-kc="1">開く</button></div><div class="kpi" data-kc="1"><div><b>${k.n}</b><span>コール</span></div><div><b>${k.ans}</b><span>対応</span></div><div><b>${k.apo}</b><span>アポ</span></div><div><b>${k.week}<small style="font-size:13px;color:var(--sub)">/${WEEK_GOAL}</small></b><span>今週のアポ</span></div></div>`;
   h += `<div class="sec"><span>予定</span><button data-goto="cal">すべて</button></div><div class="group">${evs.map(eventCell).join("") || `<div class="empty">今日の予定はありません</div>`}</div>`;
   const list = [...over.sort(byDue), ...todays.sort(byDue), ...doneToday];
-  h += `<div class="sec"><span>今日のタスク</span><button data-goto="task">すべて</button></div><div class="group">${list.map(t => taskCell(t, true)).join("") || `<div class="empty">今日のタスクはありません</div>`}</div>`;
-  h += `<p class="note">データはこのスマホの中に保存しています（あとでクラウドに移して、パソコンの秘書・Googleカレンダーとつなぎます）。${canSave ? "" : "<b>このブラウザでは保存が使えません。</b>"}</p>`;
+  const preRows = pres.map(p => `<div class="cell" data-kc="1"><span class="circle" style="opacity:.35"></span><div class="grow"><div class="t">${esc(p.title)}</div><div class="s${p.when < n ? " over" : ""}">${esc((ymd(p.when) === T ? "今日 " : mdw(ymd(p.when)) + " ") + hm(p.when) + "まで ・ " + p.sub)}</div></div><span class="pill orange">前確</span></div>`);
+  h += `<div class="sec"><span>今日のタスク</span><button data-goto="task">すべて</button></div><div class="group">${list.map(t => taskCell(t, true)).join("") + preRows.join("") || `<div class="empty">今日のタスクはありません</div>`}</div>`;
+  h += `<p class="note">橙＝結果カウンターの予定（押すと結果カウンターが開きます）。ログイン中：${esc(auth.currentUser ? auth.currentUser.email : "")} ・ <button class="linkbtn" data-logout="1">ログアウト</button></p>`;
   $("todayBody").innerHTML = h;
 }
 
@@ -157,7 +292,7 @@ function renderCal() {
     : `${ws.getMonth() + 1}月${ws.getDate()}日〜${we.getMonth() === ws.getMonth() ? "" : (we.getMonth() + 1) + "月"}${we.getDate()}日`;
   $("weekStrip").innerHTML = `<button class="arrow" data-wk="-1" aria-label="前の週">‹</button>` + [0, 1, 2, 3, 4, 5, 6].map(i => {
     const d = addDays(ws, i), s = ymd(d);
-    return `<button class="wd${s === T ? " today" : ""}${calMode === "day" && s === sel ? " sel" : ""}" data-day="${s}">${WD[i]}<b>${d.getDate()}</b><i class="${db.events.some(e => e.date === s) ? "on" : ""}"></i></button>`;
+    return `<button class="wd${s === T ? " today" : ""}${calMode === "day" && s === sel ? " sel" : ""}" data-day="${s}">${WD[i]}<b>${d.getDate()}</b><i class="${[...db.events, ...kcEvents()].some(e => e.date === s) ? "on" : ""}"></i></button>`;
   }).join("") + `<button class="arrow" data-wk="1" aria-label="次の週">›</button>`;
   if (calMode === "week") {
     $("calBody").innerHTML = [0, 1, 2, 3, 4, 5, 6].map(i => { const s = ymd(addDays(ws, i)), evs = eventsOn(s);
@@ -181,10 +316,10 @@ function renderCal() {
   for (let h = 0; h < 24; h++) tl += `<div class="hr" data-slot="${h}"><span>${h}時</span></div>`;
   tl += timed.map(e => {
     const s = toMin(e.start), en = Math.max(s + 20, toMin(e.end || e.start)), n = groupN[e.id] || 1, l = laneOf[e.id] || 0, c = colorOf(e);
-    return `<button class="ev2" data-eedit="${esc(e.id)}" style="top:${s / 60 * HOUR}px;height:${Math.max(22, (en - s) / 60 * HOUR - 2)}px;left:calc(52px + (100% - 56px) * ${l} / ${n});width:calc((100% - 56px) / ${n} - 2px);background:${c[1]};border-color:${c[0]};color:${c[0]}">${esc(e.title || "（予定）")}<small>${esc(e.start)}〜${esc(e.end)}</small></button>`;
+    return `<button class="ev2${e.kc ? " kc" : ""}" ${evAttr(e)} style="top:${s / 60 * HOUR}px;height:${Math.max(22, (en - s) / 60 * HOUR - 2)}px;left:calc(52px + (100% - 56px) * ${l} / ${n});width:calc((100% - 56px) / ${n} - 2px);background:${c[1]};border-color:${c[0]};color:${c[0]}">${esc(e.title || "（予定）")}<small>${esc(e.start)}〜${esc(e.end)}</small></button>`;
   }).join("");
   if (sel === T) tl += `<div class="now" style="top:${nowMin / 60 * HOUR}px"></div>`;
-  $("calBody").innerHTML = (all.length ? `<div class="allday">${all.map(e => `<button data-eedit="${esc(e.id)}" style="background:${colorOf(e)[1]};color:${colorOf(e)[0]}">終日 ${esc(e.title || "（予定）")}</button>`).join("")}</div>` : "") +
+  $("calBody").innerHTML = (all.length ? `<div class="allday">${all.map(e => `<button ${evAttr(e)} style="background:${colorOf(e)[1]};color:${colorOf(e)[0]}">終日 ${esc(e.title || "（予定）")}</button>`).join("")}</div>` : "") +
     `<div class="tlwrap" id="tlwrap"><div class="tl">${tl}</div></div>`;
   const w = $("tlwrap"), top = w.getBoundingClientRect().top;
   w.style.height = Math.max(240, window.innerHeight - top - $("tabs").offsetHeight - 70 + window.scrollY) + "px";
@@ -199,7 +334,7 @@ $("weekStrip").addEventListener("click", e => {
   const d = e.target.closest("[data-day]"); if (d) { calDate = parseYmd(d.dataset.day); if (calMode === "week") { calMode = "day"; $("calMode").querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", String(x.dataset.m === "day"))); } calScrolled = false; renderCal(); }
 });
 $("calBody").addEventListener("click", e => {
-  if (e.target.closest("[data-eedit]")) return;
+  if (e.target.closest("[data-eedit],[data-kc]")) return;
   const s = e.target.closest("[data-slot]"); if (s) { const h = Number(s.dataset.slot); eventForm(null, {date: ymd(calDate), start: pad(h) + ":00", end: pad(Math.min(23, h + 1)) + ":00"}); return; }
   const d = e.target.closest("[data-dadd]"); if (d) eventForm(null, {date: d.dataset.dadd});
 });
@@ -209,9 +344,12 @@ $("memoAdd").onclick = () => memoForm(null);
 $("memoSearch").addEventListener("input", () => renderMemos());
 function memoTag(m) {
   if (m.status === "done" && m.result) return `<div class="tag">→ ${esc(m.result.label)}</div>`;
-  if (m.status === "memo") return `<div class="tag gray">メモのまま</div>`;
-  return `<div class="tag gray">振り分け待ち（PCの秘書がつながったら振り分けます）</div>`;
+  if (m.status === "memo") return `<div class="tag gray">${esc(m.result && m.result.label || "メモのまま")}</div>`;
+  if (m.status === "doing") return `<div class="tag gray">秘書が振り分け中…</div>`;
+  return `<div class="tag gray">振り分け待ち（${pcOn() ? "PCの秘書がもうすぐ見ます" : "PCが開いたら秘書が振り分けます"}）</div>`;
 }
+/* PCの秘書が動いているか（見張りが5分以内に動いた） */
+const pcOn = () => !!pcAt && Date.now() - pcAt.getTime() < 5 * 6e4;
 function whenText(iso) {
   const d = new Date(iso), s = ymd(d), T = todayStr();
   return s === T ? "今日 " + hm(d) : s === ymd(addDays(new Date(), -1)) ? "昨日 " + hm(d) : (d.getMonth() + 1) + "月" + d.getDate() + "日";
@@ -231,16 +369,22 @@ function addMemo(text) {
 
 /* ---------- 秘書 ---------- */
 function renderAi() {
-  $("pcState").className = "pc";
-  $("pcState").innerHTML = `<i></i>PCの秘書：まだつながっていません（送った文はためておきます）`;
-  let h = `<div class="msg ai">ここに頼みごとを書いてください。いまはスマホの中にためておいて、PCの秘書とつながったら、まとめて届けます。</div>`, last = "";
+  const on = pcOn();
+  $("pcState").className = "pc" + (on ? " on" : "");
+  $("pcState").innerHTML = on ? `<i></i>PCの秘書：対応中（パソコンが開いています）` : `<i></i>PCの秘書：お休み中（送った文はためておいて、PCが開いたら届きます）${pcAt ? " ・ 最後 " + esc(whenText(pcAt.toISOString())) : ""}`;
+  let h = `<div class="msg ai">ここに頼みごとを書いてください。予定・タスクに入れる、メンバーに頼む、などを秘書がやります。</div>`, last = "";
   const list = db.chat.slice().sort((a, b) => String(a.at).localeCompare(String(b.at)));
+  const ICON = {task: ["var(--blue)", "✓"], event: ["var(--red)", "予"], memo: ["var(--gray)", "メ"], member: ["#1c1c1e", "人"]};
   list.forEach((c, i) => {
     const d = new Date(c.at), day = ymd(d);
     const stamp = day === todayStr() ? "今日 " + hm(d) : (d.getMonth() + 1) + "月" + d.getDate() + "日 " + hm(d);
     if (day + pad(d.getHours()) !== last) { h += `<div class="when">${stamp}</div>`; last = day + pad(d.getHours()); }
-    h += `<div class="msg ${c.role === "me" ? "me" : "ai"}" data-cedit="${esc(c.id)}">${esc(c.text)}</div>`;
-    if (c.role === "me" && c.status === "wait" && i === list.length - 1) h += `<div class="stat">未送信（PCの秘書がつながったら届きます）</div>`;
+    h += `<div class="msg ${c.role === "me" ? "me" : "ai"}">${esc(c.text)}</div>`;
+    if (c.role !== "me" && Array.isArray(c.items) && c.items.length) h += `<div class="card2">${c.items.map(x => { const ic = ICON[x.kind] || ICON.memo; return `<div class="row2"><span class="ico" style="background:${ic[0]}">${ic[1]}</span><span class="grow">${esc(x.label)}</span><span class="state">${esc(x.state || "")}</span></div>`; }).join("")}</div>`;
+    if (c.role === "me" && (c.status === "wait" || c.status === "doing")) {
+      const later = list.slice(i + 1).some(x => x.role === "me");   // 続けて送った分は、いちばん下だけに出す
+      if (!later) h += `<div class="stat">${c.status === "doing" ? "秘書が対応中…" : on ? "届きました（秘書がもうすぐ見ます）" : "ためています（PCが開いたら届きます）"}</div>`;
+    }
   });
   $("chatBody").innerHTML = h;
 }
@@ -392,6 +536,8 @@ document.addEventListener("click", e => {
   const dn = t.closest("[data-tdone]"); if (dn) { e.stopPropagation(); toggleTask(dn.dataset.tdone); return; }
   const qa = t.closest("[data-qadd]"); if (qa) { const k = qa.dataset.qadd; taskForm(null, {imp: k[0] === "1", urg: k[1] === "1"}); return; }
   const te = t.closest("[data-tedit]"); if (te) { const x = db.tasks.find(y => y.id === te.dataset.tedit); if (x) taskForm(x); return; }
+  const kc = t.closest("[data-kc]"); if (kc) { openKC(); return; }
+  const lo = t.closest("[data-logout]"); if (lo) { if (confirm("ログアウトしますか？")) signOut(auth); return; }
   const ee = t.closest("[data-eedit]"); if (ee) { const x = db.events.find(y => y.id === ee.dataset.eedit); if (x) eventForm(x); return; }
   const me = t.closest("[data-medit]"); if (me) { const x = db.memos.find(y => y.id === me.dataset.medit); if (x) memoForm(x); return; }
 });
@@ -401,10 +547,8 @@ function render() {
 }
 /* 日付が変わったら・別のタブで直したら、描き直す */
 setInterval(() => { if ($("sheet").hidden && (view === "today" || view === "cal")) render(); }, 60000);
-window.addEventListener("storage", ev => { if (ev.key === KEY) { Object.assign(db, load()); render(); } });
 document.addEventListener("visibilitychange", () => { if (!document.hidden && $("sheet").hidden) render(); });
 window.addEventListener("resize", () => { if (view === "cal") renderCal(); });
 
 go("today");
 if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("./sw.js").catch(() => {});
-})();
