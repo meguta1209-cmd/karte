@@ -212,3 +212,7 @@ textarea.field.big { min-height: 46dvh; font-size: 17px; }
 .waitbox .path { font-size: 13px; color: var(--sub); margin-top: 8px; word-break: break-all; }
 .waitbox .row3 { display: flex; gap: 8px; margin-top: 10px; }
 .waitbox .row3 .btn { margin-top: 0; padding: 10px; font-size: 15px; }
+/* v3.3：長い予定は細い帯（縦書きの題）・今日の結果カウンターの行 */
+.ev2.long { padding: 3px 0; border-left-width: 3px; font-size: 10px; font-weight: 600; text-align: center; }
+.ev2.long span { writing-mode: vertical-rl; letter-spacing: 1px; white-space: nowrap; }
+.chev { color: var(--circle); font-size: 18px; flex: none; }

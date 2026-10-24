@@ -147,6 +147,7 @@ function kcPres() {
 const openKC = () => window.open(KC_URL, "_blank", "noopener");
 
 /* ---------- 今日の数字（結果カウンターの stats から。今週＝月曜から） ---------- */
+let kcOpen = false;   // 今日の画面で、結果カウンターの行を開いているか
 const WEEK_GOAL = 20, NO_ANSWER = ["留守", "繋がらない", "使われてない"];
 let kpiFor = "", kpiUnsubs = [], kpiDays = {};
 function subscribeKpi() {
@@ -228,6 +229,8 @@ const colorOf = e => COLORS[e.color] || COLORS.blue;
 /* 自分で入れた予定＋結果カウンターの予定（見るだけ・橙） */
 const eventsOn = s => [...db.events, ...kcEvents()].filter(e => e.date === s && !e.deleted).sort((a, b) => (b.allDay ? 1 : 0) - (a.allDay ? 1 : 0) || toMin(a.start) - toMin(b.start));
 const evAttr = e => e.kc ? `data-kc="1"` : `data-eedit="${esc(e.id)}"`;
+const LONG_MIN = 240;   // これ以上（4時間以上）の予定は、日の表示で細い帯にする
+const isLongEv = e => !e.allDay && !e.kc && toMin(e.end || e.start) - toMin(e.start) >= LONG_MIN;
 function eventCell(e) {
   return `<div class="cell" ${evAttr(e)}><div class="time">${e.allDay ? "終日" : esc(e.start)}${e.allDay ? "" : `<small>${esc(e.end)}</small>`}</div><div class="bar" style="background:${colorOf(e)[0]}"></div>
     <div class="grow"><div class="t">${esc(e.title || "（予定）")}</div>${e.note ? `<div class="s">${esc(e.note.split("\n")[0])}</div>` : ""}</div></div>`;
@@ -258,7 +261,22 @@ function renderToday() {
   if (kpiFor !== T && U) subscribeKpi();   // 日付が変わったら読み直す
   const k = kpiNow();
   h += `<div class="sec"><span>今日の数字（結果カウンター）</span><button data-kc="1">開く</button></div><div class="kpi" data-kc="1"><div><b>${k.n}</b><span>コール</span></div><div><b>${k.ans}</b><span>対応</span></div><div><b>${k.apo}</b><span>アポ</span></div><div><b>${k.week}<small style="font-size:13px;color:var(--sub)">/${WEEK_GOAL}</small></b><span>今週のアポ</span></div></div>`;
-  h += `<div class="sec"><span>予定</span><button data-goto="cal">すべて</button></div><div class="group">${evs.map(eventCell).join("") || `<div class="empty">今日の予定はありません</div>`}</div>`;
+  /* 予定：これからの物を3件＋「ほか n件」（社長「全部入れるとパンパンで醜い」）。結果カウンターの分は1行にまとめて、押すと開く */
+  const nowMin = n.getHours() * 60 + n.getMinutes();
+  const mine = evs.filter(e => !e.kc), kcs = evs.filter(e => e.kc);
+  const coming = mine.filter(e => e.allDay || toMin(e.end || e.start) > nowMin), shown = coming.slice(0, 3), rest = mine.length - shown.length;
+  let eh = shown.map(eventCell).join("");
+  if (!mine.length && !kcs.length) eh = `<div class="empty">今日の予定はありません</div>`;
+  else if (!shown.length && mine.length) eh = `<div class="empty">今日の予定は終わりました</div>`;
+  if (rest > 0) eh += `<button class="cell plain" data-gotoday="1"><div class="grow"><div class="t" style="color:var(--blue);font-size:15px">ほか ${rest}件を見る${coming.length < mine.length ? "（終わった予定も）" : ""}</div></div></button>`;
+  if (kcs.length) {
+    const cnt = k => kcs.filter(e => e.id.indexOf("kc:" + k + ":") === 0).length;
+    const parts = [["apo", "商談"], ["call", "再架電"], ["task", "予定"]].map(([k, l]) => cnt(k) ? l + cnt(k) : "").filter(Boolean).join("・");
+    const kNext = kcs.find(e => toMin(e.end || e.start) > nowMin);
+    eh += `<button class="cell" data-kctoggle="1"><div class="time" style="color:var(--orange)">結果</div><div class="bar" style="background:var(--orange)"></div><div class="grow"><div class="t">結果カウンター：${esc(parts)}</div><div class="s">${kNext ? "次は " + esc(kNext.start + " " + kNext.title) : "今日の分は終わりました"}</div></div><span class="chev">${kcOpen ? "⌃" : "⌄"}</span></button>`;
+    if (kcOpen) eh += kcs.map(eventCell).join("");
+  }
+  h += `<div class="sec"><span>予定</span><button data-goto="cal">すべて</button></div><div class="group">${eh}</div>`;
   const list = [...over.sort(byDue), ...todays.sort(byDue), ...doneToday];
   const preRows = pres.map(p => `<div class="cell" data-kc="1"><span class="circle" style="opacity:.35"></span><div class="grow"><div class="t">${esc(p.title)}</div><div class="s${p.when < n ? " over" : ""}">${esc((ymd(p.when) === T ? "今日 " : mdw(ymd(p.when)) + " ") + hm(p.when) + "まで ・ " + p.sub)}</div></div><span class="pill orange">前確</span></div>`);
   h += `<div class="sec"><span>今日のタスク</span><button data-goto="task">すべて</button></div><div class="group">${list.map(t => taskCell(t, true)).join("") + preRows.join("") || `<div class="empty">今日のタスクはありません</div>`}</div>`;
@@ -327,7 +345,9 @@ function renderCal() {
       return `<div class="sec"><span>${mdw(s)}${s === T ? " ・ 今日" : ""}</span><button data-dadd="${s}">＋</button></div><div class="group">${evs.map(eventCell).join("") || `<div class="empty">予定なし</div>`}</div>`; }).join("");
     return;
   }
-  const evs = eventsOn(sel), all = evs.filter(e => e.allDay), timed = evs.filter(e => !e.allDay);
+  const evs = eventsOn(sel), all = evs.filter(e => e.allDay);
+  /* 4時間以上の予定（テレアポ10〜18時など、毎日の決まった予定）は左の細い帯にして場所を取らない（社長「パンパンで醜い」） */
+  const longs = evs.filter(isLongEv), timed = evs.filter(e => !e.allDay && !isLongEv(e)), off = longs.length * 16;
   /* 重なる予定は横に並べる */
   const lanes = [], laneOf = {}, groupN = {};
   let grp = [], gEnd = -1;
@@ -342,9 +362,13 @@ function renderCal() {
   const now = new Date(), nowMin = now.getHours() * 60 + now.getMinutes();
   let tl = "";
   for (let h = 0; h < 24; h++) tl += `<div class="hr" data-slot="${h}"><span>${h}時</span></div>`;
+  tl += longs.map((e, i) => {
+    const s = toMin(e.start), en = toMin(e.end), c = colorOf(e);
+    return `<button class="ev2 long" ${evAttr(e)} title="${esc(e.title + " " + e.start + "〜" + e.end)}" style="top:${s / 60 * HOUR}px;height:${(en - s) / 60 * HOUR - 2}px;left:${52 + i * 16}px;width:13px;background:${c[1]};border-color:${c[0]};color:${c[0]}"><span>${esc(e.title || "（予定）")}</span></button>`;
+  }).join("");
   tl += timed.map(e => {
     const s = toMin(e.start), en = Math.max(s + 20, toMin(e.end || e.start)), n = groupN[e.id] || 1, l = laneOf[e.id] || 0, c = colorOf(e);
-    return `<button class="ev2${e.kc ? " kc" : ""}" ${evAttr(e)} style="top:${s / 60 * HOUR}px;height:${Math.max(22, (en - s) / 60 * HOUR - 2)}px;left:calc(52px + (100% - 56px) * ${l} / ${n});width:calc((100% - 56px) / ${n} - 2px);background:${c[1]};border-color:${c[0]};color:${c[0]}">${esc(e.title || "（予定）")}<small>${esc(e.start)}〜${esc(e.end)}</small></button>`;
+    return `<button class="ev2${e.kc ? " kc" : ""}" ${evAttr(e)} style="top:${s / 60 * HOUR}px;height:${Math.max(22, (en - s) / 60 * HOUR - 2)}px;left:calc(${52 + off}px + (100% - ${56 + off}px) * ${l} / ${n});width:calc((100% - ${56 + off}px) / ${n} - 2px);background:${c[1]};border-color:${c[0]};color:${c[0]}">${esc(e.title || "（予定）")}<small>${esc(e.start)}〜${esc(e.end)}</small></button>`;
   }).join("");
   if (sel === T) tl += `<div class="now" style="top:${nowMin / 60 * HOUR}px"></div>`;
   $("calBody").innerHTML = (all.length ? `<div class="allday">${all.map(e => `<button ${evAttr(e)} style="background:${colorOf(e)[1]};color:${colorOf(e)[0]}">終日 ${esc(e.title || "（予定）")}</button>`).join("")}</div>` : "") +
@@ -580,6 +604,8 @@ function markMemo(id, kind, label) { const m = db.memos.find(x => x.id === id); 
 document.addEventListener("click", e => {
   const t = e.target;
   const gt = t.closest("[data-goto]"); if (gt) { go(gt.dataset.goto); return; }
+  const kt = t.closest("[data-kctoggle]"); if (kt) { kcOpen = !kcOpen; render(); return; }
+  const gd = t.closest("[data-gotoday]"); if (gd) { calDate = parseYmd(todayStr()); calMode = "day"; $("calMode").querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", String(x.dataset.m === "day"))); go("cal"); return; }
   const gk = t.closest("[data-gotask]"); if (gk) { taskF = gk.dataset.gotask; $("taskSeg").querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", String(x.dataset.f === taskF))); go("task"); return; }
   const dn = t.closest("[data-tdone]"); if (dn) { e.stopPropagation(); toggleTask(dn.dataset.tdone); return; }
   const qa = t.closest("[data-qadd]"); if (qa) { const k = qa.dataset.qadd; taskForm(null, {imp: k[0] === "1", urg: k[1] === "1"}); return; }
