@@ -43,16 +43,24 @@ const shadow = {tasks: new Map(), events: new Map(), memos: new Map(), chat: new
 let U = null, unsubs = [], canSave = true, brief = null, pcAt = null, kcRecs = [], kcTasks = [];
 const P = col => `hub/${U}/${col}`;
 const plain = o => JSON.parse(JSON.stringify(o));
+/* Googleカレンダーをそろえる仕組み（GAS）が書く項目。アプリは新しく作る時の gcalId:"" 以外は書かない
+   （古い写しで上書きして、Googleに二重に作られないように。書くときは merge＝送った項目だけ。テスター 2026-10-24） */
+const GAS_FIELDS = ["gcalId", "gcalKey", "link", "recur", "syncedAt"];
 function save() {
   if (!U) return;
   COLS.forEach(col => {
     const seen = new Set();
     db[col].forEach(o => {
       seen.add(o.id);
-      const s = JSON.stringify(o);
+      const s = JSON.stringify(o), isNew = !shadow[col].has(o.id);
       if (shadow[col].get(o.id) === s) return;
       shadow[col].set(o.id, s);
-      setDoc(doc(fs, P(col), o.id), plain(o)).catch(e => { console.error(e); toast("保存できませんでした"); });
+      const data = plain(o);
+      if (col === "events") {
+        if (isNew && !data.gcalId) { data.gcalId = ""; data.dirty = false; data.deleted = false; }
+        else GAS_FIELDS.forEach(k => delete data[k]);
+      }
+      setDoc(doc(fs, P(col), o.id), data, {merge: true}).catch(e => { console.error(e); toast("保存できませんでした"); });
     });
     [...shadow[col].keys()].filter(id => !seen.has(id)).forEach(id => {
       shadow[col].delete(id);
@@ -69,7 +77,7 @@ async function moveLocal() {
     try {
       for (let i = 0; i < items.length; i += 400) {
         const b = writeBatch(fs);
-        items.slice(i, i + 400).forEach(([col, o]) => b.set(doc(fs, P(col), o.id), plain(o)));
+        items.slice(i, i + 400).forEach(([col, o]) => b.set(doc(fs, P(col), o.id), col === "events" ? Object.assign({gcalId: "", dirty: false, deleted: false}, plain(o)) : plain(o), {merge: true}));
         await b.commit();
       }
       toast("スマホの中の " + items.length + "件をクラウドに移しました");
@@ -208,7 +216,7 @@ function taskCell(t, withPill) {
 const COLORS = {blue: ["var(--blue)", "rgba(0,122,255,.14)"], orange: ["var(--orange)", "rgba(255,149,0,.16)"], purple: ["var(--purple)", "rgba(175,82,222,.14)"], green: ["var(--green)", "rgba(52,199,89,.16)"], red: ["var(--red)", "rgba(255,59,48,.14)"]};
 const colorOf = e => COLORS[e.color] || COLORS.blue;
 /* 自分で入れた予定＋結果カウンターの予定（見るだけ・橙） */
-const eventsOn = s => [...db.events, ...kcEvents()].filter(e => e.date === s).sort((a, b) => (b.allDay ? 1 : 0) - (a.allDay ? 1 : 0) || toMin(a.start) - toMin(b.start));
+const eventsOn = s => [...db.events, ...kcEvents()].filter(e => e.date === s && !e.deleted).sort((a, b) => (b.allDay ? 1 : 0) - (a.allDay ? 1 : 0) || toMin(a.start) - toMin(b.start));
 const evAttr = e => e.kc ? `data-kc="1"` : `data-eedit="${esc(e.id)}"`;
 function eventCell(e) {
   return `<div class="cell" ${evAttr(e)}><div class="time">${e.allDay ? "終日" : esc(e.start)}${e.allDay ? "" : `<small>${esc(e.end)}</small>`}</div><div class="bar" style="background:${colorOf(e)[0]}"></div>
@@ -292,7 +300,7 @@ function renderCal() {
     : `${ws.getMonth() + 1}月${ws.getDate()}日〜${we.getMonth() === ws.getMonth() ? "" : (we.getMonth() + 1) + "月"}${we.getDate()}日`;
   $("weekStrip").innerHTML = `<button class="arrow" data-wk="-1" aria-label="前の週">‹</button>` + [0, 1, 2, 3, 4, 5, 6].map(i => {
     const d = addDays(ws, i), s = ymd(d);
-    return `<button class="wd${s === T ? " today" : ""}${calMode === "day" && s === sel ? " sel" : ""}" data-day="${s}">${WD[i]}<b>${d.getDate()}</b><i class="${[...db.events, ...kcEvents()].some(e => e.date === s) ? "on" : ""}"></i></button>`;
+    return `<button class="wd${s === T ? " today" : ""}${calMode === "day" && s === sel ? " sel" : ""}" data-day="${s}">${WD[i]}<b>${d.getDate()}</b><i class="${[...db.events, ...kcEvents()].some(e => e.date === s && !e.deleted) ? "on" : ""}"></i></button>`;
   }).join("") + `<button class="arrow" data-wk="1" aria-label="次の週">›</button>`;
   if (calMode === "week") {
     $("calBody").innerHTML = [0, 1, 2, 3, 4, 5, 6].map(i => { const s = ymd(addDays(ws, i)), evs = eventsOn(s);
@@ -467,6 +475,12 @@ function saveTask(t, v) {
 
 /* 予定の入力（新しく／直す）。pre＝下書き {title, date, start, end, allDay, note, memoId} */
 function eventForm(e, pre) {
+  /* Googleのくり返し予定は見るだけ（直すのは Googleカレンダーで） */
+  if (e && e.recur) {
+    openSheet("予定", `<div class="group"><div class="cell plain"><div class="grow"><div class="t">${esc(e.title)}</div><div class="s">${esc(mdw(e.date) + (e.allDay ? " 終日" : " " + e.start + "〜" + e.end))}</div>${e.note ? `<div class="s">${esc(e.note)}</div>` : ""}</div></div></div>
+      ${e.link ? `<a class="btn" href="${esc(e.link)}" target="_blank" rel="noopener">Googleカレンダーで開く</a>` : ""}<p class="note">Googleカレンダーのくり返しの予定です。直すときは Googleカレンダーで直してください（数分でそろいます）。</p>`);
+    return;
+  }
   const n = new Date(), next = fromMin(Math.min(23 * 60, (n.getHours() + 1) * 60));
   const v = e || Object.assign({title: "", date: todayStr(), allDay: false, start: next, end: fromMin(Math.min(23 * 60 + 59, toMin(next) + 60)), note: "", color: "blue"}, pre);
   openSheet(e ? "予定を直す" : "予定を足す", `
@@ -479,12 +493,13 @@ function eventForm(e, pre) {
     <div class="lab">メモ</div>
     <textarea class="field" id="eNote" placeholder="場所・相手など（なくてもOK）">${esc(v.note || "")}</textarea>
     ${e ? `<button type="button" class="btn danger" id="eDel">この予定を消す</button>` : ""}
-    <p class="note">いまはこのスマホの中だけの予定です（Googleカレンダーとそろえるのは次の段階）。</p>`, () => saveEvent(e, v));
+    ${e && e.link ? `<a class="btn" href="${esc(e.link)}" target="_blank" rel="noopener">Googleカレンダーで開く</a>` : ""}
+    <p class="note">${e && e.src === "gcal" ? "Googleカレンダーの予定です。直す・消すと、数分でGoogleにもそろいます。" : "Googleカレンダーとは数分おきにそろえます（そろえる仕組みが動いている時）。"}</p>`, () => saveEvent(e, v));
   const syncAll = () => { const a = $("eAll").checked; $("eRowS").hidden = $("eRowE").hidden = a; };
   $("eAll").addEventListener("change", syncAll); syncAll();
   $("eStart").addEventListener("change", () => { if (toMin($("eEnd").value) <= toMin($("eStart").value)) $("eEnd").value = fromMin(Math.min(23 * 60 + 59, toMin($("eStart").value) + 60)); });
   $("eColor").addEventListener("click", ev => { const b = ev.target.closest("[data-c]"); if (!b) return; $("eColor").querySelectorAll("[data-c]").forEach(x => { const on = x === b; x.setAttribute("aria-pressed", String(on)); x.style.background = on ? COLORS[x.dataset.c][0] : ""; x.style.color = on ? "#fff" : COLORS[x.dataset.c][0]; }); });
-  if (e) $("eDel").onclick = () => { if (!confirm("この予定を消します。よろしいですか？")) return; db.events = db.events.filter(x => x.id !== e.id); save(); closeSheet(); render(); toast("消しました"); };
+  if (e) $("eDel").onclick = () => { if (!confirm("この予定を消します。よろしいですか？")) return; e.deleted = true; e.updatedAt = nowIso(); save();   /* 印だけ（文書を消すのはカレンダーをそろえる仕組み。Googleにあれば Google からも消す） */ closeSheet(); render(); toast("消しました"); };
   else setTimeout(() => $("eTitle").focus(), 80);
 }
 function saveEvent(e, v) {
@@ -496,7 +511,7 @@ function saveEvent(e, v) {
   if (!allDay && toMin(end) <= toMin(start)) end = fromMin(Math.min(23 * 60 + 59, toMin(start) + 60));
   const c = $("eColor").querySelector('[aria-pressed="true"]');
   const data = {title, date, allDay, start, end, note: $("eNote").value.trim(), color: c ? c.dataset.c : "blue", updatedAt: nowIso()};
-  if (e) Object.assign(e, data);
+  if (e) { Object.assign(e, data); e.dirty = true; }   // 直した印→そろえる仕組みが Google を直す（Googleにまだ無い予定は、作る時に今の中身で作る）
   else {
     db.events.push(Object.assign({id: newId(), createdAt: nowIso(), src: "me"}, data));
     if (v.memoId) markMemo(v.memoId, "event", "予定（" + mdw(date) + (allDay ? "" : " " + start) + "）に入れました");
