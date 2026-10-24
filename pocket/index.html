@@ -16,7 +16,7 @@
 <link rel="manifest" href="./manifest.webmanifest">
 <link rel="apple-touch-icon" href="./icons/icon-180.png">
 <link rel="icon" href="./icons/icon-192.png">
-<link rel="stylesheet" href="./style.css?v=17">
+<link rel="stylesheet" href="./style.css?v=18">
 </head>
 <body>
 <!-- 入口：社長のGoogleでログイン -->
@@ -47,7 +47,7 @@
   </section>
   <!-- メモ -->
   <section class="view" id="v-memo" hidden>
-    <div class="nav"><span></span><button class="navbtn" id="memoAdd" aria-label="メモを書く">✎</button></div>
+    <div class="nav"><span></span><span></span></div><!-- 右上の✎は消した（社長「このボタンいらない」2026-10-25）。新しいメモは右下の書くボタンと下の欄で -->
     <h1 class="large">メモ</h1>
     <input class="search" id="memoSearch" type="search" placeholder="⌕ 検索" autocomplete="off">
     <div id="memoBody"></div>
@@ -87,6 +87,6 @@
   <div class="sbody" id="sheetBody"></div>
 </div>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
-<script type="module" src="./app.js?v=17"></script>
+<script type="module" src="./app.js?v=18"></script>
 </body>
 </html>

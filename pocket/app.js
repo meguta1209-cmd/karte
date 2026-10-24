@@ -617,7 +617,6 @@ $("calBody").addEventListener("click", e => {
 });
 
 /* ---------- メモ ---------- */
-$("memoAdd").onclick = () => memoForm(null);
 $("memoFab").onclick = () => memoForm(null);
 $("memoSearch").addEventListener("input", () => renderMemos());
 function memoTag(m) {
@@ -638,7 +637,7 @@ function renderMemos() {
   $("memoBody").innerHTML = `<div class="group">${list.map(m => {
     const lines = String(m.text || "").split("\n"), head = lines[0] || "（空のメモ）", rest = lines.slice(1).join(" ").trim();
     return `<button class="memo" data-medit="${esc(m.id)}"><div class="t">${esc(head)}</div>${rest ? `<div class="s">${esc(rest)}</div>` : ""}${memoTag(m)}<div class="s" style="font-size:12px;margin-top:4px">${whenText(m.createdAt)}</div></button>`;
-  }).join("") || `<div class="empty">${q ? "見つかりません" : "メモはまだありません。右上の✎か、下の欄から書けます"}</div>`}</div>`;
+  }).join("") || `<div class="empty">${q ? "見つかりません" : "メモはまだありません。右下の書くボタンか、下の欄から書けます"}</div>`}</div>`;
 }
 function addMemo(text, area) {
   const m = {id: newId(), text, status: "wait", result: null, area: area || newArea(), createdAt: nowIso(), updatedAt: nowIso()};
