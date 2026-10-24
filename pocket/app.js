@@ -673,6 +673,22 @@ function syncAskBtn() { const has = !!$("askIn").value.trim(), recOn = !!rec && 
 function syncFab() { const el = $("askIn"); $("memoFab").hidden = view !== "memo" || document.activeElement === el || !!el.value.trim(); }
 $("askIn").addEventListener("focus", syncFab); $("askIn").addEventListener("blur", () => setTimeout(syncFab, 0));
 function growAsk() { const el = $("askIn"); el.style.height = "auto"; el.style.height = Math.min(el.scrollHeight, 142) + "px"; }
+/* キーボードが出ている間（v6.1・社長「入力欄に打つ時、下のタブがキーボードと一緒に上がってくるのが嫌」）
+   文字の欄（下の欄・秘書の画面・メモを書く画面など）にカーソルがある間は body に kb を付けて下のタブを隠し、
+   下の欄・下から出る画面を、見えている所（visualViewport）の下の端＝キーボードのすぐ上に置く。打ち終わったら元に戻す */
+const isTyping = el => !!el && (el.tagName === "TEXTAREA" || el.tagName === "INPUT" && /^(text|search|email|url|tel|number)?$/i.test(el.getAttribute("type") || ""));
+function syncKb() {
+  const on = isTyping(document.activeElement), vv = window.visualViewport, root = document.documentElement.style;
+  document.body.classList.toggle("kb", on);
+  /* レイアウトの下の端と、見えている所の下の端の差（キーボードで画面が縮む作りなら 0・縮まない作りならキーボードの高さ） */
+  root.setProperty("--kb", (on && vv ? Math.max(0, Math.round(window.innerHeight - (vv.offsetTop + vv.height))) : 0) + "px");
+  root.setProperty("--vvh", (vv ? Math.round(vv.height) : window.innerHeight) + "px");
+}
+document.addEventListener("focusin", syncKb);
+document.addEventListener("focusout", () => setTimeout(syncKb, 120));   // 送るボタンを押した時に、押し終わる前に欄が動かないよう少し待つ
+if (window.visualViewport) { visualViewport.addEventListener("resize", syncKb); visualViewport.addEventListener("scroll", syncKb); }
+/* 下の欄のマイク・送るは、押してもカーソルを欄に残す（キーボードとタブが出たり消えたりしない） */
+["askMic", "askSend"].forEach(id => $(id).addEventListener("mousedown", e => e.preventDefault()));
 $("askIn").addEventListener("input", () => { syncAskBtn(); growAsk(); syncFab(); });
 $("ask").addEventListener("submit", e => {
   e.preventDefault();
