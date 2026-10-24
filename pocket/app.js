@@ -596,7 +596,8 @@ function renderCal() {
   $("calBody").innerHTML = (all.length ? `<div class="allday">${all.map(e => `<button ${evAttr(e)} style="background:${colorOf(e)[1]};color:${colorOf(e)[0]}">終日 ${esc(e.title || "（予定）")}</button>`).join("")}</div>` : "") +
     `<div class="tlwrap" id="tlwrap"><div class="tl">${tl}</div></div>`;
   const w = $("tlwrap"), top = w.getBoundingClientRect().top;
-  w.style.height = Math.max(240, window.innerHeight - top - $("tabs").offsetHeight - 70 + window.scrollY) + "px";
+  const tb = $("tabs").getBoundingClientRect(), under = tb.height ? window.innerHeight - tb.top : 66;   // 下のメニュー（浮いたカプセル）から下の分
+  w.style.height = Math.max(240, window.innerHeight - top - under - 70 + window.scrollY) + "px";
   if (!calScrolled) {
     const y = Math.max(0, ((sel === T ? nowMin - 60 : 8 * 60) / 60) * HOUR);
     w.scrollTop = y; requestAnimationFrame(() => { w.scrollTop = y; }); setTimeout(() => { w.scrollTop = y; }, 60);

@@ -16,7 +16,7 @@
 <link rel="manifest" href="./manifest.webmanifest">
 <link rel="apple-touch-icon" href="./icons/icon-180.png">
 <link rel="icon" href="./icons/icon-192.png">
-<link rel="stylesheet" href="./style.css?v=14">
+<link rel="stylesheet" href="./style.css?v=15">
 </head>
 <body>
 <!-- 入口：社長のGoogleでログイン -->
@@ -71,11 +71,12 @@
 </form>
 
 <nav class="tabbar" id="tabs">
-  <button data-go="today" aria-current="page"><svg class="off" viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3.5" y="5.5" width="19" height="16" rx="3.5"/></svg><svg class="on" viewBox="0 0 26 26" fill="currentColor"><rect x="3" y="5" width="20" height="17" rx="3.5"/></svg>今日</button>
-  <button data-go="task"><i class="tdot" id="waitDot" hidden></i><svg class="off" viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3.5" y="3.5" width="8" height="8" rx="2"/><rect x="14.5" y="3.5" width="8" height="8" rx="2"/><rect x="3.5" y="14.5" width="8" height="8" rx="2"/><rect x="14.5" y="14.5" width="8" height="8" rx="2"/></svg><svg class="on" viewBox="0 0 26 26" fill="currentColor"><rect x="3" y="3" width="9" height="9" rx="2.4"/><rect x="14" y="3" width="9" height="9" rx="2.4"/><rect x="3" y="14" width="9" height="9" rx="2.4"/><rect x="14" y="14" width="9" height="9" rx="2.4"/></svg>タスク</button>
-  <button data-go="cal"><svg class="off" viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3.5" y="5.5" width="19" height="17" rx="3"/><path d="M3.5 10.5h19M8.5 3v5M17.5 3v5"/></svg><svg class="on" viewBox="0 0 26 26" fill="currentColor"><rect x="3" y="5" width="20" height="18" rx="3"/><rect x="7.6" y="2.5" width="2" height="5" rx="1"/><rect x="16.4" y="2.5" width="2" height="5" rx="1"/><rect x="3" y="11" width="20" height="1.5" fill="var(--bar-solid)"/></svg>予定</button>
-  <button data-go="memo"><svg class="off" viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="5" y="3.5" width="16" height="19" rx="3"/><path d="M9 9h8M9 13h8M9 17h5"/></svg><svg class="on" viewBox="0 0 26 26" fill="currentColor"><rect x="4.5" y="3" width="17" height="20" rx="3.2"/><path d="M9 9h8M9 13h8M9 17h5" stroke="var(--bar-solid)" stroke-width="1.8"/></svg>メモ</button>
-  <button data-go="ai"><svg class="off" viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 12a9 8 0 1 1 4 6.6L4 21l1.2-4.2A7.6 7.6 0 0 1 4 12z"/></svg><svg class="on" viewBox="0 0 26 26" fill="currentColor"><path d="M4 12a9 8 0 1 1 4 6.6L4 21l1.2-4.2A7.6 7.6 0 0 1 4 12z"/></svg>秘書</button>
+  <!-- v6.2（社長の見本「下のメニュー_見本.jpg」）：浮いた白いカプセル。選んでいるタブだけ青いカプセルに白いアイコン＋名前、ほかは灰色のアイコンだけ -->
+  <button data-go="today" aria-label="今日" aria-current="page"><span class="ic"><svg class="off" viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3.5" y="5.5" width="19" height="16" rx="3.5"/></svg><svg class="on" viewBox="0 0 26 26" fill="currentColor"><rect x="3" y="5" width="20" height="17" rx="3.5"/></svg></span><span class="lb">今日</span></button>
+  <button data-go="task" aria-label="タスク"><span class="ic"><svg class="off" viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3.5" y="3.5" width="8" height="8" rx="2"/><rect x="14.5" y="3.5" width="8" height="8" rx="2"/><rect x="3.5" y="14.5" width="8" height="8" rx="2"/><rect x="14.5" y="14.5" width="8" height="8" rx="2"/></svg><svg class="on" viewBox="0 0 26 26" fill="currentColor"><rect x="3" y="3" width="9" height="9" rx="2.4"/><rect x="14" y="3" width="9" height="9" rx="2.4"/><rect x="3" y="14" width="9" height="9" rx="2.4"/><rect x="14" y="14" width="9" height="9" rx="2.4"/></svg><i class="tdot" id="waitDot" hidden></i></span><span class="lb">タスク</span></button>
+  <button data-go="cal" aria-label="予定"><span class="ic"><svg class="off" viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3.5" y="5.5" width="19" height="17" rx="3"/><path d="M3.5 10.5h19M8.5 3v5M17.5 3v5"/></svg><svg class="on" viewBox="0 0 26 26" fill="currentColor"><rect x="3" y="5" width="20" height="18" rx="3"/><rect x="7.6" y="2.5" width="2" height="5" rx="1"/><rect x="16.4" y="2.5" width="2" height="5" rx="1"/><rect x="3" y="11" width="20" height="1.5" fill="var(--tabsel)"/></svg></span><span class="lb">予定</span></button>
+  <button data-go="memo" aria-label="メモ"><span class="ic"><svg class="off" viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="5" y="3.5" width="16" height="19" rx="3"/><path d="M9 9h8M9 13h8M9 17h5"/></svg><svg class="on" viewBox="0 0 26 26" fill="currentColor"><rect x="4.5" y="3" width="17" height="20" rx="3.2"/><path d="M9 9h8M9 13h8M9 17h5" stroke="var(--tabsel)" stroke-width="1.8"/></svg></span><span class="lb">メモ</span></button>
+  <button data-go="ai" aria-label="秘書"><span class="ic"><svg class="off" viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 12a9 8 0 1 1 4 6.6L4 21l1.2-4.2A7.6 7.6 0 0 1 4 12z"/></svg><svg class="on" viewBox="0 0 26 26" fill="currentColor"><path d="M4 12a9 8 0 1 1 4 6.6L4 21l1.2-4.2A7.6 7.6 0 0 1 4 12z"/></svg></span><span class="lb">秘書</span></button>
 </nav>
 
 <!-- 下から出る入力 -->
@@ -86,6 +87,6 @@
   <div class="sbody" id="sheetBody"></div>
 </div>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
-<script type="module" src="./app.js?v=14"></script>
+<script type="module" src="./app.js?v=15"></script>
 </body>
 </html>
