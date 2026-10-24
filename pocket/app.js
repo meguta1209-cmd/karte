@@ -182,6 +182,7 @@ function go(v) {
   $("ask").classList.toggle("chatbar", ai);
   $("askIn").placeholder = ai ? "秘書に頼む…" : "秘書に頼む・メモする…";
   $("memoFab").hidden = v !== "memo";
+  $("areaSeg").hidden = v === "ai";
   syncAskBtn();
   if (v === "cal") calScrolled = false;
   window.scrollTo(0, 0);
@@ -214,6 +215,26 @@ function taskCell(t, withPill) {
     ${withPill && q.pill && !t.done ? `<span class="pill ${q.pill}">${q.name}</span>` : ""}</div>`;
 }
 
+/* ---------- 仕事／プライベート（v4・社長 2026-10-24） ----------
+   tasks・events・memos に area:"work"|"private"（無い古い物は仕事）。結果カウンター・今日の数字・社長待ちはいつも仕事。
+   いちばん上の切り替え（端末に覚える）で見る物を絞る。アプリで新しく入れる物は今選んでいる方（「すべて」なら仕事）。入力の画面でワンタップで変えられる */
+const AREA_KEY = "pocket-area";
+let areaF = (() => { try { const v = localStorage.getItem(AREA_KEY); return v === "work" || v === "private" ? v : "all"; } catch (e) { return "all"; } })();
+const areaOfX = x => x && x.area === "private" ? "private" : "work";
+const inArea = x => areaF === "all" || areaOfX(x) === areaF;
+const newArea = () => areaF === "private" ? "private" : "work";
+const showWork = () => areaF !== "private";
+function syncAreaSeg() { $("areaSeg").querySelectorAll("[data-a]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.a === areaF))); }
+$("areaSeg").addEventListener("click", e => {
+  const b = e.target.closest("[data-a]"); if (!b) return;
+  areaF = b.dataset.a; try { localStorage.setItem(AREA_KEY, areaF); } catch (x) {}
+  syncAreaSeg(); render();
+});
+/* 入力の画面の「仕事／プライベート」 */
+const areaChips = cur => `<div class="lab">区分</div><div class="chips" id="fArea"><button type="button" class="chip ar" data-ar="work" aria-pressed="${cur !== "private"}">仕事</button><button type="button" class="chip ar" data-ar="private" aria-pressed="${cur === "private"}">プライベート</button></div>`;
+function wireAreaChips() { const box = $("fArea"); if (box) box.addEventListener("click", e => { const b = e.target.closest("[data-ar]"); if (!b) return; box.querySelectorAll("[data-ar]").forEach(x => x.setAttribute("aria-pressed", String(x === b))); }); }
+const pickedArea = () => { const b = $("fArea") && $("fArea").querySelector('[aria-pressed="true"]'); return b ? b.dataset.ar : newArea(); };
+
 /* 社長待ち（チームが社長を待っている作業。秘書が wait:true・from・steps・link を付けて入れる）。4マス・リストには出さない */
 const isWait = t => !!t.wait;
 const waitsOpen = () => db.tasks.filter(t => isWait(t) && !t.done).sort(byDue);
@@ -227,7 +248,7 @@ function waitCell(t) {
 const COLORS = {blue: ["var(--blue)", "rgba(0,122,255,.14)"], orange: ["var(--orange)", "rgba(255,149,0,.16)"], purple: ["var(--purple)", "rgba(175,82,222,.14)"], green: ["var(--green)", "rgba(52,199,89,.16)"], red: ["var(--red)", "rgba(255,59,48,.14)"]};
 const colorOf = e => COLORS[e.color] || COLORS.blue;
 /* 自分で入れた予定＋結果カウンターの予定（見るだけ・橙） */
-const eventsOn = s => [...db.events, ...kcEvents()].filter(e => e.date === s && !e.deleted).sort((a, b) => (b.allDay ? 1 : 0) - (a.allDay ? 1 : 0) || toMin(a.start) - toMin(b.start));
+const eventsOn = s => [...db.events.filter(inArea), ...(showWork() ? kcEvents() : [])].filter(e => e.date === s && !e.deleted).sort((a, b) => (b.allDay ? 1 : 0) - (a.allDay ? 1 : 0) || toMin(a.start) - toMin(b.start));
 const evAttr = e => e.kc ? `data-kc="1"` : `data-eedit="${esc(e.id)}"`;
 const LONG_MIN = 240;   // これ以上（4時間以上）の予定は、日の表示で細い帯にする
 const isLongEv = e => !e.allDay && !e.kc && toMin(e.end || e.start) - toMin(e.start) >= LONG_MIN;
@@ -241,26 +262,26 @@ function renderToday() {
   const n = new Date(), T = todayStr();
   $("tDate").textContent = `${n.getMonth() + 1}月${n.getDate()}日 ${WD[n.getDay()]}曜日`;
   const evs = eventsOn(T);
-  const open = db.tasks.filter(t => !t.done && !isWait(t)), waits = waitsOpen();
+  const open = db.tasks.filter(t => !t.done && !isWait(t) && inArea(t)), waits = showWork() ? waitsOpen() : [];
   const over = open.filter(isOver), todays = open.filter(t => isToday(t) && !isOver(t));
-  const doneToday = db.tasks.filter(t => t.done && !isWait(t) && t.doneAt && ymd(new Date(t.doneAt)) === T);
-  const waiting = db.memos.filter(m => m.status === "wait").length;
+  const doneToday = db.tasks.filter(t => t.done && !isWait(t) && inArea(t) && t.doneAt && ymd(new Date(t.doneAt)) === T);
+  const waiting = db.memos.filter(m => m.status === "wait" && inArea(m)).length;
   /* 結果カウンターの前確：前確の日が今日まで（商談の前まで）の分を、今日のタスクに */
-  const E = addDays(parseYmd(T), 1), pres = kcPres().filter(p => p.when < E).sort((a, b) => a.when - b.when);
+  const E = addDays(parseYmd(T), 1), pres = (showWork() ? kcPres() : []).filter(p => p.when < E).sort((a, b) => a.when - b.when);
   const next = evs.find(e => !e.allDay && toMin(e.end || e.start) > n.getHours() * 60 + n.getMinutes());
   const hello = n.getHours() < 11 ? "おはようございます。" : n.getHours() < 18 ? "おつかれさまです。" : "おつかれさまでした。";
   const say = hello + `今日は予定が${evs.length}件、今日のタスクが${todays.length + pres.length}件です。` + (over.length ? `期限切れのタスクが${over.length}件あります。` : "") +
     (next ? `次は ${next.start}「${next.title}」。` : "") + (waiting ? `振り分け待ちのメモが${waiting}件。` : "") + (waits.length ? `チームが社長を待っている作業が${waits.length}件あります。` : "");
   /* 秘書のひと言：PCの秘書が今日書いた物があればそれ、なければ自動のまとめ */
   const bAt = brief && brief.at ? tsd(brief.at) || new Date(brief.at) : null;
-  const useBrief = brief && brief.text && bAt && ymd(bAt) === T;
+  const useBrief = showWork() && brief && brief.text && bAt && ymd(bAt) === T;   // プライベートの時は自動のまとめ
   /* いちばん上：チームが社長を待っている作業（無い時は出さない） */
   /* 期限の近い順に3件だけ＋「ほか n件」（社長「タスクぱんぱんになっちゃう」） */
   let h = waits.length ? `<div class="sec bell"><span>🔔 チームが社長を待っています（${waits.length}）</span><button data-gotask="wait">すべて</button></div><div class="group wait">${waits.slice(0, 3).map(waitCell).join("")}${waits.length > 3 ? `<button class="cell plain" data-gotask="wait"><div class="grow"><div class="t" style="color:var(--blue);font-size:15px">ほか ${waits.length - 3}件を見る</div></div></button>` : ""}</div><div style="height:14px"></div>` : "";
   h += `<div class="hisho"><div class="av">秘</div><div class="grow"><div class="t">${esc(useBrief ? brief.text : say)}</div><div class="s">${useBrief ? "秘書 ・ " + hm(bAt) : "ポケノートのまとめ ・ " + hm(n)}</div></div></div>`;
   if (kpiFor !== T && U) subscribeKpi();   // 日付が変わったら読み直す
   const k = kpiNow();
-  h += `<div class="sec"><span>今日の数字（結果カウンター）</span><button data-kc="1">開く</button></div><div class="kpi" data-kc="1"><div><b>${k.n}</b><span>コール</span></div><div><b>${k.ans}</b><span>対応</span></div><div><b>${k.apo}</b><span>アポ</span></div><div><b>${k.week}<small style="font-size:13px;color:var(--sub)">/${WEEK_GOAL}</small></b><span>今週のアポ</span></div></div>`;
+  if (showWork()) h += `<div class="sec"><span>今日の数字（結果カウンター）</span><button data-kc="1">開く</button></div><div class="kpi" data-kc="1"><div><b>${k.n}</b><span>コール</span></div><div><b>${k.ans}</b><span>対応</span></div><div><b>${k.apo}</b><span>アポ</span></div><div><b>${k.week}<small style="font-size:13px;color:var(--sub)">/${WEEK_GOAL}</small></b><span>今週のアポ</span></div></div>`;
   /* 予定：これからの物を3件＋「ほか n件」（社長「全部入れるとパンパンで醜い」）。結果カウンターの分は1行にまとめて、押すと開く */
   const nowMin = n.getHours() * 60 + n.getMinutes();
   const mine = evs.filter(e => !e.kc), kcs = evs.filter(e => e.kc);
@@ -289,7 +310,7 @@ let taskF = "quad";
 $("taskSeg").addEventListener("click", e => { const b = e.target.closest("[data-f]"); if (!b) return; taskF = b.dataset.f; $("taskSeg").querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", String(x === b))); renderTasks(); });
 $("taskAdd").onclick = () => taskForm(null, {});
 function renderTasks() {
-  const open = db.tasks.filter(t => !t.done && !isWait(t));
+  const open = db.tasks.filter(t => !t.done && !isWait(t) && inArea(t));
   if (taskF === "wait") {
     const w = waitsOpen(), doneW = db.tasks.filter(t => isWait(t) && t.done).sort((a, b) => String(b.doneAt).localeCompare(String(a.doneAt))).slice(0, 20);
     $("taskBody").innerHTML = `<div class="sec bell"><span>🔔 チームが社長を待っています（${w.length}）</span></div><div class="group wait">${w.map(waitCell).join("") || `<div class="empty">チームが社長を待っている作業はありません</div>`}</div>` +
@@ -312,10 +333,11 @@ function renderTasks() {
     $("taskBody").innerHTML = shown.map(([l, list]) => `<div class="sec"><span>${l}</span><span>${list.length}</span></div><div class="group">${list.sort(byDue).map(t => taskCell(t, true)).join("")}</div>`).join("")
       || `<div class="group"><div class="empty">タスクはありません。右上の＋で足せます</div></div>`;
   } else {
-    const done = db.tasks.filter(t => t.done).sort((a, b) => String(b.doneAt).localeCompare(String(a.doneAt)));
+    const done = db.tasks.filter(t => t.done && inArea(t)).sort((a, b) => String(b.doneAt).localeCompare(String(a.doneAt)));
     $("taskBody").innerHTML = done.length ? `<div class="group">${done.slice(0, 200).map(t => taskCell(t, false)).join("")}</div><button class="btn danger" id="clearDone">完了したタスクを全部消す</button>`
       : `<div class="group"><div class="empty">完了したタスクはまだありません</div></div>`;
-    const c = $("clearDone"); if (c) c.onclick = () => { if (!confirm("完了したタスク " + done.length + "件を消します。よろしいですか？")) return; db.tasks = db.tasks.filter(t => !t.done); save(); render(); toast("消しました"); };
+    const delN = done.filter(t => !isWait(t)).length;   /* 見ている区分の完了だけ消す（ほかの区分・社長待ちの済みは残す。テスター） */
+    const c = $("clearDone"); if (c) c.onclick = () => { if (!confirm("完了したタスク " + delN + "件を消します。よろしいですか？")) return; db.tasks = db.tasks.filter(t => !(t.done && inArea(t) && !isWait(t))); save(); render(); toast("消しました"); };
   }
 }
 function toggleTask(id) {
@@ -338,7 +360,7 @@ function renderCal() {
     : `${ws.getMonth() + 1}月${ws.getDate()}日〜${we.getMonth() === ws.getMonth() ? "" : (we.getMonth() + 1) + "月"}${we.getDate()}日`;
   $("weekStrip").innerHTML = `<button class="arrow" data-wk="-1" aria-label="前の週">‹</button>` + [0, 1, 2, 3, 4, 5, 6].map(i => {
     const d = addDays(ws, i), s = ymd(d);
-    return `<button class="wd${s === T ? " today" : ""}${calMode === "day" && s === sel ? " sel" : ""}" data-day="${s}">${WD[i]}<b>${d.getDate()}</b><i class="${[...db.events, ...kcEvents()].some(e => e.date === s && !e.deleted) ? "on" : ""}"></i></button>`;
+    return `<button class="wd${s === T ? " today" : ""}${calMode === "day" && s === sel ? " sel" : ""}" data-day="${s}">${WD[i]}<b>${d.getDate()}</b><i class="${[...db.events.filter(inArea), ...(showWork() ? kcEvents() : [])].some(e => e.date === s && !e.deleted) ? "on" : ""}"></i></button>`;
   }).join("") + `<button class="arrow" data-wk="1" aria-label="次の週">›</button>`;
   if (calMode === "week") {
     $("calBody").innerHTML = [0, 1, 2, 3, 4, 5, 6].map(i => { const s = ymd(addDays(ws, i)), evs = eventsOn(s);
@@ -368,7 +390,8 @@ function renderCal() {
   }).join("");
   tl += timed.map(e => {
     const s = toMin(e.start), en = Math.max(s + 20, toMin(e.end || e.start)), n = groupN[e.id] || 1, l = laneOf[e.id] || 0, c = colorOf(e);
-    return `<button class="ev2${e.kc ? " kc" : ""}" ${evAttr(e)} style="top:${s / 60 * HOUR}px;height:${Math.max(22, (en - s) / 60 * HOUR - 2)}px;left:calc(${52 + off}px + (100% - ${56 + off}px) * ${l} / ${n});width:calc((100% - ${56 + off}px) / ${n} - 2px);background:${c[1]};border-color:${c[0]};color:${c[0]}">${esc(e.title || "（予定）")}<small>${esc(e.start)}〜${esc(e.end)}</small></button>`;
+    /* 45分より短い予定は、題と時刻を1行に（30分の予定で時刻が下で切れていた。テスター） */
+    return `<button class="ev2${e.kc ? " kc" : ""}${en - s < 45 ? " tiny" : ""}" ${evAttr(e)} style="top:${s / 60 * HOUR}px;height:${Math.max(22, (en - s) / 60 * HOUR - 2)}px;left:calc(${52 + off}px + (100% - ${56 + off}px) * ${l} / ${n});width:calc((100% - ${56 + off}px) / ${n} - 2px);background:${c[1]};border-color:${c[0]};color:${c[0]}">${esc(e.title || "（予定）")}<small>${esc(e.start)}〜${esc(e.end)}</small></button>`;
   }).join("");
   if (sel === T) tl += `<div class="now" style="top:${nowMin / 60 * HOUR}px"></div>`;
   $("calBody").innerHTML = (all.length ? `<div class="allday">${all.map(e => `<button ${evAttr(e)} style="background:${colorOf(e)[1]};color:${colorOf(e)[0]}">終日 ${esc(e.title || "（予定）")}</button>`).join("")}</div>` : "") +
@@ -409,14 +432,14 @@ function whenText(iso) {
 }
 function renderMemos() {
   const q = $("memoSearch").value.trim().toLowerCase();
-  const list = db.memos.filter(m => !q || String(m.text).toLowerCase().includes(q)).sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+  const list = db.memos.filter(m => inArea(m) && (!q || String(m.text).toLowerCase().includes(q))).sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
   $("memoBody").innerHTML = `<div class="group">${list.map(m => {
     const lines = String(m.text || "").split("\n"), head = lines[0] || "（空のメモ）", rest = lines.slice(1).join(" ").trim();
     return `<button class="memo" data-medit="${esc(m.id)}"><div class="t">${esc(head)}</div>${rest ? `<div class="s">${esc(rest)}</div>` : ""}${memoTag(m)}<div class="s" style="font-size:12px;margin-top:4px">${whenText(m.createdAt)}</div></button>`;
   }).join("") || `<div class="empty">${q ? "見つかりません" : "メモはまだありません。右上の✎か、下の欄から書けます"}</div>`}</div>`;
 }
-function addMemo(text) {
-  const m = {id: newId(), text, status: "wait", result: null, createdAt: nowIso(), updatedAt: nowIso()};
+function addMemo(text, area) {
+  const m = {id: newId(), text, status: "wait", result: null, area: area || newArea(), createdAt: nowIso(), updatedAt: nowIso()};
   db.memos.push(m); save(); return m;
 }
 
@@ -502,7 +525,9 @@ function taskForm(t, pre) {
     <div class="chips" id="fQuick">${quick.map(([l, d]) => `<button type="button" class="chip" data-q="${d}" aria-pressed="${(v.due || "") === d}">${l}</button>`).join("")}</div>
     <div class="lab">メモ</div>
     <textarea class="field" id="fNote" placeholder="（なくてもOK）">${esc(v.note || "")}</textarea>
+    ${t && isWait(t) ? "" : areaChips(t ? areaOfX(t) : (v.area || newArea()))}
     ${t ? `<button type="button" class="btn" id="fDone">${t.done ? "未完了に戻す" : "完了にする"}</button><button type="button" class="btn danger" id="fDel">このタスクを消す</button>` : ""}`, () => saveTask(t, v));
+  wireAreaChips();
   $("fQuick").addEventListener("click", e => { const b = e.target.closest("[data-q]"); if (!b) return; $("fDate").value = b.dataset.q; if (!b.dataset.q) $("fTime").value = ""; $("fQuick").querySelectorAll("[data-q]").forEach(x => x.setAttribute("aria-pressed", String(x === b))); });
   $("fDate").addEventListener("input", () => $("fQuick").querySelectorAll("[data-q]").forEach(x => x.setAttribute("aria-pressed", String(x.dataset.q === $("fDate").value))));
   if (t) {
@@ -520,6 +545,7 @@ function saveTask(t, v) {
   if (!title) { toast("やることを入れてください"); return; }
   const due = $("fDate").value || null, time = due ? $("fTime").value || "" : "";
   const data = {title, note: $("fNote").value.trim(), imp: $("fImp").checked, urg: $("fUrg").checked, due, time, updatedAt: nowIso()};
+  if (!(t && isWait(t))) data.area = pickedArea();
   if (t) Object.assign(t, data);
   else {
     const nt = Object.assign({id: newId(), done: false, doneAt: null, createdAt: nowIso(), src: "me"}, data);
@@ -538,7 +564,7 @@ function eventForm(e, pre) {
     return;
   }
   const n = new Date(), next = fromMin(Math.min(23 * 60, (n.getHours() + 1) * 60));
-  const v = e || Object.assign({title: "", date: todayStr(), allDay: false, start: next, end: fromMin(Math.min(23 * 60 + 59, toMin(next) + 60)), note: "", color: "blue"}, pre);
+  const v = e || Object.assign({title: "", date: todayStr(), allDay: false, start: next, end: fromMin(Math.min(23 * 60 + 59, toMin(next) + 60)), note: "", color: newArea() === "private" ? "green" : "blue", area: newArea()}, pre);
   openSheet(e ? "予定を直す" : "予定を足す", `
     <input class="field" id="eTitle" placeholder="予定の名前" value="${esc(v.title)}" autocomplete="off" enterkeyhint="done">
     <div class="lab">日時</div>
@@ -548,9 +574,11 @@ function eventForm(e, pre) {
     <div class="chips" id="eColor">${Object.keys(COLORS).map(k => `<button type="button" class="chip" data-c="${k}" aria-pressed="${(v.color || "blue") === k}" style="color:${(v.color || "blue") === k ? "#fff" : COLORS[k][0]};${(v.color || "blue") === k ? "background:" + COLORS[k][0] : ""}">●</button>`).join("")}</div>
     <div class="lab">メモ</div>
     <textarea class="field" id="eNote" placeholder="場所・相手など（なくてもOK）">${esc(v.note || "")}</textarea>
+    ${areaChips(e ? areaOfX(e) : (v.area || newArea()))}
     ${e ? `<button type="button" class="btn danger" id="eDel">この予定を消す</button>` : ""}
     ${e && e.link ? `<a class="btn" href="${esc(e.link)}" target="_blank" rel="noopener">Googleカレンダーで開く</a>` : ""}
     <p class="note">${e && e.src === "gcal" ? "Googleカレンダーの予定です。直す・消すと、数分でGoogleにもそろいます。" : "Googleカレンダーとは数分おきにそろえます（そろえる仕組みが動いている時）。"}</p>`, () => saveEvent(e, v));
+  wireAreaChips();
   const syncAll = () => { const a = $("eAll").checked; $("eRowS").hidden = $("eRowE").hidden = a; };
   $("eAll").addEventListener("change", syncAll); syncAll();
   $("eStart").addEventListener("change", () => { if (toMin($("eEnd").value) <= toMin($("eStart").value)) $("eEnd").value = fromMin(Math.min(23 * 60 + 59, toMin($("eStart").value) + 60)); });
@@ -566,7 +594,7 @@ function saveEvent(e, v) {
   let start = allDay ? "" : $("eStart").value || "09:00", end = allDay ? "" : $("eEnd").value || "";
   if (!allDay && toMin(end) <= toMin(start)) end = fromMin(Math.min(23 * 60 + 59, toMin(start) + 60));
   const c = $("eColor").querySelector('[aria-pressed="true"]');
-  const data = {title, date, allDay, start, end, note: $("eNote").value.trim(), color: c ? c.dataset.c : "blue", updatedAt: nowIso()};
+  const data = {title, date, allDay, start, end, note: $("eNote").value.trim(), color: c ? c.dataset.c : "blue", area: pickedArea(), updatedAt: nowIso()};
   if (e) { Object.assign(e, data); e.dirty = true; }   // 直した印→そろえる仕組みが Google を直す（Googleにまだ無い予定は、作る時に今の中身で作る）
   else {
     db.events.push(Object.assign({id: newId(), createdAt: nowIso(), src: "me"}, data));
@@ -580,22 +608,25 @@ function saveEvent(e, v) {
 function memoForm(m) {
   openSheet(m ? "メモ" : "新しいメモ", `
     <textarea class="field big" id="mText" placeholder="思いついたこと・あとでやること・聞いた話…">${esc(m ? m.text : "")}</textarea>
+    ${areaChips(m ? areaOfX(m) : newArea())}
     ${m ? `<div class="chips"><button type="button" class="chip" id="mTask">タスクにする</button><button type="button" class="chip" id="mEvent">予定にする</button><button type="button" class="chip" id="mKeep" aria-pressed="${m.status === "memo"}">メモのまま（振り分けない）</button></div>
       <p class="note">${m.status === "done" && m.result ? "→ " + esc(m.result.label) + "<br>" : ""}書いた日時：${esc(whenText(m.createdAt))}</p>
       <button type="button" class="btn danger" id="mDel">このメモを消す</button>` : `<p class="note">書いたメモは、PCの秘書がつながったら「予定・タスク・メモのまま」に振り分けます。</p>`}`, () => saveMemo(m));
   if (m) {
     const firstLine = () => ($("mText").value.split("\n")[0] || "").trim().slice(0, 60);
-    $("mTask").onclick = () => { saveMemoText(m); taskForm(null, {title: firstLine(), note: $("mText").value.split("\n").slice(1).join("\n").trim(), memoId: m.id}); };
-    $("mEvent").onclick = () => { saveMemoText(m); eventForm(null, {title: firstLine(), date: todayStr(), note: $("mText").value.split("\n").slice(1).join("\n").trim(), memoId: m.id}); };
+    const ar = () => pickedArea();   // メモで選んでいる区分を、タスク・予定にも引き継ぐ
+    $("mTask").onclick = () => { saveMemoText(m); taskForm(null, {title: firstLine(), note: $("mText").value.split("\n").slice(1).join("\n").trim(), memoId: m.id, area: ar()}); };
+    $("mEvent").onclick = () => { saveMemoText(m); eventForm(null, {title: firstLine(), date: todayStr(), note: $("mText").value.split("\n").slice(1).join("\n").trim(), memoId: m.id, area: ar(), color: ar() === "private" ? "green" : "blue"}); };
     $("mKeep").onclick = () => { saveMemoText(m); m.status = m.status === "memo" ? "wait" : "memo"; m.result = null; m.updatedAt = nowIso(); save(); closeSheet(); render(); toast(m.status === "memo" ? "メモのままにしました" : "振り分け待ちに戻しました"); };
     $("mDel").onclick = () => { if (!confirm("このメモを消します。よろしいですか？")) return; db.memos = db.memos.filter(x => x.id !== m.id); save(); closeSheet(); render(); toast("消しました"); };
   } else setTimeout(() => $("mText").focus(), 80);
+  wireAreaChips();
 }
 function saveMemoText(m) { const t = $("mText").value.trim(); if (t && t !== m.text) { m.text = t; m.updatedAt = nowIso(); save(); } }
 function saveMemo(m) {
   const text = $("mText").value.trim();
   if (!text) { if (!m) { closeSheet(); return; } toast("中身が空です（消すときは下のボタン）"); return; }
-  if (m) { m.text = text; m.updatedAt = nowIso(); } else addMemo(text);
+  if (m) { m.text = text; m.area = pickedArea(); m.updatedAt = nowIso(); } else addMemo(text, pickedArea());
   save(); closeSheet(); render(); toast(m ? "直しました" : "メモしました");
 }
 function markMemo(id, kind, label) { const m = db.memos.find(x => x.id === id); if (!m) return; m.status = "done"; m.result = {kind, label}; m.updatedAt = nowIso(); }
@@ -617,7 +648,9 @@ document.addEventListener("click", e => {
 });
 
 function render() {
-  $("waitDot").hidden = !db.tasks.some(t => isWait(t) && !t.done);   // タスクのタブの赤い印＝チームが社長を待っている作業がある
+  $("waitDot").hidden = !showWork() || !db.tasks.some(t => isWait(t) && !t.done);
+  $("taskSeg").querySelector('[data-f="wait"]').hidden = !showWork();
+  if (!showWork() && taskF === "wait") { taskF = "quad"; $("taskSeg").querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", String(x.dataset.f === "quad"))); }   // タスクのタブの赤い印＝チームが社長を待っている作業がある
   if (view === "today") renderToday(); else if (view === "task") renderTasks(); else if (view === "cal") renderCal(); else if (view === "memo") renderMemos(); else renderAi();
 }
 /* 日付が変わったら・別のタブで直したら、描き直す */
@@ -625,5 +658,6 @@ setInterval(() => { if ($("sheet").hidden && (view === "today" || view === "cal"
 document.addEventListener("visibilitychange", () => { if (!document.hidden && $("sheet").hidden) render(); });
 window.addEventListener("resize", () => { if (view === "cal") renderCal(); });
 
+syncAreaSeg();
 go("today");
 if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("./sw.js").catch(() => {});

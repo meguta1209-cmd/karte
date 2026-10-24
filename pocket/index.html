@@ -16,12 +16,14 @@
 <link rel="manifest" href="./manifest.webmanifest">
 <link rel="apple-touch-icon" href="./icons/icon-180.png">
 <link rel="icon" href="./icons/icon-192.png">
-<link rel="stylesheet" href="./style.css?v=6">
+<link rel="stylesheet" href="./style.css?v=7">
 </head>
 <body>
 <!-- 入口：社長のGoogleでログイン -->
 <div class="gate" id="gate"><div class="gate-box"><img src="./icons/icon-192.png" alt=""><h1>ポケノート</h1><p id="gateMsg">読み込み中…</p><button type="button" class="btn primary" id="loginBtn" hidden>Googleでログイン</button><button type="button" class="btn" id="logoutBtn2" hidden>別のアカウントでログイン</button></div></div>
 <main id="main">
+  <!-- 仕事／プライベート／すべて（社長 2026-10-24）。秘書の画面では出さない -->
+  <div class="seg area" id="areaSeg" role="tablist" aria-label="仕事とプライベート"><button data-a="work" aria-pressed="false">仕事</button><button data-a="private" aria-pressed="false">プライベート</button><button data-a="all" aria-pressed="false">すべて</button></div>
   <!-- 今日 -->
   <section class="view" id="v-today">
     <div class="nav"><span></span><span></span></div>
@@ -84,6 +86,6 @@
   <div class="sbody" id="sheetBody"></div>
 </div>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
-<script type="module" src="./app.js?v=6"></script>
+<script type="module" src="./app.js?v=7"></script>
 </body>
 </html>
