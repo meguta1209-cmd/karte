@@ -180,6 +180,7 @@ function go(v) {
   const ai = v === "ai";
   $("ask").classList.toggle("chatbar", ai);
   $("askIn").placeholder = ai ? "秘書に頼む…" : "秘書に頼む・メモする…";
+  $("memoFab").hidden = v !== "memo";
   syncAskBtn();
   if (v === "cal") calScrolled = false;
   window.scrollTo(0, 0);
@@ -349,6 +350,7 @@ $("calBody").addEventListener("click", e => {
 
 /* ---------- メモ ---------- */
 $("memoAdd").onclick = () => memoForm(null);
+$("memoFab").onclick = () => memoForm(null);
 $("memoSearch").addEventListener("input", () => renderMemos());
 function memoTag(m) {
   if (m.status === "done" && m.result) return `<div class="tag">→ ${esc(m.result.label)}</div>`;

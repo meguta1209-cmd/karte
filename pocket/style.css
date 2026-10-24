@@ -196,3 +196,8 @@ textarea.field.big { min-height: 46dvh; font-size: 17px; }
 .kpi div { background: var(--card); border-radius: 12px; padding: 10px 8px; text-align: center; }
 .kpi b { display: block; font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .kpi span { font-size: 11px; color: var(--sub); }
+/* v3.1：メモの画面の右下の大きい書くボタン（入力欄・タブとぶつからない高さ） */
+.fab { position: fixed; z-index: 21; right: max(16px, calc(50% - 304px)); bottom: calc(var(--tabh) + 66px); width: 58px; height: 58px; border-radius: 50%; background: var(--blue); display: grid; place-items: center; box-shadow: 0 4px 14px rgba(0,0,0,.25); }
+.fab:active { transform: scale(.94); }
+#v-memo { padding-bottom: 70px; }
+#memoAdd { min-width: 44px; min-height: 44px; font-size: 24px; }
