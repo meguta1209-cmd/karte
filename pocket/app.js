@@ -711,28 +711,40 @@ $("ask").addEventListener("submit", e => {
 let rec = null, recBtn = null, recTarget = null;
 const SRClass = () => window.SpeechRecognition || window.webkitSpeechRecognition || null;
 function stopDictation() { if (rec) { try { rec.stop(); } catch (e) {} } }
+const DICTATE_QUIET_MS = 2000, DICTATE_FIRST_MS = 5000;   // 黙ったら止める：話したあと2秒／最初に何も話さない時5秒
 function dictate(target, btn, after) {
   if (rec) { stopDictation(); return; }
   const SR = SRClass();
   /* 使えない時：押した直後にキーボードを開く（iPhone は押した直後でないと開かない）＋案内 */
   if (!SR) { target.focus(); toast("キーボードの🎤（マイク）を押して話してください"); return; }
-  let base = target.value, finals = "", lastErr = "";
+  let base = target.value, finals = "", interim = "", lastErr = "", quiet = null;
   if (base && !/[\s\n]$/.test(base)) base += " ";
   const ph = target.placeholder;
   try {
-    rec = new SR(); rec.lang = "ja-JP"; rec.interimResults = true; rec.continuous = true; rec.maxAlternatives = 1;
+    const me = rec = new SR(); rec.lang = "ja-JP"; rec.interimResults = true; rec.continuous = true; rec.maxAlternatives = 1;
     recBtn = btn; recTarget = target;
-    btn.classList.add("rec"); btn.setAttribute("aria-pressed", "true"); target.placeholder = "聞いています…（話し終わったら、もう一度マイク）";
+    btn.classList.add("rec"); btn.setAttribute("aria-pressed", "true"); target.placeholder = "聞いています…（黙ると自動で止まります）";
+    /* v6.6（社長「指示が終わったら自動でマイクが切れるように」）：最後に言葉が入ってから2秒（最初に何も話さない時は5秒）黙ったら止める。
+       文字は欄に残す（自動では送らない）。止めても iPhone が止まらない時は、1.5秒後に打ち切る */
+    const arm = ms => { clearTimeout(quiet); quiet = setTimeout(() => {
+      if (rec !== me) return;
+      try { me.stop(); } catch (x) {}
+      setTimeout(() => { if (rec === me) { try { me.abort(); } catch (x) {} if (rec === me) me.onend(); } }, 1500);
+    }, ms); };
+    arm(DICTATE_FIRST_MS);
     rec.onresult = e => {
-      let interim = "";
+      interim = "";
       for (let i = e.resultIndex; i < e.results.length; i++) { const r = e.results[i]; if (r.isFinal) finals += r[0].transcript; else interim += r[0].transcript; }
       target.value = base + finals + interim;
       target.dispatchEvent(new Event("input", {bubbles: true}));
+      arm(DICTATE_QUIET_MS);
     };
     rec.onerror = e => { lastErr = e && e.error || "error"; };
     rec.onend = () => {
+      if (rec !== me) return;   // 二度目（打ち切りのあとに iPhone からも来た時）は何もしない
+      clearTimeout(quiet);
       rec = null; btn.classList.remove("rec"); btn.setAttribute("aria-pressed", "false"); target.placeholder = ph;
-      target.value = (base + finals).replace(/\s+$/, "") || target.value; target.dispatchEvent(new Event("input", {bubbles: true}));
+      target.value = (base + finals + interim).replace(/\s+$/, "") || target.value; target.dispatchEvent(new Event("input", {bubbles: true}));   // 確定前の言葉も残す
       if (lastErr === "not-allowed" || lastErr === "service-not-allowed") toast("マイクが使えませんでした。キーボードの🎤で話せます（設定 → ポケノート → マイク でも許可できます）");
       else if (lastErr === "no-speech") toast("聞き取れませんでした。もう一度マイクを押して話してください");
       else if (lastErr && lastErr !== "aborted") toast("音声を文字にできませんでした（" + lastErr + "）。キーボードの🎤も使えます");
