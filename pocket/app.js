@@ -189,10 +189,12 @@ function go(v) {
   $("areaSeg").hidden = v === "ai";
   syncAskBtn();
   if (v === "cal") calScrolled = false;
-  window.scrollTo(0, 0);
+  /* 秘書の画面は、描いたその場でいちばん下に合わせる（画面に出る前なので跳ねない。前は上で一度描いてから下へ動かしていた＝社長「開く時にガタッとなる」） */
+  if (!ai) window.scrollTo(0, 0);
   render();
-  if (ai) setTimeout(() => window.scrollTo(0, document.body.scrollHeight), 0);
+  if (ai) { chatToBottom(); requestAnimationFrame(chatToBottom); }
 }
+const chatToBottom = () => window.scrollTo(0, document.documentElement.scrollHeight);
 $("tabs").addEventListener("click", e => { const b = e.target.closest("button[data-go]"); if (b) go(b.dataset.go); });
 
 /* ---------- タスクの部品 ---------- */
@@ -644,6 +646,7 @@ function addMemo(text, area) {
 }
 
 /* ---------- 秘書 ---------- */
+let chatHtml = "";   // いま秘書の画面に出している会話（同じなら描き直さない）
 function renderAi() {
   const on = pcOn();
   $("pcState").className = "pc" + (on ? " on" : "");
@@ -663,7 +666,12 @@ function renderAi() {
       if (!later) h += `<div class="stat">${c.status === "doing" ? "秘書が対応中…" : on ? "届きました（秘書がもうすぐ見ます）" : "ためています（PCが開いたら届きます）"}</div>`;
     }
   });
-  $("chatBody").innerHTML = h;
+  /* 中身が同じなら描き直さない（PCの秘書の見張りが動くたびに全部を描き直して揺れないように）。
+     いちばん下を見ていた時は、新しい吹き出しが来ても下に合わせたまま（上の方を読んでいる時は動かさない） */
+  if (h === chatHtml) return;
+  const atBottom = !chatHtml || window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 80;
+  chatHtml = h; $("chatBody").innerHTML = h;
+  if (atBottom) chatToBottom();
 }
 
 /* ---------- 入力欄（どの画面にも） ---------- */
@@ -694,7 +702,7 @@ $("askIn").addEventListener("input", () => { syncAskBtn(); growAsk(); syncFab();
 $("ask").addEventListener("submit", e => {
   e.preventDefault();
   const text = $("askIn").value.trim(); if (!text) return;
-  if (view === "ai") { db.chat.push({id: newId(), role: "me", text, at: nowIso(), status: "wait"}); save(); $("askIn").value = ""; syncAskBtn(); growAsk(); syncFab(); render(); setTimeout(() => window.scrollTo(0, document.body.scrollHeight), 0); return; }
+  if (view === "ai") { db.chat.push({id: newId(), role: "me", text, at: nowIso(), status: "wait"}); save(); $("askIn").value = ""; syncAskBtn(); growAsk(); syncFab(); render(); chatToBottom(); return; }
   addMemo(text); $("askIn").value = ""; syncAskBtn(); growAsk(); syncFab(); $("askIn").blur(); render(); toast("メモに入れました");
 });
 /* ---------- 音声メモ（v5.2・社長「音声メモ機能いける？」→ A：話した言葉を文字に） ----------
