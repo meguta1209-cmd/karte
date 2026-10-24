@@ -241,3 +241,6 @@ button.hisho { width: 100%; text-align: left; }
 .ask textarea::placeholder { color: var(--sub); }
 .ask.chatbar { height: auto; min-height: 52px; }
 .ask.chatbar textarea { border: 1px solid var(--circle); border-radius: 18px; background: var(--card); padding: 6px 14px; }
+/* v5.2：音声メモ（聞いている間は赤） */
+.chip.micchip { font-size: 15px; padding: 8px 14px; }
+.chip.micchip.rec { background: var(--red); color: #fff; animation: pulse 1s infinite; }

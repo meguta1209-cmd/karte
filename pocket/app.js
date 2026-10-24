@@ -511,7 +511,8 @@ function renderAi() {
 }
 
 /* ---------- 入力欄（どの画面にも） ---------- */
-function syncAskBtn() { const has = !!$("askIn").value.trim(); $("askSend").hidden = !has && view !== "ai"; $("askMic").hidden = has || view === "ai"; }
+/* 空ならマイク、書いてあれば送る。聞いている間はマイク（赤）のまま＝押して止められる */
+function syncAskBtn() { const has = !!$("askIn").value.trim(), recOn = !!rec && recBtn === $("askMic"); $("askMic").hidden = has && !recOn; $("askSend").hidden = !has || recOn; }
 /* 下の入力欄は複数行（textarea）：書いた分だけ高さが伸びる（最大6行・それより長い時は中を動かす）。改行キーは改行、送るのはボタン（社長「改行されず打ちにくい」） */
 /* メモの画面の大きい書くボタンは、下の欄で打っている間（中身がある・カーソルがある）は隠す（伸びた欄と重なるため。テスター） */
 function syncFab() { const el = $("askIn"); $("memoFab").hidden = view !== "memo" || document.activeElement === el || !!el.value.trim(); }
@@ -524,20 +525,44 @@ $("ask").addEventListener("submit", e => {
   if (view === "ai") { db.chat.push({id: newId(), role: "me", text, at: nowIso(), status: "wait"}); save(); $("askIn").value = ""; syncAskBtn(); growAsk(); syncFab(); render(); setTimeout(() => window.scrollTo(0, document.body.scrollHeight), 0); return; }
   addMemo(text); $("askIn").value = ""; syncAskBtn(); growAsk(); syncFab(); $("askIn").blur(); render(); toast("メモに入れました");
 });
-let rec = null;
-$("askMic").onclick = () => {
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR) { $("askIn").focus(); toast("キーボードのマイクで話して入れられます"); return; }
-  if (rec) { rec.stop(); return; }
+/* ---------- 音声メモ（v5.2・社長「音声メモ機能いける？」→ A：話した言葉を文字に） ----------
+   マイクを押す → 話している最中から入力欄に文字が出る → もう一度押すか、話し終わると止まる。改行や直しは手でそのまま。
+   使えない時（ホーム画面のアプリで音声の文字起こしが止められている等）は、キーボードを開いて「キーボードの🎤で話してください」と案内。
+   使う所：下の欄（メモ・秘書）／メモを書く画面。入ったメモはふつうのメモと同じく「振り分け待ち」で秘書に届く */
+let rec = null, recBtn = null, recTarget = null;
+const SRClass = () => window.SpeechRecognition || window.webkitSpeechRecognition || null;
+function stopDictation() { if (rec) { try { rec.stop(); } catch (e) {} } }
+function dictate(target, btn, after) {
+  if (rec) { stopDictation(); return; }
+  const SR = SRClass();
+  /* 使えない時：押した直後にキーボードを開く（iPhone は押した直後でないと開かない）＋案内 */
+  if (!SR) { target.focus(); toast("キーボードの🎤（マイク）を押して話してください"); return; }
+  let base = target.value, finals = "", lastErr = "";
+  if (base && !/[\s\n]$/.test(base)) base += " ";
+  const ph = target.placeholder;
   try {
-    rec = new SR(); rec.lang = "ja-JP"; rec.interimResults = false; rec.maxAlternatives = 1;
-    $("askMic").classList.add("rec");
-    rec.onresult = e => { const t = Array.from(e.results).map(r => r[0].transcript).join(""); $("askIn").value = ($("askIn").value + " " + t).trim(); syncAskBtn(); };
-    rec.onend = () => { rec = null; $("askMic").classList.remove("rec"); $("askIn").focus(); };
-    rec.onerror = () => { toast("聞き取れませんでした。キーボードのマイクも使えます"); };
+    rec = new SR(); rec.lang = "ja-JP"; rec.interimResults = true; rec.continuous = true; rec.maxAlternatives = 1;
+    recBtn = btn; recTarget = target;
+    btn.classList.add("rec"); btn.setAttribute("aria-pressed", "true"); target.placeholder = "聞いています…（話し終わったら、もう一度マイク）";
+    rec.onresult = e => {
+      let interim = "";
+      for (let i = e.resultIndex; i < e.results.length; i++) { const r = e.results[i]; if (r.isFinal) finals += r[0].transcript; else interim += r[0].transcript; }
+      target.value = base + finals + interim;
+      target.dispatchEvent(new Event("input", {bubbles: true}));
+    };
+    rec.onerror = e => { lastErr = e && e.error || "error"; };
+    rec.onend = () => {
+      rec = null; btn.classList.remove("rec"); btn.setAttribute("aria-pressed", "false"); target.placeholder = ph;
+      target.value = (base + finals).replace(/\s+$/, "") || target.value; target.dispatchEvent(new Event("input", {bubbles: true}));
+      if (lastErr === "not-allowed" || lastErr === "service-not-allowed") toast("マイクが使えませんでした。キーボードの🎤で話せます（設定 → ポケノート → マイク でも許可できます）");
+      else if (lastErr === "no-speech") toast("聞き取れませんでした。もう一度マイクを押して話してください");
+      else if (lastErr && lastErr !== "aborted") toast("音声を文字にできませんでした（" + lastErr + "）。キーボードの🎤も使えます");
+      if (after) after();
+    };
     rec.start();
-  } catch (e) { rec = null; $("askMic").classList.remove("rec"); $("askIn").focus(); }
-};
+  } catch (e) { rec = null; btn.classList.remove("rec"); target.placeholder = ph; target.focus(); toast("キーボードの🎤（マイク）を押して話してください"); }
+}
+$("askMic").onclick = () => dictate($("askIn"), $("askMic"), () => { syncAskBtn(); growAsk(); });
 
 /* ---------- 下から出る画面 ---------- */
 let sheetDone = null, sheetSnap = "";
@@ -548,7 +573,7 @@ function openSheet(title, html, onDone, doneLabel) {
   sheetDone = onDone || null; $("scrim").hidden = $("sheet").hidden = false; $("sheetBody").scrollTop = 0;
   setTimeout(() => { sheetSnap = sheetState(); }, 0);
 }
-function closeSheet() { $("scrim").hidden = $("sheet").hidden = true; sheetDone = null; }
+function closeSheet() { stopDictation(); $("scrim").hidden = $("sheet").hidden = true; sheetDone = null; }
 function closeSafely() { if (sheetDone && sheetState() !== sheetSnap && !confirm("入力した内容を保存せずに閉じますか？")) return; closeSheet(); }
 $("sheetCancel").onclick = closeSafely; $("scrim").onclick = closeSafely;
 $("sheetDone").onclick = () => { if (sheetDone) sheetDone(); };
@@ -658,6 +683,7 @@ function saveEvent(e, v) {
 function memoForm(m) {
   openSheet(m ? "メモ" : "新しいメモ", `
     <textarea class="field big" id="mText" placeholder="思いついたこと・あとでやること・聞いた話…">${esc(m ? m.text : "")}</textarea>
+    <div class="chips"><button type="button" class="chip micchip" id="mMic" aria-pressed="false">🎤 話して書く</button></div>
     ${areaChips(m ? areaOfX(m) : newArea())}
     ${m ? `<div class="chips"><button type="button" class="chip" id="mTask">タスクにする</button><button type="button" class="chip" id="mEvent">予定にする</button><button type="button" class="chip" id="mKeep" aria-pressed="${m.status === "memo"}">メモのまま（振り分けない）</button></div>
       <p class="note">${m.status === "done" && m.result ? "→ " + esc(m.result.label) + "<br>" : ""}書いた日時：${esc(whenText(m.createdAt))}</p>
@@ -671,6 +697,7 @@ function memoForm(m) {
     $("mDel").onclick = () => { if (!confirm("このメモを消します。よろしいですか？")) return; db.memos = db.memos.filter(x => x.id !== m.id); save(); closeSheet(); render(); toast("消しました"); };
   } else setTimeout(() => $("mText").focus(), 80);
   wireAreaChips();
+  $("mMic").onclick = () => dictate($("mText"), $("mMic"));   // 音声メモ：話して書く
 }
 function saveMemoText(m) { const t = $("mText").value.trim(); if (t && t !== m.text) { m.text = t; m.updatedAt = nowIso(); save(); } }
 function saveMemo(m) {
