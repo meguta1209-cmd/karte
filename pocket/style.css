@@ -422,14 +422,15 @@ body.kb .undo { bottom: calc(var(--kb, 0px) + 70px); }
 /* 削除の赤は、引いている時・開いている時だけ（角の丸みから赤がにじんで見えないように。閉じる時は滑り終わってから消す） */
 .mdel { opacity: 0; transition: opacity 0s linear .26s; }
 .mrow.open .mdel { opacity: 1; transition: none; }
-/* v6.8：4マスで長押し→引っぱって移す */
-.qi { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
-.qi.qghost { opacity: .3; }
-.qdrag { position: fixed; z-index: 45; margin: 0; padding: 8px 10px; border-top: 0; border-radius: 12px; background: var(--card); pointer-events: none;
-  box-shadow: 0 1px 3px rgba(0,0,0,.08); transition: box-shadow .18s ease, transform .18s ease; will-change: transform; }
-.qdrag.up { box-shadow: 0 12px 28px rgba(0,0,0,.22); transform: scale(1.04); }
-.qdrag.gone { opacity: 0; transition: opacity .18s ease; }
-.quad.dragging .q { transition: background-color .15s ease, box-shadow .15s ease; }
+/* v6.8→v6.9：4マスで長押し→引っぱって移す（純正のリマインダーの動きに近づけた） */
+.qi { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; transition: background-color .2s ease, opacity .2s ease; }
+.qi.press { background: var(--fill); }   /* 押している間、少し沈む */
+.qi.qghost { opacity: .25; }   /* 元の場所は空きを残す（ほかが詰まって跳ねない） */
+.qi.qhide { opacity: 0; transition: none; }   /* 吸い込まれ終わるまで、移り先は空けておく */
+.qdrag { position: fixed; z-index: 45; pointer-events: none; will-change: transform; }
+.qdin { margin: 0; padding: 8px 10px; border-top: 0 !important; border-radius: 12px; background: var(--card); box-shadow: 0 0 0 rgba(0,0,0,0); transition: transform .18s ease, box-shadow .18s ease; }
+.qdrag.up .qdin { transform: scale(1.03); box-shadow: 0 12px 28px rgba(0,0,0,.22); }
+.q { transition: background-color .2s ease, box-shadow .2s ease; }   /* 色づけはふわっと */
 .quad.dragging .q:not(.drop) { box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--qc) 22%, transparent); }   /* 置けるマスをうすく */
 .q.drop { background: var(--fill); }   /* 古い iPhone（color-mix が無い）用 */
 .q.drop { background: color-mix(in srgb, var(--qc) 13%, var(--card)); box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--qc) 55%, transparent); }   /* 指の下のマスは濃く */

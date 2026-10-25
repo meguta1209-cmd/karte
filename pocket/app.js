@@ -539,7 +539,7 @@ function renderTasks() {
     $("taskBody").innerHTML = `<div class="quad">${QUADS.map(q => {
       const items = open.filter(t => quadOf(t) === q).sort(byDue);
       return `<div class="q" data-q="${q.k}" style="--qc:${q.color}"><div class="qh"><span class="dot" style="background:${q.color}"></span>${q.name}<span class="qn">${items.length}</span></div>
-        ${items.map(t => `<div class="qi" data-tedit="${esc(t.id)}"><button class="circle" data-tdone="${esc(t.id)}" aria-label="完了にする"></button><div>${esc(t.title || "（題なし）")}${t.due || repOk(t.repeat) ? `<small class="${isOver(t) ? "over" : ""}">${[esc(dueLabel(t)), repOk(t.repeat) ? `<span class="repi">${SF.repeat}</span>${esc(repLabel(t.repeat))}` : ""].filter(Boolean).join(" ")}</small>` : ""}</div></div>`).join("")}
+        ${items.map(t => `<div class="qi${qMark[t.id] ? " " + qMark[t.id] : ""}" data-tedit="${esc(t.id)}"><button class="circle" data-tdone="${esc(t.id)}" aria-label="完了にする"></button><div>${esc(t.title || "（題なし）")}${t.due || repOk(t.repeat) ? `<small class="${isOver(t) ? "over" : ""}">${[esc(dueLabel(t)), repOk(t.repeat) ? `<span class="repi">${SF.repeat}</span>${esc(repLabel(t.repeat))}` : ""].filter(Boolean).join(" ")}</small>` : ""}</div></div>`).join("")}
         <button class="qadd" data-qadd="${q.k}">＋ 足す</button></div>`;
     }).join("")}</div>`;
   } else if (taskF === "list") {
@@ -561,45 +561,82 @@ function renderTasks() {
    0.4秒押したままにすると、タスクが少し浮き上がって（影・ほんの少し大きく）指について動く。別のマスの上で離すと、そのマスの imp・urg に書き換える。
    運んでいる間は、置けるマスをうすく色づけ（指の下のマスは濃く）。マスの外か同じマスで離したら、元の所へ戻る。
    長押しの前に指が動いたら、ふつうのスクロール。長押しのあとは画面をスクロールさせない（touchmove を止める）。マスの中の並べ替えはしない */
-const QHOLD_MS = 400;
+const QHOLD_MS = 400, QPAD = 10;   // 長押しの時間／写しの左右の余白（文字の位置は元と同じにする）
 let qd = null, qdClick = false;
+const qMark = {};   // 運んでいる間・置いている間の印（描き直しても残す）：id → "qghost"(元の場所は空き)｜"qhide"(移り先は吸い込まれるまで空ける)
+/* v6.9（社長「遅れてくる、詰まってるイメージ」→ 純正のリマインダー・ホーム画面のアイコンを運ぶ動きに近づける）
+   ・押している間は少し沈む ・浮く時はつかんだ所を中心に1.03倍＋影（0.18秒・内側だけ）・文字の位置は動かない（前は写しにだけ左右の余白が付いて10pxずれていた）
+   ・指には transform だけで遅れなくついていく（前は大きさの動き 0.18秒 が指の動きにもかかって遅れていた＝「遅れてくる」）。
+     マスの位置は運び始めに1回だけ測って覚え、動かす時は測り直さない。色づけはマスが変わった時だけ（重い処理をしない＝「詰まる」を防ぐ）
+   ・元の場所は同じ高さの空きを残す（ほかが詰まって跳ねない）。同期で描き直しても、空き・印は残す
+   ・離すと移り先の置き場所へ0.22秒でスッと吸い込まれる／外なら元の所へスッと戻る（前はその場でパッと消えた）・マスの色づけはふわっと */
+const qiOf = id => $("taskBody").querySelector(`.qi[data-tedit="${CSS.escape(id)}"]`);
+const qMarkSet = (id, cls) => { if (cls) qMark[id] = cls; else delete qMark[id]; const el = qiOf(id); if (el) { el.classList.remove("qghost", "qhide"); if (cls) el.classList.add(cls); } };
 function qdStart(x, y, target) {
   const it = target.closest(".qi[data-tedit]"); if (!it || target.closest("[data-tdone]") || taskF !== "quad") return;
-  qd = {it, x0: x, y0: y, x, y, on: false, t: setTimeout(() => qdLift(), QHOLD_MS)};
+  qd = {id: it.dataset.tedit, x0: x, y0: y, x, y, on: false,
+    p: setTimeout(() => { if (qd && !qd.on) { const e = qiOf(qd.id); if (e) e.classList.add("press"); } }, 120),   // 押している間、少し沈む
+    t: setTimeout(qdLift, QHOLD_MS)};
 }
+const qdUnpress = id => { const e = qiOf(id); if (e) e.classList.remove("press"); };
 function qdLift() {
   if (!qd) return;
-  const r = qd.it.getBoundingClientRect(), g = qd.it.cloneNode(true);
-  g.removeAttribute("data-tedit"); g.querySelectorAll("[data-tdone]").forEach(x => x.removeAttribute("data-tdone"));
-  g.className = "qi qdrag"; Object.assign(g.style, {left: r.left + "px", top: r.top + "px", width: r.width + "px"});
+  const it = qiOf(qd.id); if (!it) { qd = null; return; }
+  const r = it.getBoundingClientRect(); it.classList.remove("press");
+  /* 写し：外側（.qdrag）は指について動くだけ、内側（.qdin）が浮く（大きさ・影） */
+  const g = document.createElement("div"), inner = it.cloneNode(true);
+  inner.removeAttribute("data-tedit"); inner.querySelectorAll("[data-tdone]").forEach(x => x.removeAttribute("data-tdone"));
+  inner.className = "qi qdin"; g.className = "qdrag"; g.setAttribute("aria-hidden", "true"); g.appendChild(inner);
+  Object.assign(g.style, {left: (r.left - QPAD) + "px", top: r.top + "px", width: (r.width + QPAD * 2) + "px"});
+  inner.style.transformOrigin = (qd.x0 - r.left + QPAD) + "px " + (qd.y0 - r.top) + "px";   // つかんだ所を中心に浮く
   document.body.appendChild(g); void g.offsetWidth; g.classList.add("up");
-  qd.on = true; qd.g = g; qd.r = r; qd.from = qd.it.closest(".q").dataset.q;
-  qd.it.classList.add("qghost"); $("taskBody").querySelector(".quad").classList.add("dragging");
+  qd.on = true; qd.g = g; qd.r = r; qd.from = it.closest(".q").dataset.q; qd.hover = null;
+  /* マスの位置は運び始めに1回だけ測って覚える（運んでいる間は画面が動かないので、測り直さない） */
+  qd.qs = [...$("taskBody").querySelectorAll(".quad .q")].map(b => ({k: b.dataset.q, r: b.getBoundingClientRect()}));
+  qMarkSet(qd.id, "qghost"); const quad = $("taskBody").querySelector(".quad"); if (quad) quad.classList.add("dragging");
   try { if (navigator.vibrate) navigator.vibrate(10); } catch (e) {}
+  qdPaint();
+}
+const qdHitK = (d, x, y) => (d.qs.find(o => x >= o.r.left && x <= o.r.right && y >= o.r.top && y <= o.r.bottom) || {}).k || null;
+/* 指の位置へ：transform を書くだけ（ページの形を測らない。iPhone の指の動きは1コマに1回に揃って届くので、そのまま書けば遅れがいちばん少ない） */
+function qdPaint() {
+  qd.g.style.transform = `translate3d(${qd.x - qd.x0}px, ${qd.y - qd.y0}px, 0)`;
+  const k = qdHitK(qd, qd.x, qd.y), to = k && k !== qd.from ? k : null;
+  if (to !== qd.hover) {   // 色づけはマスが変わった時だけ
+    $("taskBody").querySelectorAll(".quad .q").forEach(b => b.classList.toggle("drop", b.dataset.q === to));
+    qd.hover = to;
+  }
 }
 function qdMove(x, y, ev) {
   if (!qd) return;
-  if (!qd.on) { if (Math.hypot(x - qd.x0, y - qd.y0) > 8) { clearTimeout(qd.t); qd = null; } return; }   // 長押しの前に動いた＝スクロール
+  if (!qd.on) { if (Math.hypot(x - qd.x0, y - qd.y0) > 8) { clearTimeout(qd.t); clearTimeout(qd.p); qdUnpress(qd.id); qd = null; } return; }   // 長押しの前に動いた＝スクロール
   if (ev && ev.cancelable) ev.preventDefault();
-  qd.x = x; qd.y = y; qd.g.style.transform = `translate(${x - qd.x0}px, ${y - qd.y0}px) scale(1.04)`;
-  const el = document.elementFromPoint(x, y), q = el && el.closest(".quad .q");
-  $("taskBody").querySelectorAll(".q").forEach(b => b.classList.toggle("drop", b === q && b.dataset.q !== qd.from));
+  qd.x = x; qd.y = y; qdPaint();
+}
+/* 写しを rect の所へスッと動かして（大きさ・影も元へ）から消す */
+function qdSettle(d, rect, done) {
+  const g = d.g;
+  g.style.transition = "transform .22s cubic-bezier(.2,.8,.2,1)";
+  g.style.transform = `translate3d(${rect.left - d.r.left}px, ${rect.top - d.r.top}px, 0)`;
+  g.classList.remove("up");
+  setTimeout(() => { g.remove(); done(); }, 230);
 }
 function qdEnd() {
-  const d = qd; qd = null; if (!d) return; clearTimeout(d.t); if (!d.on) return;
+  const d = qd; qd = null; if (!d) return; clearTimeout(d.t); clearTimeout(d.p); qdUnpress(d.id);
+  if (!d.on) return;
   qdClick = true; setTimeout(() => { qdClick = false; }, 350);   // 離したあとの「押した」でタスクを開かない
-  const el = document.elementFromPoint(d.x, d.y), q = el && el.closest(".quad .q");
   $("taskBody").querySelectorAll(".q").forEach(b => b.classList.remove("drop")); const quad = $("taskBody").querySelector(".quad"); if (quad) quad.classList.remove("dragging");
-  const t = db.tasks.find(x => x.id === d.it.dataset.tedit), to = q && QUADS.find(z => z.k === q.dataset.q);
-  if (t && to && q.dataset.q !== d.from) {   // 別のマス → 移す
+  const k = qdHitK(d, d.x, d.y), t = db.tasks.find(x => x.id === d.id), to = k && QUADS.find(z => z.k === k);
+  if (t && to && k !== d.from) {   // 別のマス → 移して、写しを移り先の置き場所へ吸い込ませる
+    delete qMark[d.id]; qMark[d.id] = "qhide";
     t.imp = to.imp; t.urg = to.urg; t.updatedAt = nowIso(); save(); render();
-    d.g.classList.add("gone"); setTimeout(() => d.g.remove(), 180);
+    const ni = qiOf(d.id);
+    qdSettle(d, ni ? ni.getBoundingClientRect() : d.r, () => qMarkSet(d.id, null));
     toast("「" + to.name + "」に移しました");
     return;
   }
-  /* 元の所へ戻す */
-  d.g.style.transition = "transform .22s cubic-bezier(.2,.8,.2,1), box-shadow .22s"; d.g.style.transform = ""; d.g.classList.remove("up");
-  setTimeout(() => { d.g.remove(); d.it.classList.remove("qghost"); }, 230);
+  const back = qiOf(d.id);   // 元の所へスッと戻す
+  qdSettle(d, back ? back.getBoundingClientRect() : d.r, () => qMarkSet(d.id, null));
 }
 $("taskBody").addEventListener("touchstart", e => { if (e.touches.length === 1) qdStart(e.touches[0].clientX, e.touches[0].clientY, e.target); }, {passive: true});
 $("taskBody").addEventListener("touchmove", e => { if (qd && e.touches.length === 1) qdMove(e.touches[0].clientX, e.touches[0].clientY, e); }, {passive: false});
