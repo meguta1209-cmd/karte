@@ -55,7 +55,7 @@ const fromMin = n => pad(Math.floor(n / 60) % 24) + ":" + pad(n % 60);
 const mdw = s => { const d = parseYmd(s); return (d.getMonth() + 1) + "/" + d.getDate() + "（" + WD[d.getDay()] + "）"; };
 const tsd = v => v && typeof v.toDate === "function" ? v.toDate() : v instanceof Date ? v : null;
 let tt = null;
-function toast(msg) { const el = $("toast"); el.textContent = msg; el.classList.add("on"); clearTimeout(tt); tt = setTimeout(() => el.classList.remove("on"), 2400); }
+function toast(msg, ms) { const el = $("toast"); el.textContent = msg; el.classList.add("on"); clearTimeout(tt); tt = setTimeout(() => el.classList.remove("on"), ms || 2400); }   // ms：長い案内は長めに出す
 
 /* ---------- 保存（Firebase）----------
    画面の作りは v1 のまま：db の中身を直してから save() を呼ぶ。save() は「前に送った形」と比べて、変わった物だけを書き、消えた物を消す */
@@ -843,25 +843,31 @@ function swGone(row, id) {
   void row.offsetWidth; row.style.transition = "height .22s ease .12s"; row.style.height = "0px";
   setTimeout(() => deleteMemo(id), 340);
 }
-let undoT = null, undoId = null;
-function deleteMemo(id) {
-  document.body.classList.add("undoing");
-  const m = db.memos.find(x => x.id === id); if (!m) return;
-  commitDelete();   // 前に消した物は、ここで本当に消す（元に戻せるのは最後の1つ）
-  m.deleted = true; m.updatedAt = nowIso(); undoId = id; save(); render();
-  $("undoMsg").textContent = "メモを削除しました"; $("undo").hidden = false; void $("undo").offsetWidth; $("undo").classList.add("on");   // 出したその場で動きを始める
-  clearTimeout(undoT); undoT = setTimeout(commitDelete, 5000);
+/* 画面の下の「〜しました［元に戻す］」（v6.7 メモの削除・v6.11 音声で自動で送った時の［取り消す］）。出せるのは1つ：新しく出す時は、前の物を確定する */
+let undoT = null, undoId = null, undoFn = null, undoDone = null;
+function showUndo(msg, label, onUndo, onDone, ms) {
+  flushUndo();
+  undoFn = onUndo; undoDone = onDone || null;
+  $("undoMsg").textContent = msg; $("undoBtn").textContent = label || "元に戻す";
+  document.body.classList.add("undoing"); $("undo").hidden = false; void $("undo").offsetWidth; $("undo").classList.add("on");   // 出したその場で動きを始める
+  clearTimeout(undoT); undoT = setTimeout(flushUndo, ms || 5000);
 }
-function commitDelete() {
-  clearTimeout(undoT); undoT = null; const id = undoId; undoId = null; hideUndo();
-  if (!id) return; const m = db.memos.find(x => x.id === id);
+function flushUndo() { clearTimeout(undoT); undoT = null; const d = undoDone; undoFn = undoDone = null; hideUndo(); if (d) d(); }   // 時間が来た・次が出た＝確定
+function hideUndo() { const u = $("undo"); u.classList.remove("on"); document.body.classList.remove("undoing"); setTimeout(() => { if (!u.classList.contains("on")) u.hidden = true; }, 220); }
+$("undoBtn").onclick = () => { clearTimeout(undoT); undoT = null; const f = undoFn; undoFn = undoDone = null; hideUndo(); if (f) f(); };
+function deleteMemo(id) {
+  const m = db.memos.find(x => x.id === id); if (!m) return;
+  flushUndo();   // 前に消した物は、ここで本当に消す（元に戻せるのは最後の1つ）
+  m.deleted = true; m.updatedAt = nowIso(); undoId = id; save(); render();
+  showUndo("メモを削除しました", "元に戻す",
+    () => { undoId = null; const x = db.memos.find(y => y.id === id); if (x) { x.deleted = false; x.updatedAt = nowIso(); save(); render(); toast("元に戻しました"); } },
+    () => commitDelete(id));
+}
+function commitDelete(id) {
+  if (undoId === id) undoId = null;
+  const m = db.memos.find(x => x.id === id);
   if (m && m.deleted) { db.memos = db.memos.filter(x => x !== m); save(); render(); }
 }
-function hideUndo() { const u = $("undo"); u.classList.remove("on"); document.body.classList.remove("undoing"); setTimeout(() => { if (!u.classList.contains("on")) u.hidden = true; }, 220); }
-$("undoBtn").onclick = () => {
-  clearTimeout(undoT); undoT = null; const m = db.memos.find(x => x.id === undoId); undoId = null; hideUndo();
-  if (m) { m.deleted = false; m.updatedAt = nowIso(); save(); render(); toast("元に戻しました"); }
-};
 /* 前に開いた時に消しかけのまま閉じた物（deleted の印のまま）は、次に開いた時に片づける */
 function sweepDeleted() {
   const old = db.memos.filter(m => m.deleted && m.id !== undoId && Date.now() - Date.parse(m.updatedAt || 0) > 15000);
@@ -928,40 +934,78 @@ if (window.visualViewport) { visualViewport.addEventListener("resize", syncKb); 
 /* 下の欄のマイク・送るは、押してもカーソルを欄に残す（キーボードとタブが出たり消えたりしない） */
 ["askMic", "askSend"].forEach(id => $(id).addEventListener("mousedown", e => e.preventDefault()));
 $("askIn").addEventListener("input", () => { syncAskBtn(); growAsk(); syncFab(); });
-$("ask").addEventListener("submit", e => {
-  e.preventDefault();
+$("ask").addEventListener("submit", e => { e.preventDefault(); sendAsk(false); });
+/* 下の欄を送る。auto＝音声入力が止まって自動で送った時（v6.11・社長「自動送信で」）：送ったあと下に［取り消す］を5秒。
+   取り消すと、送った文を下の欄に戻す（聞きまちがいを直して送り直せる）。秘書へは、秘書がまだ受け取っていない間だけ取り消せる */
+function sendAsk(auto) {
   const text = $("askIn").value.trim(); if (!text) return;
-  if (view === "ai") { db.chat.push({id: newId(), role: "me", text, at: nowIso(), status: "wait"}); save(); $("askIn").value = ""; syncAskBtn(); growAsk(); syncFab(); render(); chatToBottom(); return; }
-  addMemo(text); $("askIn").value = ""; syncAskBtn(); growAsk(); syncFab(); $("askIn").blur(); render(); toast(view === "memo" && memoCat !== "etc" ? "メモに入れました（振り分けまで「その他」に入ります）" : "メモに入れました");
-});
+  const clear = () => { $("askIn").value = ""; syncAskBtn(); growAsk(); syncFab(); };
+  const putBack = () => { $("askIn").value = text; syncAskBtn(); growAsk(); syncFab(); };
+  if (view === "ai") {
+    const c = {id: newId(), role: "me", text, at: nowIso(), status: "wait"};
+    db.chat.push(c); save(); clear(); render(); chatToBottom();
+    if (auto) showUndo("秘書に送りました", "取り消す", () => {
+      const x = db.chat.find(y => y.id === c.id); if (!x) return;
+      if (x.status && x.status !== "wait") { toast("秘書が受け取り済みです（取り消せません）"); return; }
+      db.chat = db.chat.filter(y => y !== x); save(); render(); putBack(); toast("取り消しました");
+    });
+    return;
+  }
+  const m = addMemo(text); clear(); $("askIn").blur(); render();
+  if (auto) showUndo("メモに入れました", "取り消す", () => { db.memos = db.memos.filter(x => x.id !== m.id); save(); render(); putBack(); toast("取り消しました"); });
+  else toast(view === "memo" && memoCat !== "etc" ? "メモに入れました（振り分けまで「その他」に入ります）" : "メモに入れました");
+}
 /* ---------- 音声メモ（v5.2・社長「音声メモ機能いける？」→ A：話した言葉を文字に） ----------
-   マイクを押す → 話している最中から入力欄に文字が出る → もう一度押すか、話し終わると止まる。改行や直しは手でそのまま。
+   マイクを押す → 話している最中から入力欄に文字が出る → もう一度押すか、話し終わると止まる → 止まったら自動で送る（v6.11・下に［取り消す］5秒）。
    使えない時（ホーム画面のアプリで音声の文字起こしが止められている等）は、キーボードを開いて「キーボードのマイクで話してください」と案内。
    使う所：下の欄（メモ・秘書）／メモを書く画面。入ったメモはふつうのメモと同じく「振り分け待ち」で秘書に届く */
-let rec = null, recBtn = null, recTarget = null;
+let rec = null, recBtn = null, recTarget = null, recLast = null;   // recLast：いちばん最後に作った音声認識（終わるまで覚えて、次を始める前に止める）
+/* うまく使えなかった時の案内（何が原因か分かるよう、決まった言葉も出す。v6.10・社長「マイク使われへんくなった」） */
+const SR_ERR = {
+  "not-allowed": "マイクの使用が許可されていません（not-allowed）。iPhone の 設定 → アプリ → Safari → マイク を「確認」か「許可」に",
+  "service-not-allowed": "音声入力が止められています（service-not-allowed）。設定 → 一般 → キーボード →「音声入力」をオンに",
+  "audio-capture": "マイクが使えません（audio-capture）。ほかのアプリがマイクを使っていないか確かめてください",
+  "network": "ネットにつながらないため、音声を文字にできません（network）"
+};
 const SRClass = () => window.SpeechRecognition || window.webkitSpeechRecognition || null;
-function stopDictation() { if (rec) { try { rec.stop(); } catch (e) {} } }
-const DICTATE_QUIET_MS = 2000, DICTATE_FIRST_MS = 5000;   // 黙ったら止める：話したあと2秒／最初に何も話さない時5秒
-function dictate(target, btn, after) {
-  if (rec) { stopDictation(); return; }
+/* 止める（v6.11・社長「1回入力したら次が入力できなくなる」）：iPhone が終わりの合図（onend）を出さないと「聞いている」のまま残り、
+   次にマイクを押しても「止める」だけで終わっていた。手で止めた時も、自動で止めた時と同じく1.5秒で打ち切ってボタンを戻す */
+function stopDictation() {
+  const me = rec; if (!me) return;
+  if (!me._stopAt) me._stopAt = Date.now();
+  try { me.stop(); } catch (e) {}
+  setTimeout(() => { if (rec === me) { try { me.abort(); } catch (x) {} if (rec === me) { me.onend(); recLast = me; } } }, 1500);
+}
+const DICTATE_QUIET_MS = 2000, DICTATE_FIRST_MS = 5000, DICTATE_WAIT_MS = 30000;   // 黙ったら止める：話したあと2秒／聞き始めてから何も話さない時5秒／聞き始めるまで（許可の確認）最大30秒
+/* onDone(言葉)：止まった時に新しい言葉が入っていたら呼ぶ（v6.11 自動で送る。日報など欄がいくつもある所では渡さない＝欄に入れるだけ） */
+function dictate(target, btn, after, onDone) {
+  if (rec) {
+    /* 止めたのに残っている（iPhone が終わりの合図を出していない）→ 片づけて、この押したので新しく聞き始める（何回押しても毎回聞き始める） */
+    if (rec._stopAt && Date.now() - rec._stopAt > 600) { const old = rec; try { old.abort(); } catch (x) {} if (rec === old) { old.onend(); recLast = old; } }
+    else { stopDictation(); return; }
+  }
   const SR = SRClass();
   /* 使えない時：押した直後にキーボードを開く（iPhone は押した直後でないと開かない）＋案内 */
-  if (!SR) { target.focus(); toast("キーボードのマイクを押して話してください"); return; }
+  if (!SR) { target.focus(); toast("この画面では音声入力が使えません（音声認識なし）。キーボードのマイクを押して話してください", 6000); return; }
   let base = target.value, finals = "", interim = "", lastErr = "", quiet = null;
   if (base && !/[\s\n]$/.test(base)) base += " ";
   const ph = target.placeholder;
   try {
-    const me = rec = new SR(); rec.lang = "ja-JP"; rec.interimResults = true; rec.continuous = true; rec.maxAlternatives = 1;
+    if (recLast) { try { recLast.abort(); } catch (x) {} recLast = null; }   // 前の音声認識が残っていたら止める（iPhone は同時に1つしか使えず、残っていると始められない）
+    const me = rec = recLast = new SR(); rec.lang = "ja-JP"; rec.interimResults = true; rec.continuous = true; rec.maxAlternatives = 1;
     recBtn = btn; recTarget = target;
     btn.classList.add("rec"); btn.setAttribute("aria-pressed", "true"); target.placeholder = "聞いています…（黙ると自動で止まります）";
     /* v6.6（社長「指示が終わったら自動でマイクが切れるように」）：最後に言葉が入ってから2秒（最初に何も話さない時は5秒）黙ったら止める。
-       文字は欄に残す（自動では送らない）。止めても iPhone が止まらない時は、1.5秒後に打ち切る */
+       止めても iPhone が止まらない時は、1.5秒後に打ち切る。v6.11 から、下の欄・メモを書く画面は止まったら自動で送る（onDone）。日報は欄に入れるだけ */
     const arm = ms => { clearTimeout(quiet); quiet = setTimeout(() => {
       if (rec !== me) return;
-      try { me.stop(); } catch (x) {}
-      setTimeout(() => { if (rec === me) { try { me.abort(); } catch (x) {} if (rec === me) me.onend(); } }, 1500);
+      stopDictation();   // 止める（iPhone が止まらない時は1.5秒で打ち切り・次を始める前にもう一度止める）
     }, ms); };
-    arm(DICTATE_FIRST_MS);
+    /* 5秒の「何も話さない」は、聞き始めてから数える（v6.10：iPhone は押したあとにマイク・音声入力の許可を聞くことがあり、
+       その間に数えていたので、許可の前に打ち切って「キーボードのマイク」の案内に落ちていた＝社長「マイク使われへんくなった」）。
+       聞き始めない時の止まりっぱなしを防ぐため、押してから30秒は待つ */
+    arm(DICTATE_WAIT_MS);
+    rec.onstart = () => { if (rec === me) arm(DICTATE_FIRST_MS); };
     rec.onresult = e => {
       interim = "";
       for (let i = e.resultIndex; i < e.results.length; i++) { const r = e.results[i]; if (r.isFinal) finals += r[0].transcript; else interim += r[0].transcript; }
@@ -971,19 +1015,21 @@ function dictate(target, btn, after) {
     };
     rec.onerror = e => { lastErr = e && e.error || "error"; };
     rec.onend = () => {
+      if (recLast === me) recLast = null;
       if (rec !== me) return;   // 二度目（打ち切りのあとに iPhone からも来た時）は何もしない
       clearTimeout(quiet);
       rec = null; btn.classList.remove("rec"); btn.setAttribute("aria-pressed", "false"); target.placeholder = ph;
+      const said = (finals + interim).trim();
       target.value = (base + finals + interim).replace(/\s+$/, "") || target.value; target.dispatchEvent(new Event("input", {bubbles: true}));   // 確定前の言葉も残す
-      if (lastErr === "not-allowed" || lastErr === "service-not-allowed") toast("マイクが使えませんでした。キーボードのマイクで話せます（設定 → ポケノート → マイク でも許可できます）");
-      else if (lastErr === "no-speech") toast("聞き取れませんでした。もう一度マイクを押して話してください");
-      else if (lastErr && lastErr !== "aborted") toast("音声を文字にできませんでした（" + lastErr + "）。キーボードのマイクも使えます");
+      if (lastErr === "no-speech") toast("聞き取れませんでした。もう一度マイクを押して話してください");
+      else if (lastErr && lastErr !== "aborted") toast((SR_ERR[lastErr] || "音声を文字にできませんでした（" + lastErr + "）") + "。キーボードのマイクも使えます", 7000);   // 何が起きたかを、決まった言葉（not-allowed など）つきで出す
       if (after) after();
+      if (onDone && said && (!lastErr || lastErr === "aborted")) onDone(said);   // 新しい言葉が入っていたら、そのまま送る（聞き取れなかった時は送らない）
     };
     rec.start();
-  } catch (e) { rec = null; btn.classList.remove("rec"); target.placeholder = ph; target.focus(); toast("キーボードのマイクを押して話してください"); }
+  } catch (e) { rec = null; recLast = null; btn.classList.remove("rec"); btn.setAttribute("aria-pressed", "false"); target.placeholder = ph; target.focus(); toast("音声入力を始められませんでした（" + (e && (e.name || e.message) || "error") + "）。キーボードのマイクを押して話してください", 7000); }
 }
-$("askMic").onclick = () => dictate($("askIn"), $("askMic"), () => { syncAskBtn(); growAsk(); });
+$("askMic").onclick = () => dictate($("askIn"), $("askMic"), () => { syncAskBtn(); growAsk(); }, () => sendAsk(true));   // 止まったら自動で送る（秘書の画面＝秘書へ／ほか＝メモ）
 
 /* ---------- 下から出る画面 ---------- */
 let sheetDone = null, sheetSnap = "";
@@ -1215,22 +1261,36 @@ function memoForm(m) {
   } else setTimeout(() => $("mText").focus(), 80);
   wireAreaChips();
   $("mCat").addEventListener("click", e => { const b = e.target.closest("[data-mc]"); if (!b) return; $("mCat").querySelectorAll("[data-mc]").forEach(x => x.setAttribute("aria-pressed", String(x === b))); });
-  $("mMic").onclick = () => dictate($("mText"), $("mMic"));   // 音声メモ：話して書く
+  /* 音声メモ：話して書く。止まったら自動で保存（v6.11）。止まる前に画面を閉じた（キャンセル等）時は保存しない */
+  const mBox = $("mText");
+  $("mMic").onclick = () => dictate(mBox, $("mMic"), null, () => { if (!$("sheet").hidden && $("mText") === mBox) saveMemo(m, true); });
 }
 /* メモを書く画面の「分類」：おまかせ（PCの係が中身で振り分ける）／重要／ネタ・アイデア／その他 */
 const catChips = cur => `<div class="lab">分類</div><div class="chips" id="mCat"><button type="button" class="chip" data-mc="" aria-pressed="${!cur}">おまかせ</button>${MCATS.map(([k, l]) =>
   `<button type="button" class="chip" data-mc="${k}" aria-pressed="${cur === k}">${ICO[k]}${l}</button>`).join("")}</div>`;
 const pickedCat = () => { const b = $("mCat") && $("mCat").querySelector('[aria-pressed="true"]'); return b ? b.dataset.mc : ""; };
 function saveMemoText(m) { const t = $("mText").value.trim(); if (t && t !== m.text) { m.text = t; m.updatedAt = nowIso(); save(); } }
-function saveMemo(m) {
+/* auto＝メモを書く画面の音声入力が止まって自動で保存した時（v6.11）：下に［取り消す］を5秒。取り消すと、新しいメモは消して、直したメモは前の中身に戻し、
+   どちらもメモを書く画面をもう一度開いて、話した文を入れたままにする（聞きまちがいを直せる） */
+function saveMemo(m, auto) {
   const text = $("mText").value.trim();
   if (!text) { if (!m) { closeSheet(); return; } toast("中身が空です（消すときは下のボタン）"); return; }
-  const c = pickedCat();
+  const c = pickedCat(), before = m ? {text: m.text, area: m.area, cat: m.cat, catBy: m.catBy, updatedAt: m.updatedAt} : null;
+  let nm = null;
   if (m) {
     m.text = text; m.area = pickedArea(); m.updatedAt = nowIso();
     if (c !== (MCATS.some(x => x[0] === m.cat) ? m.cat : "")) { m.cat = c || null; m.catBy = c ? "me" : null; }   // 変えた時だけ（おまかせに戻すと係がもう一度振り分ける）
-  } else addMemo(text, pickedArea(), c);
-  save(); closeSheet(); render(); toast(m ? "直しました" : !c && view === "memo" && memoCat !== "etc" ? "メモしました（振り分けまで「その他」に入ります）" : "メモしました");
+  } else nm = addMemo(text, pickedArea(), c);
+  save(); closeSheet(); render();
+  if (auto) {
+    showUndo(m ? "メモを直しました" : "メモを保存しました", "取り消す", () => {
+      if (m) { const cur = db.memos.find(x => x.id === m.id); if (cur) { Object.assign(cur, before); save(); render(); memoForm(cur); $("mText").value = text; } }   // 同期で入れ替わった今のメモを戻す
+      else { db.memos = db.memos.filter(x => x.id !== nm.id); save(); render(); memoForm(null); $("mText").value = text; }
+      toast("取り消しました");
+    });
+    return;
+  }
+  toast(m ? "直しました" : !c && view === "memo" && memoCat !== "etc" ? "メモしました（振り分けまで「その他」に入ります）" : "メモしました");
 }
 function markMemo(id, kind, label) { const m = db.memos.find(x => x.id === id); if (!m) return; m.status = "done"; m.result = {kind, label}; m.updatedAt = nowIso(); }
 
