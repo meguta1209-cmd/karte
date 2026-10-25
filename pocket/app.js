@@ -968,67 +968,111 @@ const SR_ERR = {
   "network": "ネットにつながらないため、音声を文字にできません（network）"
 };
 const SRClass = () => window.SpeechRecognition || window.webkitSpeechRecognition || null;
+/* ---------- マイクの記録（v6.12・社長「2回目は『聞いています』にはなるけど、全く認識されない」） ----------
+   本物の iPhone で何が起きているかを知るため、マイクの流れを時刻つきで最後の40件だけ hub/<社長>/meta/miclog に残す（社長だけが見られる所）。
+   残すのは出来事の名前と数だけ：押した・新しく作った／使い回した・start・onstart・音が来た(audiostart/soundstart/speechstart)・言葉が来た(文字数)・
+   onerror の言葉・onend・こちらの止める／打ち切り・送った。**話した言葉そのものは残さない**。ホーム画面のアプリか・iPhone か・ブラウザの名前も */
+const IS_IOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+const IS_STANDALONE = (() => { try { return navigator.standalone === true || matchMedia("(display-mode: standalone)").matches; } catch (e) { return false; } })();
+let micLog = [], micSeq = 0, micSaveT = null;
+function micNote(e, d) {
+  micLog.push({t: new Date().toISOString().slice(11, 23), n: micSeq, e, d: d == null ? "" : String(d).slice(0, 40)});
+  if (micLog.length > 40) micLog = micLog.slice(-40);
+  clearTimeout(micSaveT); micSaveT = setTimeout(micSave, 600);   // 続けて起きた分はまとめて1回で書く
+}
+function micSave() {
+  if (!U) return;
+  setDoc(doc(fs, P("meta"), "miclog"), {at: nowIso(), ua: navigator.userAgent.slice(0, 160), ios: IS_IOS, standalone: IS_STANDALONE, events: micLog}).catch(() => {});
+}
 /* 止める（v6.11・社長「1回入力したら次が入力できなくなる」）：iPhone が終わりの合図（onend）を出さないと「聞いている」のまま残り、
    次にマイクを押しても「止める」だけで終わっていた。手で止めた時も、自動で止めた時と同じく1.5秒で打ち切ってボタンを戻す */
-function stopDictation() {
-  const me = rec; if (!me) return;
+function stopDictation(why) {
+  const me = rec; if (!me) return; const s = me._sess;   // 使い回すので「同じ物」ではなく「同じ回」かで見る
   if (!me._stopAt) me._stopAt = Date.now();
+  micNote("stop", why || "manual");
   try { me.stop(); } catch (e) {}
-  setTimeout(() => { if (rec === me) { try { me.abort(); } catch (x) {} if (rec === me) { me.onend(); recLast = me; } } }, 1500);
+  setTimeout(() => { if (rec === me && me._sess === s) { micNote("forced-end"); try { me.abort(); } catch (x) {} if (rec === me && me._sess === s) { me._forcing = true; me.onend(); me._forcing = false; recLast = me; } } }, 1500);
 }
 const DICTATE_QUIET_MS = 2000, DICTATE_FIRST_MS = 5000, DICTATE_WAIT_MS = 30000;   // 黙ったら止める：話したあと2秒／聞き始めてから何も話さない時5秒／聞き始めるまで（許可の確認）最大30秒
+/* 音声認識は1つを使い回す（v6.12）：iPhone は2回目以降に新しく作った物へ音が届かないことがあるため、前の回が iPhone の「終わり」まできちんと
+   終わっていれば同じ物で start し直す。終わっていない（こちらで打ち切った）物は abort して、新しく作る。続けて聞く（continuous）は今のまま＝長い指示が途中で切れない */
+let srObj = null;
 /* onDone(言葉)：止まった時に新しい言葉が入っていたら呼ぶ（v6.11 自動で送る。日報など欄がいくつもある所では渡さない＝欄に入れるだけ） */
 function dictate(target, btn, after, onDone) {
+  micSeq++; micNote("tap", rec ? (rec._stopAt ? "alive-stopped" : "alive") : "");
   if (rec) {
     /* 止めたのに残っている（iPhone が終わりの合図を出していない）→ 片づけて、この押したので新しく聞き始める（何回押しても毎回聞き始める） */
-    if (rec._stopAt && Date.now() - rec._stopAt > 600) { const old = rec; try { old.abort(); } catch (x) {} if (rec === old) { old.onend(); recLast = old; } }
-    else { stopDictation(); return; }
+    if (rec._stopAt && Date.now() - rec._stopAt > 600) { const old = rec; micNote("clear-old"); try { old.abort(); } catch (x) {} if (rec === old) { old._forcing = true; old.onend(); old._forcing = false; recLast = old; } }
+    else { stopDictation("manual"); return; }
   }
   const SR = SRClass();
   /* 使えない時：押した直後にキーボードを開く（iPhone は押した直後でないと開かない）＋案内 */
-  if (!SR) { target.focus(); toast("この画面では音声入力が使えません（音声認識なし）。キーボードのマイクを押して話してください", 6000); return; }
-  let base = target.value, finals = "", interim = "", lastErr = "", quiet = null;
+  if (!SR) { micNote("no-sr"); target.focus(); toast("この画面では音声入力が使えません（音声認識なし）。キーボードのマイクを押して話してください", 6000); return; }
+  let base = target.value, finals = "", interim = "", lastErr = "", quiet = null, started = false, heard = false, nores = 0;
   if (base && !/[\s\n]$/.test(base)) base += " ";
   const ph = target.placeholder;
+  let me = null;
   try {
-    if (recLast) { try { recLast.abort(); } catch (x) {} recLast = null; }   // 前の音声認識が残っていたら止める（iPhone は同時に1つしか使えず、残っていると始められない）
-    const me = rec = recLast = new SR(); rec.lang = "ja-JP"; rec.interimResults = true; rec.continuous = true; rec.maxAlternatives = 1;
+    if (recLast && !recLast._ended && recLast !== srObj) { try { recLast.abort(); micNote("abort-old"); } catch (x) {} }   // 前の音声認識が残っていたら止める（iPhone は同時に1つしか使えない）
+    recLast = null;
+    if (srObj && srObj._ended) { me = srObj; me._reused = true; micNote("reuse"); }   // きちんと終わった物は使い回す
+    else { if (srObj && !srObj._ended) { try { srObj.abort(); } catch (x) {} } me = srObj = new SR(); me._reused = false; micNote("new"); }
+    me._ended = false; me._stopAt = 0; const sess = me._sess = {};   // この回のしるし（前の回の待ち時間が、使い回した今の回を止めないように）
+    const live = () => rec === me && me._sess === sess;
+    rec = recLast = me; me.lang = "ja-JP"; me.interimResults = true; me.continuous = true; me.maxAlternatives = 1;
     recBtn = btn; recTarget = target;
     btn.classList.add("rec"); btn.setAttribute("aria-pressed", "true"); target.placeholder = "聞いています…（黙ると自動で止まります）";
     /* v6.6（社長「指示が終わったら自動でマイクが切れるように」）：最後に言葉が入ってから2秒（最初に何も話さない時は5秒）黙ったら止める。
        止めても iPhone が止まらない時は、1.5秒後に打ち切る。v6.11 から、下の欄・メモを書く画面は止まったら自動で送る（onDone）。日報は欄に入れるだけ */
-    const arm = ms => { clearTimeout(quiet); quiet = setTimeout(() => {
-      if (rec !== me) return;
-      stopDictation();   // 止める（iPhone が止まらない時は1.5秒で打ち切り・次を始める前にもう一度止める）
+    const arm = (ms, why) => { clearTimeout(quiet); quiet = setTimeout(() => {
+      if (!live()) return;
+      stopDictation(why);   // 止める（iPhone が止まらない時は1.5秒で打ち切り・次を始める前にもう一度止める）
     }, ms); };
     /* 5秒の「何も話さない」は、聞き始めてから数える（v6.10：iPhone は押したあとにマイク・音声入力の許可を聞くことがあり、
        その間に数えていたので、許可の前に打ち切って「キーボードのマイク」の案内に落ちていた＝社長「マイク使われへんくなった」）。
        聞き始めない時の止まりっぱなしを防ぐため、押してから30秒は待つ */
-    arm(DICTATE_WAIT_MS);
-    rec.onstart = () => { if (rec === me) arm(DICTATE_FIRST_MS); };
-    rec.onresult = e => {
+    arm(DICTATE_WAIT_MS, "wait30");
+    me.onstart = () => { if (!live()) return; started = true; micNote("onstart"); arm(DICTATE_FIRST_MS, "silent5");
+      /* 聞き始めたのに、3秒たっても iPhone から「音が来た」が無い＝マイクの音が届いていない（2回目に認識されない、の見分け） */
+      setTimeout(() => { if (live() && !heard && !finals && !interim) { micNote("no-audio-3s"); } }, 3000); };
+    const sound = name => () => { if (!live()) return; if (!heard) micNote(name); heard = true; };
+    me.onaudiostart = sound("audiostart"); me.onsoundstart = sound("soundstart"); me.onspeechstart = sound("speechstart");
+    me.onresult = e => {
+      if (!live()) return;
       interim = "";
       for (let i = e.resultIndex; i < e.results.length; i++) { const r = e.results[i]; if (r.isFinal) finals += r[0].transcript; else interim += r[0].transcript; }
+      if (nores++ < 3 || nores % 10 === 0) micNote("result", "f" + finals.length + " i" + interim.length);   // 文字数だけ（言葉そのものは残さない）
       target.value = base + finals + interim;
       target.dispatchEvent(new Event("input", {bubbles: true}));
-      arm(DICTATE_QUIET_MS);
+      arm(DICTATE_QUIET_MS, "quiet2");
     };
-    rec.onerror = e => { lastErr = e && e.error || "error"; };
-    rec.onend = () => {
+    me.onerror = e => { lastErr = e && e.error || "error"; micNote("error", lastErr); };
+    me.onend = () => {
+      if (!me._forcing) me._ended = true;   // iPhone が出した本当の「終わり」（こちらの打ち切りではない）＝次は使い回せる
+      micNote(me._forcing ? "end-forced" : "onend", lastErr);
       if (recLast === me) recLast = null;
-      if (rec !== me) return;   // 二度目（打ち切りのあとに iPhone からも来た時）は何もしない
+      if (!live()) return;   // 二度目（打ち切りのあとに iPhone からも来た時）は何もしない
       clearTimeout(quiet);
       rec = null; btn.classList.remove("rec"); btn.setAttribute("aria-pressed", "false"); target.placeholder = ph;
       const said = (finals + interim).trim();
       target.value = (base + finals + interim).replace(/\s+$/, "") || target.value; target.dispatchEvent(new Event("input", {bubbles: true}));   // 確定前の言葉も残す
       if (lastErr === "no-speech") toast("聞き取れませんでした。もう一度マイクを押して話してください");
       else if (lastErr && lastErr !== "aborted") toast((SR_ERR[lastErr] || "音声を文字にできませんでした（" + lastErr + "）") + "。キーボードのマイクも使えます", 7000);   // 何が起きたかを、決まった言葉（not-allowed など）つきで出す
+      else if (started && !said && !heard) toast("マイクの音が届いていません（記録しました）。もう一度押してみてください", 5000);   // 2回目に認識されない時の目じるし
       if (after) after();
-      if (onDone && said && (!lastErr || lastErr === "aborted")) onDone(said);   // 新しい言葉が入っていたら、そのまま送る（聞き取れなかった時は送らない）
+      if (onDone && said && (!lastErr || lastErr === "aborted")) { micNote("send", said.length + "字"); onDone(said); }   // 新しい言葉が入っていたら、そのまま送る（聞き取れなかった時は送らない）
     };
-    rec.start();
-  } catch (e) { rec = null; recLast = null; btn.classList.remove("rec"); btn.setAttribute("aria-pressed", "false"); target.placeholder = ph; target.focus(); toast("音声入力を始められませんでした（" + (e && (e.name || e.message) || "error") + "）。キーボードのマイクを押して話してください", 7000); }
+    me.start(); micNote("start", IS_IOS ? (IS_STANDALONE ? "ios-app" : "ios-safari") : "other");
+  } catch (e) {
+    micNote("throw", e && (e.name || e.message));
+    rec = null; recLast = null; btn.classList.remove("rec"); btn.setAttribute("aria-pressed", "false"); target.placeholder = ph;
+    const wasReuse = !!(me && me._reused); srObj = null;
+    /* 使い回しで始められなかった（まだ動いている等）→ 同じ押したの中で1回だけ、新しく作ってもう一度 */
+    if (wasReuse && !dictRetrying) { try { me.abort(); } catch (x) {} dictRetrying = true; try { dictate(target, btn, after, onDone); } finally { dictRetrying = false; } return; }
+    target.focus(); toast("音声入力を始められませんでした（" + (e && (e.name || e.message) || "error") + "）。キーボードのマイクを押して話してください", 7000);
+  }
 }
+let dictRetrying = false;
 $("askMic").onclick = () => dictate($("askIn"), $("askMic"), () => { syncAskBtn(); growAsk(); }, () => sendAsk(true));   // 止まったら自動で送る（秘書の画面＝秘書へ／ほか＝メモ）
 
 /* ---------- 下から出る画面 ---------- */
@@ -1273,6 +1317,7 @@ function saveMemoText(m) { const t = $("mText").value.trim(); if (t && t !== m.t
 /* auto＝メモを書く画面の音声入力が止まって自動で保存した時（v6.11）：下に［取り消す］を5秒。取り消すと、新しいメモは消して、直したメモは前の中身に戻し、
    どちらもメモを書く画面をもう一度開いて、話した文を入れたままにする（聞きまちがいを直せる） */
 function saveMemo(m, auto) {
+  if (m) m = db.memos.find(x => x.id === m.id) || m;   // 開いている間に同期で入れ替わっていたら、今の物に書く（前の物に書くと保存されない）
   const text = $("mText").value.trim();
   if (!text) { if (!m) { closeSheet(); return; } toast("中身が空です（消すときは下のボタン）"); return; }
   const c = pickedCat(), before = m ? {text: m.text, area: m.area, cat: m.cat, catBy: m.catBy, updatedAt: m.updatedAt} : null;
