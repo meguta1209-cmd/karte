@@ -16,14 +16,14 @@
 <link rel="manifest" href="./manifest.webmanifest">
 <link rel="apple-touch-icon" href="./icons/icon-180.png">
 <link rel="icon" href="./icons/icon-192.png">
-<link rel="stylesheet" href="./style.css?v=19">
+<link rel="stylesheet" href="./style.css?v=21">
 </head>
 <body>
 <!-- 入口：社長のGoogleでログイン -->
 <div class="gate" id="gate"><div class="gate-box"><img src="./icons/icon-192.png" alt=""><h1>ポケノート</h1><p id="gateMsg">読み込み中…</p><button type="button" class="btn primary" id="loginBtn" hidden>Googleでログイン</button><button type="button" class="btn" id="logoutBtn2" hidden>別のアカウントでログイン</button></div></div>
 <main id="main">
   <!-- 仕事／プライベート／すべて（社長 2026-10-24）。秘書の画面では出さない -->
-  <div class="seg area" id="areaSeg" role="tablist" aria-label="仕事とプライベート"><button data-a="work" aria-pressed="false">仕事</button><button data-a="private" aria-pressed="false">プライベート</button><button data-a="all" aria-pressed="false">すべて</button></div>
+  <div class="seg area" id="areaSeg" role="tablist" aria-label="すべて・仕事・プライベート"><button data-a="all" aria-pressed="false">すべて</button><button data-a="work" aria-pressed="false">仕事</button><button data-a="private" aria-pressed="false">プライベート</button></div>
   <!-- 今日 -->
   <section class="view" id="v-today">
     <div class="nav"><span></span><span></span></div>
@@ -33,14 +33,14 @@
   </section>
   <!-- タスク -->
   <section class="view" id="v-task" hidden>
-    <div class="nav"><span></span><button class="navbtn" id="taskAdd" aria-label="タスクを足す">＋</button></div>
+    <div class="nav"><span></span><button class="navbtn icon" id="taskAdd" aria-label="タスクを足す"><svg class="sf" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button></div>
     <h1 class="large">タスク</h1>
     <div class="seg" id="taskSeg" role="tablist"><button data-f="quad" aria-pressed="true">4マス</button><button data-f="list" aria-pressed="false">リスト</button><button data-f="wait" aria-pressed="false">社長待ち</button><button data-f="done" aria-pressed="false">完了</button></div>
     <div id="taskBody"></div>
   </section>
   <!-- 予定 -->
   <section class="view" id="v-cal" hidden>
-    <div class="nav"><button class="navbtn" id="calToday">‹ <span id="calMonth"></span></button><span class="navr"><span class="seg mini" id="calMode"><button data-m="day" aria-pressed="true">日</button><button data-m="week" aria-pressed="false">週</button></span><button class="navbtn" id="evAdd" aria-label="予定を足す">＋</button></span></div>
+    <div class="nav"><button class="navbtn back" id="calToday"><svg class="sf" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg><span id="calMonth"></span></button><span class="navr"><span class="seg mini" id="calMode"><button data-m="day" aria-pressed="true">日</button><button data-m="week" aria-pressed="false">週</button></span><button class="navbtn icon" id="evAdd" aria-label="予定を足す"><svg class="sf" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button></span></div>
     <h1 class="large mid" id="calTitle"></h1>
     <div class="week" id="weekStrip"></div>
     <div id="calBody"></div>
@@ -49,7 +49,8 @@
   <section class="view" id="v-memo" hidden>
     <div class="nav"><span></span><span></span></div><!-- 右上の✎は消した（社長「このボタンいらない」2026-10-25）。新しいメモは右下の書くボタンと下の欄で -->
     <h1 class="large">メモ</h1>
-    <input class="search" id="memoSearch" type="search" placeholder="⌕ 検索" autocomplete="off">
+    <label class="searchbox"><svg class="sf" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5L20 20"/></svg><input class="search" id="memoSearch" type="search" placeholder="検索" autocomplete="off"></label>
+    <div class="mcats" id="memoCats" role="tablist" aria-label="メモの分類"></div><!-- v6.7 重要／ネタ・アイデア／その他 -->
     <div id="memoBody"></div>
   </section>
   <!-- 秘書 -->
@@ -62,7 +63,7 @@
 </main>
 
 <!-- メモの画面だけ：右下の大きい書くボタン（社長「メモボタン小さいわ」2026-10-24） -->
-<button type="button" class="fab" id="memoFab" aria-label="新しいメモを書く" hidden><svg width="26" height="26" viewBox="0 0 26 26" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M16.5 4.5l5 5L9 22H4v-5z"/><path d="M14 7l5 5"/></svg></button>
+<button type="button" class="fab" id="memoFab" aria-label="新しいメモを書く" hidden><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 4.5H6.5A2.5 2.5 0 0 0 4 7v10.5A2.5 2.5 0 0 0 6.5 20H17a2.5 2.5 0 0 0 2.5-2.5V13"/><path d="M17.6 3.6a2 2 0 0 1 2.8 2.8L12 14.8l-3.6.8.8-3.6z"/></svg></button>
 <!-- どの画面にも出る入力欄（秘書の画面では送る欄） -->
 <form class="ask" id="ask" autocomplete="off">
   <textarea id="askIn" rows="1" placeholder="秘書に頼む・メモする…" enterkeyhint="enter" aria-label="秘書に頼む・メモする"></textarea>
@@ -87,6 +88,8 @@
   <div class="sbody" id="sheetBody"></div>
 </div>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
-<script type="module" src="./app.js?v=19"></script>
+<!-- v6.7 メモを消した時の「元に戻す」（画面の下・5秒） -->
+<div class="undo" id="undo" role="status" aria-live="polite" hidden><span id="undoMsg"></span><button type="button" id="undoBtn">元に戻す</button></div>
+<script type="module" src="./app.js?v=21"></script>
 </body>
 </html>
