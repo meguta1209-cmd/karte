@@ -434,3 +434,71 @@ body.kb .undo { bottom: calc(var(--kb, 0px) + 70px); }
 .quad.dragging .q:not(.drop) { box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--qc) 22%, transparent); }   /* 置けるマスをうすく */
 .q.drop { background: var(--fill); }   /* 古い iPhone（color-mix が無い）用 */
 .q.drop { background: color-mix(in srgb, var(--qc) 13%, var(--card)); box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--qc) 55%, transparent); }   /* 指の下のマスは濃く */
+/* ===== v6.15（レビュー係の感想からの直し） ===== */
+/* 10 確認はアクションシート風（confirm() の代わり） */
+.asheet { position: fixed; inset: 0; z-index: 60; background: rgba(0,0,0,.35); display: flex; align-items: flex-end; justify-content: center; opacity: 0; transition: opacity .2s ease; }
+.asheet.on { opacity: 1; }
+.asbox { width: 100%; max-width: 640px; padding: 0 8px calc(env(safe-area-inset-bottom) + 8px); transform: translateY(30px); transition: transform .25s cubic-bezier(.2,.8,.2,1); }
+.asheet.on .asbox { transform: none; }
+.asgroup { background: var(--askbg); border-radius: 14px; overflow: hidden; -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px); }
+.asmsg { padding: 14px 16px; text-align: center; font-size: 13px; color: var(--sub); border-bottom: .5px solid var(--line); }
+.asbtn { display: block; width: 100%; height: 57px; font-size: 20px; color: var(--blue); background: transparent; }
+.asbtn.danger { color: var(--red); }
+.asbtn.cancel { margin-top: 8px; background: var(--askbg); border-radius: 14px; font-weight: 600; -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px); }
+.asbtn:active { background: var(--fill); }
+/* 6 商談の準備：1商談1行・押すと開く */
+.prep .pmrow { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; padding: 10px 16px; min-height: 44px; font-size: 15px; }
+.prep .pmrow + .pmrow, .prep .pi + .pmrow { border-top: .5px solid var(--line); }
+.prep .pmrow:active { background: var(--fill); }
+.prep .pmt { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.prep .pmn { color: var(--sub); font-size: 13px; white-space: nowrap; }
+.prep .pmrow.ok .pmn { color: var(--green); }
+.prep .pmrow .chev { width: 13px; height: 13px; color: var(--circle); flex: none; }
+.prep .pi { padding-left: 28px; }
+/* 5・25 メモの一覧：1行を短く・片づいたメモは薄く下にまとめる */
+.memo .mmeta { font-size: 12px; margin-top: 4px; -webkit-line-clamp: 1; }
+.mres .sf { display: inline-block; width: 12px; height: 12px; vertical-align: -1px; margin-right: 3px; color: var(--blue); }
+.mres { color: var(--blue); }
+.finrow { display: flex; align-items: center; justify-content: space-between; width: 100%; margin-top: 16px; padding: 10px 16px; font-size: 15px; color: var(--sub); background: transparent; }
+.finrow .chev { width: 13px; height: 13px; color: var(--circle); }
+.finrow:active { opacity: .55; }
+.group.fin .memo { opacity: .55; }
+/* 11 社長待ちは見る画面 */
+.waitbox .wt { font-size: 17px; font-weight: 600; margin-bottom: 6px; line-height: 1.35; }
+/* 12 メモを直す画面：行ボタン・スイッチ・1行の分類 */
+.fgroup.rowbtns { margin-top: 16px; }
+.frow.rowbtn { width: 100%; text-align: left; color: var(--blue); }
+.frow.rowbtn:active { background: var(--fill); }
+.chev.r { width: 12px; height: 14px; color: var(--circle); flex: none; }
+.seg.mcseg { margin: 0; }
+.seg.mcseg button { display: inline-flex; align-items: center; justify-content: center; gap: 4px; padding: 6px 2px; font-size: 13px; white-space: nowrap; }
+.seg.mcseg .mcico svg { width: 13px; height: 13px; margin: 0; vertical-align: 0; }
+/* 18 前確の行：橙の電話＋› */
+.rowic.kcic { color: var(--orange); width: 20px; height: 20px; }
+.cell .chev.r { margin-left: 4px; }
+/* 13 予定：左上は「今日」・左右スワイプで前後の日 */
+#calBody { touch-action: pan-y; }
+#calBody.slideL { animation: slideL .22s cubic-bezier(.2,.8,.2,1); }
+#calBody.slideR { animation: slideR .22s cubic-bezier(.2,.8,.2,1); }
+@keyframes slideL { from { transform: translateX(24px); opacity: .4; } }
+@keyframes slideR { from { transform: translateX(-24px); opacity: .4; } }
+/* 24 ＋ を線のアイコンに */
+.qadd { display: inline-flex; align-items: center; gap: 4px; }
+.qaddic { width: 13px; height: 13px; display: inline-block; }
+.daddbtn { width: 28px; height: 28px; display: inline-grid; place-items: center; }
+.daddbtn .sf { width: 18px; height: 18px; }
+@media (prefers-reduced-motion: reduce) { #calBody.slideL, #calBody.slideR { animation: none; } }
+/* 20 秘書の画面：PC の状態は切り替えと同じ場所・高さ（見出しが跳ねない）・左寄せ */
+.pc.pcbar { justify-content: flex-start; height: 33px; margin: 22px 4px 4px; }
+/* 21 4マスの題は2行で切る（押せば全部見られる）・単語の途中で切りすぎない */
+.qi .qt { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; word-break: normal; overflow-wrap: anywhere; line-break: strict; }
+/* 8・9 ダークモード：下から出る画面は #1c1c1e、中の行や欄は #2c2c2e／セグメントの選んでいる方は #636366（純正と同じ） */
+@media (prefers-color-scheme: dark) {
+  .sheet { background: #1c1c1e; }
+  .sheet .field, .sheet .frow, .sheet .group, .sheet .chip:not([aria-pressed="true"]), .sheet .waitbox, .sheet .btn, .sheet .nippoOut, .sheet .kpi1 { background: #2c2c2e; }   /* 選んでいるチップは青のまま */
+  .sheet .sw input:not(:checked) + span { background: #39393d; }   /* スイッチの切った時の地（行と同じ色で見えなくならないように） */
+  .sheet .frow input[type=date], .sheet .frow input[type=time], .sheet .frow select.sel { background: #3a3a3c; }
+  .seg [aria-pressed="true"] { background: #636366; }
+}
+/* 24 青を1つに（下のメニューの選んだタブ・メモの分類のカプセルも iOS の青 #007aff） */
+:root { --tabsel: var(--blue); }

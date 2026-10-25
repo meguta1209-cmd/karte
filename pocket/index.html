@@ -16,7 +16,7 @@
 <link rel="manifest" href="./manifest.webmanifest">
 <link rel="apple-touch-icon" href="./icons/icon-180.png">
 <link rel="icon" href="./icons/icon-192.png">
-<link rel="stylesheet" href="./style.css?v=26">
+<link rel="stylesheet" href="./style.css?v=27">
 </head>
 <body>
 <!-- 入口：社長のGoogleでログイン -->
@@ -24,6 +24,7 @@
 <main id="main">
   <!-- 仕事／プライベート／すべて（社長 2026-10-24）。秘書の画面では出さない -->
   <div class="seg area" id="areaSeg" role="tablist" aria-label="すべて・仕事・プライベート"><button data-a="all" aria-pressed="false">すべて</button><button data-a="work" aria-pressed="false">仕事</button><button data-a="private" aria-pressed="false">プライベート</button></div>
+  <div class="pc pcbar" id="pcState" hidden></div><!-- 秘書の画面だけ：切り替えと同じ高さに PC の状態（v6.15・レビュー20） -->
   <!-- 今日 -->
   <section class="view" id="v-today">
     <div class="nav"><span></span><span></span></div>
@@ -40,7 +41,7 @@
   </section>
   <!-- 予定 -->
   <section class="view" id="v-cal" hidden>
-    <div class="nav"><button class="navbtn back" id="calToday"><svg class="sf" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg><span id="calMonth"></span></button><span class="navr"><span class="seg mini" id="calMode"><button data-m="day" aria-pressed="true">日</button><button data-m="week" aria-pressed="false">週</button></span><button class="navbtn icon" id="evAdd" aria-label="予定を足す"><svg class="sf" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button></span></div>
+    <div class="nav"><button class="navbtn" id="calToday">今日</button><span class="navr"><span class="seg mini" id="calMode"><button data-m="day" aria-pressed="true">日</button><button data-m="week" aria-pressed="false">週</button></span><button class="navbtn icon" id="evAdd" aria-label="予定を足す"><svg class="sf" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button></span></div>
     <h1 class="large mid" id="calTitle"></h1>
     <div class="week" id="weekStrip"></div>
     <div id="calBody"></div>
@@ -57,7 +58,6 @@
   <section class="view" id="v-ai" hidden>
     <div class="nav"><span></span><span></span></div>
     <h1 class="large">秘書</h1>
-    <div class="pc" id="pcState"></div>
     <div class="chat" id="chatBody"></div>
   </section>
 </main>
@@ -66,14 +66,14 @@
 <button type="button" class="fab" id="memoFab" aria-label="新しいメモを書く" hidden><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 4.5H6.5A2.5 2.5 0 0 0 4 7v10.5A2.5 2.5 0 0 0 6.5 20H17a2.5 2.5 0 0 0 2.5-2.5V13"/><path d="M17.6 3.6a2 2 0 0 1 2.8 2.8L12 14.8l-3.6.8.8-3.6z"/></svg></button>
 <!-- どの画面にも出る入力欄（秘書の画面では送る欄） -->
 <form class="ask" id="ask" autocomplete="off">
-  <textarea id="askIn" rows="1" placeholder="秘書に頼む・メモする…" enterkeyhint="enter" aria-label="秘書に頼む・メモする"></textarea>
+  <textarea id="askIn" rows="1" placeholder="メモする（秘書があとで振り分け）" enterkeyhint="enter" aria-label="メモする・秘書に頼む"></textarea>
   <button type="button" class="mic" id="askMic" aria-label="話して入れる"><svg width="14" height="18" viewBox="0 0 14 18" fill="#fff"><rect x="4" y="0" width="6" height="11" rx="3"/><path d="M1 8a6 6 0 0 0 12 0" stroke="#fff" stroke-width="1.6" fill="none"/><rect x="6.2" y="13.5" width="1.6" height="4"/></svg></button>
   <button type="submit" class="mic send" id="askSend" aria-label="送る" hidden><svg width="14" height="14" viewBox="0 0 14 14" fill="#fff"><path d="M7 1l5 5H8.5v7h-3V6H2z"/></svg></button>
 </form>
 
 <nav class="tabbar" id="tabs">
   <!-- v6.2（社長の見本「下のメニュー_見本.jpg」）：浮いた白いカプセル。選んでいるタブだけ青いカプセルに白いアイコン＋名前、ほかは灰色のアイコンだけ -->
-  <button data-go="today" aria-label="今日" aria-current="page"><span class="ic"><svg class="off" viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3.5" y="5.5" width="19" height="16" rx="3.5"/></svg><svg class="on" viewBox="0 0 26 26" fill="currentColor"><rect x="3" y="5" width="20" height="17" rx="3.5"/></svg></span><span class="lb">今日</span></button>
+  <button data-go="today" aria-label="今日" aria-current="page"><span class="ic"><svg class="off" viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3.5" y="4" width="19" height="19" rx="4.2"/><path d="M3.5 9.6h19"/><text class="dnum" x="13" y="20" text-anchor="middle" font-size="9.5" font-weight="700" fill="currentColor" stroke="none" font-family="-apple-system,BlinkMacSystemFont,sans-serif">1</text></svg><svg class="on" viewBox="0 0 26 26"><rect x="3" y="3.5" width="20" height="20" rx="4.6" fill="currentColor"/><rect x="3" y="8.6" width="20" height="1.4" fill="var(--tabsel)" opacity=".35"/><text class="dnum" x="13" y="20" text-anchor="middle" font-size="10" font-weight="800" fill="var(--tabsel)" font-family="-apple-system,BlinkMacSystemFont,sans-serif">1</text></svg></span><span class="lb">今日</span></button>
   <button data-go="task" aria-label="タスク"><span class="ic"><svg class="off" viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3.5" y="3.5" width="8" height="8" rx="2"/><rect x="14.5" y="3.5" width="8" height="8" rx="2"/><rect x="3.5" y="14.5" width="8" height="8" rx="2"/><rect x="14.5" y="14.5" width="8" height="8" rx="2"/></svg><svg class="on" viewBox="0 0 26 26" fill="currentColor"><rect x="3" y="3" width="9" height="9" rx="2.4"/><rect x="14" y="3" width="9" height="9" rx="2.4"/><rect x="3" y="14" width="9" height="9" rx="2.4"/><rect x="14" y="14" width="9" height="9" rx="2.4"/></svg><i class="tdot" id="waitDot" hidden></i></span><span class="lb">タスク</span></button>
   <button data-go="cal" aria-label="予定"><span class="ic"><svg class="off" viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3.5" y="5.5" width="19" height="17" rx="3"/><path d="M3.5 10.5h19M8.5 3v5M17.5 3v5"/></svg><svg class="on" viewBox="0 0 26 26" fill="currentColor"><rect x="3" y="5" width="20" height="18" rx="3"/><rect x="7.6" y="2.5" width="2" height="5" rx="1"/><rect x="16.4" y="2.5" width="2" height="5" rx="1"/><rect x="3" y="11" width="20" height="1.5" fill="var(--tabsel)"/></svg></span><span class="lb">予定</span></button>
   <button data-go="memo" aria-label="メモ"><span class="ic"><svg class="off" viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="5" y="3.5" width="16" height="19" rx="3"/><path d="M9 9h8M9 13h8M9 17h5"/></svg><svg class="on" viewBox="0 0 26 26" fill="currentColor"><rect x="4.5" y="3" width="17" height="20" rx="3.2"/><path d="M9 9h8M9 13h8M9 17h5" stroke="var(--tabsel)" stroke-width="1.8"/></svg></span><span class="lb">メモ</span></button>
@@ -90,6 +90,8 @@
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 <!-- v6.7 メモを消した時の「元に戻す」（画面の下・5秒） -->
 <div class="undo" id="undo" role="status" aria-live="polite" hidden><span id="undoMsg"></span><button type="button" id="undoBtn">元に戻す</button></div>
-<script type="module" src="./app.js?v=26"></script>
+<!-- v6.15 確認（純正のアクションシート風・confirm() の代わり） -->
+<div class="asheet" id="asheet" hidden><div class="asbox" role="alertdialog" aria-modal="true" aria-labelledby="asMsg"><div class="asgroup"><p class="asmsg" id="asMsg"></p><button type="button" class="asbtn danger" id="asOk"></button></div><button type="button" class="asbtn cancel" id="asCancel">キャンセル</button></div></div>
+<script type="module" src="./app.js?v=27"></script>
 </body>
 </html>
