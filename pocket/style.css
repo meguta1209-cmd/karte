@@ -502,3 +502,8 @@ body.kb .undo { bottom: calc(var(--kb, 0px) + 70px); }
 }
 /* 24 青を1つに（下のメニューの選んだタブ・メモの分類のカプセルも iOS の青 #007aff） */
 :root { --tabsel: var(--blue); }
+
+/* ---------- v6.14 iPhone のマイク：キーボードで話した後は自動で送らないので、送るボタン・保存を光らせる ---------- */
+@keyframes kbglow { 0%, 100% { box-shadow: 0 0 0 0 rgba(0, 122, 255, .55); } 60% { box-shadow: 0 0 0 8px rgba(0, 122, 255, 0); } }
+#askSend.glow { animation: kbglow 1.3s ease-out infinite; }
+.shead #sheetDone.glow { background: var(--blue); color: #fff; border-radius: 16px; padding: 0 14px; min-height: 32px; animation: kbglow 1.3s ease-out infinite; }
