@@ -1736,7 +1736,7 @@ function taskOf(snap) {
     memo: {shop: d.shop || "", tel: d.tel || "", text: d.text || "", when: tsd(d.when), remind: d.remind !== false}};
 }
 function rebuildPending() {
-  pendMine = recPendMine.concat(taskMine).concat(autoPre());
+  pendMine = recPendMine.concat(taskMine).concat(autoPre()).concat(autoRusu());
   renderAfterPending(); maybeDaySum();
 }
 /* 前確の自動の予定（v77・2026-10-21 社長「アポの前日の、約束の時刻に前確を促して」）：
@@ -1753,6 +1753,48 @@ function autoPre() {
     .map(r => ({id: "pre_" + r.id, auto: true, rec: r, isTask: true, uid: U, by: U, r: "前確", done: false, t: r.t, preDay: dayWord(r.memo.when),
       title: "前確（" + dayWord(r.memo.when) + " " + hm(r.memo.when) + " のアポ）",
       memo: {shop: r.memo.shop || "", tel: r.memo.tel || "", text: "", when: preAt(r.memo.when), remind: r.memo.remind !== false}}));
+}
+/* 前確が「留守」のアポの催促（v82・社長 2026-10-26「前確の結果が留守の案件はアポインターに1時間おきに催促のメッセージを入れてほしい」）：
+   自分が取ったアポで、①前確が「留守」・商談の時刻がまだの物。留守を入れてから1時間おきに、9〜20時台（日曜は休み）だけ、帯と音で
+   「前確がまだ留守です。もう一度かけてください」（今の前確のリマインドと同じ通り道＝アプリを開いている間）。
+   前確が留守以外（OK・リスケ・キャンセル等）に変わった・商談の時刻を過ぎた・取り消した・リマインドを切った物は、ここに出なくなる＝止まる。
+   日程を変えた（リスケ）時は、前確の結果は新しい日時に引き継がれる（v73 社長「前確の結果引き継いで」）ので、留守のままなら続けて催促する。
+   最後に出した時刻は端末に覚える（RUSU_KEY）。アプリを閉じていた間の分は、開いた時に1時間たっていれば1回だけ出す。リマインドの一覧には次に出す時刻で並べる */
+const RUSU_MS = 60 * 6e4, RUSU_FROM = 9, RUSU_TO = 21, RUSU_KEY = "team-rusu";   // 9〜20時台（20:59まで）。日曜は休み（前日の前確と同じ）
+const rusuKey = r => r.id;   // アポごと（リスケで「留守」が新しい日時に引き継がれたら＝v73 carryRes、続けて催促。印はアポごとなので、リスケの直後に重ねて鳴らない）
+const rusuOn = d => d.getDay() !== 0 && d.getHours() >= RUSU_FROM && d.getHours() < RUSU_TO;
+/* 最後に出した時刻と、留守を入れた時刻の遅い方（留守を入れ直したら、そこから1時間を数え直す） */
+const rusuLast = (r, rz) => Math.max(rz[rusuKey(r)] || 0, (tsd((resOf(r) || {}).at) || new Date()).getTime());
+/* 次に出す時刻：1時間後（もう過ぎていれば今）を、出してよい時間（9〜20時台・日曜以外）に寄せる */
+function rusuNextAt(r, rz) {
+  const d = new Date(Math.max(rusuLast(r, rz) + RUSU_MS, Date.now()));
+  for (let i = 0; i < 4 && !rusuOn(d); i++) {
+    if (d.getDay() === 0 || d.getHours() >= RUSU_TO) { d.setDate(d.getDate() + 1); d.setHours(RUSU_FROM, 0, 0, 0); }
+    else d.setHours(RUSU_FROM, 0, 0, 0);
+  }
+  return d;
+}
+function autoRusu() {
+  const now = new Date(), rz = lsGet(RUSU_KEY, {});
+  return recPendMine.filter(r => r.r === "アポ" && r.uid === U && !r.canceled && !isSheetRec(r) && r.memo && r.memo.when && r.memo.when > now && r.memo.remind !== false && (resOf(r) || {}).pre === "留守")
+    .map(r => ({id: "rusu_" + r.id, auto: true, rusu: true, rec: r, isTask: true, uid: U, by: U, r: "前確", done: false, t: r.t, preDay: md(r.memo.when),
+      title: "前確がまだ留守（" + md(r.memo.when) + " " + hm(r.memo.when) + " の商談）",
+      memo: {shop: r.memo.shop || "", tel: r.memo.tel || "", text: "", when: rusuNextAt(r, rz), remind: true}}));
+}
+/* 15秒ごと（checkNotifs）：出してよい時間に、留守を入れて（最後に出して）から1時間たったアポを1件出す */
+function checkRusu(now) {
+  if (!rusuOn(new Date(now))) return false;
+  const rz = lsGet(RUSU_KEY, {});
+  Object.keys(rz).forEach(k => { if (now - rz[k] > 3 * 864e5) delete rz[k]; });   // 古い印は片づける
+  for (const it of pendMine.filter(x => x.rusu)) {
+    const r = it.rec;
+    if (now - rusuLast(r, rz) < RUSU_MS || now >= r.memo.when.getTime()) continue;
+    rz[rusuKey(r)] = now; lsSet(RUSU_KEY, rz);
+    showAlert(it, "now"); rebuildPending();
+    return true;
+  }
+  lsSet(RUSU_KEY, rz);
+  return false;
 }
 const canEditTask = t => t.uid === U || t.by === U || (me && me.role === "admin");
 const itemLabel = r => r.isTask ? (r.title || r.r) : r.r;
@@ -2310,6 +2352,7 @@ function showAlert(rec, mode, force) {
   $("alDone").hidden = !now || !canDone; $("alSnooze").hidden = !now;
   $("alDone").textContent = rec.auto ? "前確を入れる" : rec.isTask && rec.r !== "再架電" ? "完了" : "かけた";
   if (rec.auto) { $("alTime").textContent = rec.preDay + " " + hm(rec.rec.memo.when); $("alSnooze").hidden = true; }   // v77：時刻は商談の時刻
+  if (rec.rusu) { $("alTag").textContent = "前確がまだ留守です。もう一度かけてください"; $("alTime").textContent = md(rec.rec.memo.when) + " " + hm(rec.rec.memo.when) + " の商談"; $("alShop").textContent = rec.memo.shop || "（店名なし）"; }   // v82
   $("alOpen").classList.toggle("primary", !now || !canDone);
   $("alertBar").hidden = false;
   beep(now ? 3 : 2);
@@ -2331,12 +2374,13 @@ function checkNotifs() {
   const now = Date.now(), key = "team-fired-" + dk(today());
   const fired = lsGet(key, {});
   for (const r of todayMine()) {
-    if (r.memo.remind === false) continue;
+    if (r.memo.remind === false || r.rusu) continue;   // 留守の催促は checkRusu で出す（v82）
     const w = r.memo.when.getTime(), k = r.id + "@" + w;
     if (snoozed[r.id] && now >= snoozed[r.id]) { delete snoozed[r.id]; showAlert(r, "now"); return; }
     if (!fired[k + ":now"] && now >= w && now < w + 30 * 6e4) { fired[k + ":now"] = 1; fired[k + ":pre"] = 1; lsSet(key, fired); showAlert(r, "now"); return; }
     if (!fired[k + ":pre"] && !r.auto && now >= w - 15 * 6e4 && now < w) { fired[k + ":pre"] = 1; lsSet(key, fired); showAlert(r, "pre"); return; }   // 自動の前確は「ちょうど」だけ（v77）
   }
+  if ($("alertBar").hidden) checkRusu(now);   // 前確が留守のアポの催促（v82）。ほかの帯が出ている間は待つ
 }
 
 /* その日はじめて開いたときの「今日の予定」（機械ごとに1日1回） */
