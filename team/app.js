@@ -2591,7 +2591,59 @@ async function renderKpi() {
   const maxC = Math.max(1, ...keys.map(k => s.c[k] || 0));
   $("brk").innerHTML = keys.map(k => ({k, v: s.c[k] || 0})).sort((x, y) => y.v - x.v).map(({k, v}) =>
     `<div class="row">${resChip(k)}<div class="track"><i style="width:${v / maxC * 100}%"></i></div><span class="c">${v}</span><span class="p">${(v / total * 100).toFixed(1)}%</span></div>`).join("");
+  renderTeleRes(a, b, pa, seq, rows.map(r => r.u));
 }
+/* ---------- KPI テレアポ：アポインターの商談率・成約率（v83・社長 2026-10-26「アポインターのアポの商談率と、成約率も見れるようにして」「成約予定は成約に入れなくてOK」） ----------
+   商談日で数える（クローザーの画面と同じ・records を読む）。アポ＝商談の時間が来たアポ（「結果まだ」は分母から外して件数だけ）。
+   商談率＝実施（受注・成約予定・失注・再営）÷アポ／成約率＝受注÷実施（成約予定は件数を並べるだけ）／アポからの成約率＝受注÷アポ。
+   アポインター＝アポを取った人（records の uid。営業結果シートから来たアポは、シートのアポインター名で別の行「〇〇（シート）」）。
+   実施が5件未満の人の率は「＊」を付けて薄く（数が少なく参考）。数字を押すと、そのアポの一覧 */
+const FEW_HELD = 5;
+const apGroup = r => isSheetRec(r) ? "sheet:" + (r.apName || "") : r.uid;
+const apGroupName = g => g.indexOf("sheet:") === 0 ? (g.slice(6) || "名前なし") + "（シート）" : nameOf(g);
+const apRates = c => { const den = c.due - c.todo; return {den, meet: den ? c.held / den * 100 : null, close: c.held ? c.won / c.held * 100 : null, apoClose: den ? c.won / den * 100 : null}; };
+const pctTxt = v => v == null ? "–" : v.toFixed(1) + "%";
+async function renderTeleRes(a, b, pa, seq, rowUids) {
+  let list, plist;
+  try { [list, plist] = await Promise.all([loadResApos(a, b), loadResApos(pa, a)]); } catch (e) { return; }
+  if (seq !== kpiSeq || kpiSide !== "tele") return;
+  const pick = l => l.filter(r => resDue(r) && (member === "all" || apGroup(r) === member));
+  const due = pick(list), pdue = pick(plist), c = resCount(due), p = resCount(pdue), rc = apRates(c), rp = apRates(p);
+  const per = $("period").querySelector("[aria-pressed=true]");
+  resView = {list: list.filter(resDue), label: (per ? per.textContent : "") + (member !== "all" ? "・アポ " + apGroupName(member) : ""), by: "apo"};
+  const few = c.held < FEW_HELD;
+  const tile = (k, lbl, v, sub, d) => `<button type="button" class="card tile res-tile tele-res${few && k !== "due" ? " few" : ""}" data-k="${k}"><div class="k">${lbl}</div><div class="v">${v}</div>${sub ? `<div class="sub">${sub}</div>` : ""}${d}</button>`;
+  const dd = (x, y) => x != null && y != null ? delta(x, y, "%") : `<span class="d flat">&nbsp;</span>`;
+  $("tiles").insertAdjacentHTML("beforeend",
+    tile("held", "商談率", pctTxt(rc.meet), `商談 ${c.held} ／ 商談日のアポ ${rc.den}${c.todo ? `（結果まだ ${c.todo}）` : ""}`, dd(rc.meet, rp.meet)) +
+    tile("won", "成約率", pctTxt(rc.close), `受注 ${c.won} ／ 商談 ${c.held}${c.plan ? `・成約予定 ${c.plan}` : ""}${few ? "　＊実施5件未満" : ""}`, dd(rc.close, rp.close)) +
+    tile("won", "アポからの成約率", pctTxt(rc.apoClose), `受注 ${c.won} ／ 商談日のアポ ${rc.den}`, dd(rc.apoClose, rp.apoClose)));
+  /* 人ごとの表：商談・受注（成約予定）・商談率・成約率の列を足す。シートから来たアポの人は、行を足す */
+  const all = list.filter(resDue), groups = new Set(rowUids);
+  all.forEach(r => groups.add(apGroup(r)));
+  const tb = $("mtable"); if (!tb || !tb.rows.length) return;
+  const head = tb.rows[0];
+  ["商談", "受注", "商談率", "成約率"].forEach(h => { const th = document.createElement("th"); th.textContent = h; th.className = "tr-h"; th.title = "商談の日で数えます（左の「アポ」は取った日で数えるので、数が違います）"; head.appendChild(th); });
+  const cell = (g, k, v) => v ? `<button type="button" class="res-n" data-g="${esc(g)}" data-k="${k}">${v}</button>` : `<span class="res-0">0</span>`;
+  const cellsOf = (g, cc) => { const r = apRates(cc), f = cc.held < FEW_HELD;
+    return `<td>${cell(g, "held", cc.held)}</td><td>${cell(g, "won", cc.won)}${cc.plan ? `<small class="plan">予定${cc.plan}</small>` : ""}</td>` +
+      `<td class="${f ? "few" : ""}">${pctTxt(r.meet)}${f && r.meet != null ? "＊" : ""}</td><td class="${f ? "few" : ""}"><b>${pctTxt(r.close)}</b>${f && r.close != null ? "＊" : ""}</td>`; };
+  const byG = g => resCount(all.filter(r => apGroup(r) === g));
+  [...tb.rows].slice(1).forEach(tr => {
+    const g = tr.dataset.u;
+    tr.insertAdjacentHTML("beforeend", g ? cellsOf(g, byG(g)) : cellsOf("*", resCount(all)));   // data-u の無い行＝チーム合計
+  });
+  const totalRow = tb.rows[tb.rows.length - 1], ncol = head.cells.length - 4;
+  [...groups].filter(g => !rowUids.includes(g) && all.some(r => apGroup(r) === g)).forEach(g => {
+    const tr = document.createElement("tr"); tr.className = "nopick sheet-ap";
+    tr.innerHTML = `<td class="name">${esc(apGroupName(g))}</td>` + `<td>–</td>`.repeat(ncol - 1) + cellsOf(g, byG(g));
+    totalRow.parentNode.insertBefore(tr, totalRow);
+  });
+  tb.classList.add("res-kpi");
+  if (!$("teleFew")) $("mtable").closest(".card").insertAdjacentHTML("afterend", `<p class="note tele-few" id="teleFew">商談・受注・商談率・成約率は「商談の日」で数えます（左の「アポ」は取った日で数えるので、数が違います）。＊実施（商談）が5件未満の人の率は、数が少ないので参考です。商談・受注の数字を押すと、そのアポの一覧が出ます。</p>`);
+}
+$("tiles").addEventListener("click", e => { const t = e.target.closest(".tele-res"); if (t) openResList(t.dataset.k, member === "all" ? "*" : member); });
+$("mtable").addEventListener("click", e => { const t = e.target.closest(".res-n"); if (t) { e.stopPropagation(); openResList(t.dataset.k, t.dataset.g); } }, true);   // 行を押した時の絞り込み（tr.onclick）より先に受ける
 /* ---------- KPI：商談の結果（v66） ----------
    期間（上のボタン）の商談日のアポを records から読む（memo.when の範囲。stats は使わない＝今までの数字は変わらない）。
    数えるのは商談の時間が来たアポだけ。メンバーを選んでいれば、その人が取ったアポだけ */
@@ -2689,9 +2741,9 @@ async function renderCloserKpi(a, b, pa, days, seq) {
 }
 /* 中身の一覧（数字・タイル・内訳を押す／［受注した案件の一覧］）。g＝クローザー（"*"＝全員） */
 function openResList(k, g) {
-  const f = RES_KIND[k][2], grp = closerGroupOf();
+  const f = RES_KIND[k][2], apo = resView.by === "apo", grp = apo ? apGroup : closerGroupOf();   // テレアポの画面（v83）はアポを取った人ごと
   const list = resView.list.filter(r => (!g || g === "*" || grp(r) === g) && f(r)).sort((x, y) => y.memo.when - x.memo.when);
-  const who = g && g !== "*" ? "・クローザー " + groupName(g) : "";
+  const who = g && g !== "*" ? (apo ? "・アポ " + apGroupName(g) : "・クローザー " + groupName(g)) : "";
   $("rlTitle").textContent = `${k === "held" ? "商談（実施）" : RES_KIND[k][1]} ${list.length}件`;
   $("rlNote").textContent = (resView.label || "") + who + "　押すと記録の詳細が開きます";
   $("rlList").innerHTML = list.length ? list.map(r => {
