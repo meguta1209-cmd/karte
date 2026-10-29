@@ -2604,6 +2604,13 @@ const apGroupName = g => g.indexOf("sheet:") === 0 ? (g.slice(6) || "名前な�
 const apRates = c => { const den = c.due - c.todo; return {den, meet: den ? c.held / den * 100 : null, close: c.held ? c.won / c.held * 100 : null, apoClose: den ? c.won / den * 100 : null}; };
 const pctTxt = v => v == null ? "–" : v.toFixed(1) + "%";
 async function renderTeleRes(a, b, pa, seq, rowUids) {
+  /* 今日・昨日は出さない（上の3マスも、表の4列と説明の一文も。records も読まない）。v84・社長 2026-10-29「今日と昨日の欄には出さなくていいよ！！」「それなら4列とも消してOK」 */
+  const per0 = $("period").querySelector("[aria-pressed=true]");
+  if (per0 && (per0.dataset.p === "today" || per0.dataset.p === "yday")) {
+    const n = $("teleFew"); if (n) n.remove();
+    $("mtable").classList.remove("res-kpi");
+    return;
+  }
   let list, plist;
   try { [list, plist] = await Promise.all([loadResApos(a, b), loadResApos(pa, a)]); } catch (e) { return; }
   if (seq !== kpiSeq || kpiSide !== "tele") return;
