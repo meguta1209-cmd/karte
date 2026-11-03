@@ -224,7 +224,22 @@ const RES_WAIT = ["OK", "前確認待ち", "オンライン前確"];   // この
 const resOf = r => { const x = r && r.res, w = r && r.memo && r.memo.when; if (!x || !w) return null; const xw = tsd(x.w); return xw && +xw === +w ? x : null; };
 const resDue = r => !!r && !r.isTask && r.r === "アポ" && !!(r.memo && r.memo.when) && r.memo.when <= new Date();
 const canResult = r => !!r && !r.isTask && r.r === "アポ" && (r.uid === U || isAdminMe() || isCloserOf(r));
-const resPending = r => { if (!resDue(r) || r.canceled) return false; const x = resOf(r); return !x || (!x.deal && (!x.pre || RES_WAIT.includes(x.pre))); };
+/* リスケ（日程未定）（v85・社長 2026-11-02「日程の決まっていないリスケはクローザーのカレンダーから消えるように」「そのアポインターにのみ表示されるリスケリスト」）：
+   枠を消して、記録に rsWait:true（枠の長さは rsDur）。memo.when（元の日時）と res（①か②のリスケ）はそのまま＝日程が決まるまでは元の日のリスケに数える。
+   日程が決まると moveApo で同じ記録のまま動くので、元の日のリスケの数からは外れる（社長「元の日のKPIに回数は残さない」）。履歴は rsLog（記録の詳細に出す）。
+   古い画面が枠を作り直すと slotId が入るので、rsWait が残っていても日程未定には数えない */
+const isRsWait = r => !!r && !!r.rsWait && !r.slotId && !r.canceled && !!(r.memo && r.memo.when);
+/* 日程未定を元と同じ日時で決めたとき（お客さんが「やっぱり元の時間で」。テスター 2026-11-02）：res.w が今の日時のままなので、リスケだけ外して書く。
+   外さないと元の日のリスケに残り、前確や商談の結果も入れ直せない。ほかの結果（②のリスケの前の前確など）とメモは残す。ルール rsWaitResOk と同じ形 */
+const rsResAfter = (raw, when) => {
+  const x = raw.res;
+  if (!raw.rsWait || raw.slotId || !x || !x.w || +tsd(x.w) !== +when || +tsd(raw.memo.when) !== +when) return null;
+  return {w: raw.memo.when, pre: x.pre === "リスケ" ? "" : x.pre || "", deal: x.deal === "リスケ" ? "" : x.deal || "", note: x.note || "", by: U, at: serverTimestamp()};
+};
+const RS_BADGE = `<span class="badge late">日程未定</span>`;
+let rsMine = [], rsAll = null, rsAllUnsub = null;   // 自分のリスト／管理者が「全員分」を開いている間だけの全員分
+const rsLogAdd = (raw, to, kind, closer) => (raw.rsLog || []).concat([{from: raw.memo.when, to: to ? Timestamp.fromDate(to) : null, kind: kind || "", closer: closer || "", by: U, at: Timestamp.now()}]).slice(-50);
+const resPending = r => { if (!resDue(r) || r.canceled || isRsWait(r)) return false; const x = resOf(r); return !x || (!x.deal && (!x.pre || RES_WAIT.includes(x.pre))); };
 const resCanceled = r => !!r.canceled || (resOf(r) || {}).pre === "キャンセル";
 /* 実施した商談（社長 2026-10-16「実施されたもののみ商談数にする」）＝②商談の結果が 受注・成約予定・失注・再営 のどれか（成約予定は v73。受注には数えない）。
    ②がリスケ・前確で終わったもの（NG・留守・キャンセル・リスケなど）・取り消したもの・結果まだ は数えない */
@@ -362,6 +377,13 @@ function startApp() {
     if (curTab === "remind") renderRemind();
   }, onErr("頼んだ予定")));
   unsubs.push(onSnapshot(query(recs, where("undated", "==", true), where("r", "==", "アポ")), s => { undated = s.docs.map(recOf).sort((a, b) => a.t - b.t); renderUndated(); }, onErr("日時未定のアポ")));
+  /* リスケ（日程未定）のリスト（v85）：自分が取った分だけ。件数が少ないので読み込みはほとんど増えない */
+  unsubs.push(onSnapshot(query(recs, where("uid", "==", U), where("rsWait", "==", true)), s => {
+    rsMine = s.docs.map(recOf).filter(r => isRsWait(r) && r.memo && r.memo.when).sort((a, b) => a.memo.when - b.memo.when);
+    if (curTab === "remind") renderRemind();
+    if (curTab === "cal" && calMode === "me") renderMyRm();
+  }, onErr("リスケのリスト")));
+  unsubs.push(() => { if (rsAllUnsub) rsAllUnsub(); rsAllUnsub = null; rsAll = null; });
   unsubs.push(onSnapshot(collection(db, "busy"), {includeMetadataChanges: true}, s => {   // サーバーの最新が届いたことも知りたいので
     busyMap = {};
     const spans = a => (a || []).map(b => ({s: tsd(b.s), e: tsd(b.e)})).filter(b => b.s && b.e);
@@ -381,7 +403,7 @@ function startApp() {
   unsubs.push(onSnapshot(query(recs, where("r", "==", "アポ"), where("memo.when", ">=", Timestamp.fromDate(addDays(today(), -35)))), s => {
     apoRecent = s.docs.map(recOf).filter(r => r.r === "アポ"); apoRecentLoaded = true;
     updateRmDot(); if (curTab === "remind") renderRemind();
-    if (detailRec && !$("recDetail").hidden) { const x = apoRecent.find(r => r.id === detailRec.id); if (x) { detailRec.res = x.res; renderResBox(detailRec); } }
+    if (detailRec && !$("recDetail").hidden) { const x = apoRecent.find(r => r.id === detailRec.id); if (x) { detailRec.res = x.res; detailRec.rsWait = x.rsWait; detailRec.slotId = x.slotId; renderResBox(detailRec); } }
   }, onErr("商談の結果")));
   startFeedback();
   pollTeam(); teamTimer = setInterval(() => { if (document.visibilityState === "visible") pollTeam(); }, 30000);
@@ -605,6 +627,7 @@ function renderHist(loading) {
       let st = "";
       if (r.canceled) st = CX_BADGE;
       else if (r.src === "old" && !w) st = noDateBadge(r) + OLD_BADGE;
+      else if (isRsWait(r)) st = RS_BADGE;
       else if (r.r === "アポ") st = !w ? `<span class="badge late">日時未定</span>` : w < now ? `<span class="badge done">面談済み</span>` : "";
       else st = r.done ? `<span class="badge done">かけた</span>` : w && w < now ? `<span class="badge late">期限切れ</span>` : !w ? `<span class="badge pend">日時なし</span>` : "";
       if (r.pre) st += PRE_BADGE;
@@ -629,7 +652,7 @@ function fillRecs(box, list, withDelete) {
   list.forEach(r => {
     const row = document.createElement("div"); row.className = "rec"; row.setAttribute("role", "button"); row.tabIndex = 0;
     const w = r.memo && r.memo.when;
-    const when = (w ? `<span class="when">${r.r === "アポ" ? "面談" : "再架電"} ${md(w)} ${hm(w)}</span>` : r.canceled ? "" : noDateBadge(r) + (r.src === "old" ? OLD_BADGE : "")) + (r.canceled ? CX_BADGE : "");
+    const when = (w ? `<span class="when">${r.r === "アポ" ? "面談" : "再架電"} ${md(w)} ${hm(w)}</span>` : r.canceled ? "" : noDateBadge(r) + (r.src === "old" ? OLD_BADGE : "")) + (r.canceled ? CX_BADGE : "") + (isRsWait(r) ? RS_BADGE : "");
     row.innerHTML = `<span class="tm">${hm(r.t)}</span><span class="body">${resChip(r.r)}${when}` +
       (r.memo && (r.memo.shop || r.memo.text) ? `<div class="memo">${memoLine(r.memo)}</div>` : `<div class="add">＋メモ</div>`) + `</span>`;
     const hasInfo = r.memo && (r.memo.shop || r.memo.tel || r.memo.text || r.memo.when);
@@ -706,8 +729,11 @@ function openMemo(rec) {
   const adminEdit = !rs && !rec.draft && rec.uid !== U && kind === "アポ" && isAdminMe() && !isSheetRec(rec);
   const mine = (rec.uid === U || adminEdit) && !rs;
   rec.adminEdit = adminEdit;   /* クローザーのボタンを押せるように（v76） */
-  $("mTitle").innerHTML = resChip(kind) + (rs ? " 日程を変える（リスケ）" : kind === "アポ" ? " アポの詳細" : kind === "再架電" ? " 再架電の予定" : " メモ");
-  $("mHint").textContent = rs ? "今：" + md(m.when) + " " + hm(m.when) + "〜" + hm(new Date(m.when.getTime() + recDur(rec) * 6e4)) + "（クローザー " + CNAME(m.closer) + "）。新しい日時" +
+  const waiting = isRsWait(rec);   // リスケ（日程未定）。日時は空で開く（元の日時のまま保存して枠が戻らないように。v85）
+  $("mTitle").innerHTML = resChip(kind) + (rs ? (waiting ? " 日程を決める（リスケ）" : " 日程を変える（リスケ）") : kind === "アポ" ? " アポの詳細" : kind === "再架電" ? " 再架電の予定" : " メモ");
+  $("mHint").textContent = rs && waiting ? "今は日程未定です（元の日時 " + md(m.when) + " " + hm(m.when) + "・クローザー " + CNAME(m.closer) + "）。新しい日時とクローザーを選んで［日程を決める］を押してください。カレンダーに戻り、クローザーの招待ももう一度届きます" :
+    waiting ? "リスケ（日程未定）の記録です（元の日時 " + md(m.when) + " " + hm(m.when) + "）。日時を入れずに保存するとメモだけ保存します（日程未定のまま）。新しい日時を入れて保存すると、もう一度アポとして入ります" :
+    rs ? "今：" + md(m.when) + " " + hm(m.when) + "〜" + hm(new Date(m.when.getTime() + recDur(rec) * 6e4)) + "（クローザー " + CNAME(m.closer) + "）。新しい日時" +
       (rsCloserFixed(rec) ? "" : "とクローザー") + "を選んで［日程を変える］を押してください。同じアポのまま日時だけ変わります（KPIの数はそのまま。クローザーのGoogleカレンダーと営業結果シートも新しい日時に変わります）" :
     !mine ? nameOf(rec.uid) + "さんの記録です（見るだけ）" :
     adminEdit ? nameOf(rec.uid) + "さんのアポです。管理者として直せます（取った人・取った日時・KPIの数は変わりません）" :
@@ -722,12 +748,12 @@ function openMemo(rec) {
   if (timed) {
     selCloser = m.closer || "auto";
     $("mWhenLbl").textContent = kind === "アポ" ? "商談日時（" + APO_LBL + "）" : "かけ直す日時";
-    $("mWhen").value = m.when && !rec.canceled ? toLocal(m.when) : ""; $("mRemind").checked = m.remind !== false; setQuick(kind);   // キャンセルした記録は日時を空で開く（メモを足して保存しただけで復活しないように）
+    $("mWhen").value = m.when && !rec.canceled && !waiting && !rec.rsKind ? toLocal(m.when) : ""; $("mRemind").checked = m.remind !== false; setQuick(kind);   // キャンセルした記録は日時を空で開く（メモを足して保存しただけで復活しないように）
   }
   ["mShop", "mTel", "mText", "mInfo"].forEach(id => $(id).readOnly = !mine);
   $("mWhen").readOnly = !(mine || rs);
   $("mPaste").hidden = !mine;
-  $("mSave").hidden = !(mine || rs); $("mSave").textContent = rs ? "日程を変える" : "保存";
+  $("mSave").hidden = !(mine || rs); $("mSave").textContent = rs ? (waiting ? "日程を決める" : "日程を変える") : "保存";
   $("mSkip").textContent = rs ? "やめる" : mine ? "あとで" : "閉じる";
   $("mUndo").hidden = !(rec.fresh && mine && !rec.draft && rec.src !== "old");
   /* カレンダーから新しく入れるアポだけ：10月より前に取った案件として（KPIに数えずに）入れられる。管理者は取った人を選べる */
@@ -1025,13 +1051,13 @@ $("mSave").onclick = async () => {
     rec.owner = rec.pre && isAdminMe() && $("mBy").value ? $("mBy").value : U;
   }
   try {
-    if (rec.canceled && !w) {
-      /* キャンセルした記録に日時を入れずに保存：メモだけ書いて、キャンセルのまま（元の日時・クローザーは残す） */
+    if ((rec.canceled || isRsWait(rec)) && !w) {
+      /* キャンセルした記録・リスケ（日程未定）に日時を入れずに保存：メモだけ書いて、そのまま（元の日時・クローザーは残す） */
       const keep = {...(rec.memo || {}), ...m};
       if (keep.when instanceof Date) keep.when = Timestamp.fromDate(keep.when);
       Object.keys(keep).forEach(k => { if (keep[k] === undefined) delete keep[k]; });
       updateDoc(doc(db, "records", rec.id), {memo: keep, ...edited}).catch(e => toast(errMsg(e)));
-      closeMemo(); toast("メモを保存しました（キャンセルのまま）");
+      closeMemo(); toast(rec.canceled ? "メモを保存しました（キャンセルのまま）" : "メモを保存しました（日程未定のまま）");
     } else if (rec.r === "アポ" && w) {
       if (!isSlotTime(w)) { toast("アポの枠の外です（" + SLOT_H0 + ":00〜" + SLOT_H1 + ":00・30分ごと・日曜休み）"); return; }
       const cl = await bookSlot(rec, m, w, remind, edited);
@@ -1073,9 +1099,11 @@ async function bookSlot(rec, m, when, remind, extra) {
     /* 長さ：新しいアポは APO_MIN。もう枠があるアポ（日時を直す）は、その枠の長さをそのまま（社長 2026-10-14「既存のものはそのまま」） */
     let myDur = APO_MIN;
     if (rec.slotId) { const os = await tx.get(doc(db, "slots", rec.slotId)); if (os.exists()) myDur = durOf(os.data()); }
+    else if (rec.rsWait && rec.rsDur) myDur = rec.rsDur;   // リスケ（日程未定）は元の枠の長さのまま（v85）
     /* アポを取った本人が「メモを編集」で日時を直したときも、前確を新しい日時へ（v73。読むのは書く前に） */
     const curRec = rec.draft ? null : await tx.get(recRef);
-    const cr = curRec && curRec.exists() ? carryRes(curRec.data(), when) : null;
+    const cr = curRec && curRec.exists() ? carryRes(curRec.data(), when) || rsResAfter(curRec.data(), when) : null;
+    const curRaw = curRec && curRec.exists() ? curRec.data() : null;
     chosenDur = myDur;
     let chosen = null;
     if (over) chosen = {c: selCloser, sref: doc(db, "slots", slotIdOf(when, selCloser) + "_ov" + rec.id)};
@@ -1105,7 +1133,8 @@ async function bookSlot(rec, m, when, remind, extra) {
       tx.set(recRef, {uid: U, r: "アポ", t: Timestamp.fromDate(t), day: dk(t), hour: t.getHours(), mb: mbOf(t), memo, undated: false, pending: true, done: false, slotId: chosen.sref.id});
       tx.set(doc(db, "stats", dk(t)), statInc(U, "アポ", t.getHours(), 1, mbOf(t)), {merge: true});
     } else {
-      tx.update(recRef, {...(extra || {}), memo, undated: false, pending: true, slotId: chosen.sref.id, ...(rec.canceled ? {canceled: false} : {}), ...(cr ? {res: cr} : {})});   // キャンセルしたアポに日時を入れ直したら、もう一度アポとして入る
+      tx.update(recRef, {...(extra || {}), memo, undated: false, pending: true, slotId: chosen.sref.id, ...(rec.canceled ? {canceled: false} : {}), ...(cr ? {res: cr} : {}),
+        ...(curRaw && curRaw.rsWait ? {rsWait: false, rsLog: rsLogAdd(curRaw, when, "", chosen.c)} : {})});   // キャンセルしたアポに日時を入れ直したら、もう一度アポとして入る。リスケ（日程未定）も同じ（v85）
     }
     chosenId = chosen.c;
   });
@@ -1159,14 +1188,18 @@ async function saveResched(rec) {
   /* 日時もクローザーも今のまま（おまかせなら、空いている人の先頭＝今の人）なら何も書かない。
      前は「おまかせ」だとこの判定を通り抜けて同じ枠に書き直そうとし、管理者には「権限がありません」が出ていた（テスター 2026-10-09。
      枠の書き換えは取った本人しかできないルールのため。日時やクローザーが変わるときは「消して作る」なので管理者・クローザーも通る） */
-  if (+w === +old && (cid === "auto" ? cands[0] === oldC : cid === oldC)) { toast("日時もクローザーも今のままです"); return; }
+  const waiting = isRsWait(rec), kind = rec.rsKind || "", before = resOf(rec);   // v85：kind＝どちらの結果のリスケから来たか（pre・deal。ふつうの［日程を変える］は空）
+  if (!waiting && +w === +old && (cid === "auto" ? cands[0] === oldC : cid === oldC)) { toast("日時もクローザーも今のままです"); return; }
   if (!cands.length) { toast(whyNot(w, cid, rec)); return; }
   $("mSave").disabled = true;
   try {
-    const got = await moveApo(rec.id, w, cands, over ? slotIdOf(w, cid) + "_ov" + rec.id : null);
+    /* 前確で「リスケ」を選んで動かすときは、前確を引き継がない（前の前確は前の日時の分・新しい日時でやり直す）。②のリスケは今まで通り（v73 carryRes） */
+    const got = await moveApo(rec.id, w, cands, over ? slotIdOf(w, cid) + "_ov" + rec.id : null, {log: true, kind, noCarry: kind === "pre"});
     closeMemo();
-    toast("日程を変えました：" + md(old) + " " + hm(old) + " → " + md(w) + " " + hm(w) + "（クローザー " + CNAME(got.closer) + "）。招待も5分以内に変わります",
-      "元に戻す", () => moveApo(rec.id, old, [oldC], oldSid).then(() => toast("元の日時に戻しました")).catch(e => toast(e && e.message === "FULL" ? "元の時間に別の商談が入ったため、戻せませんでした" : errMsg(e))), 10000);
+    if (waiting) toast("日程を決めました：" + md(w) + " " + hm(w) + "（クローザー " + CNAME(got.closer) + "）。カレンダーに戻り、招待も5分以内に届きます",
+      "元に戻す", () => rsBackToWait(rec.id, old, oldC, before).then(() => toast("日程未定に戻しました")).catch(e => toast(errMsg(e))), 10000);
+    else toast("日程を変えました：" + md(old) + " " + hm(old) + " → " + md(w) + " " + hm(w) + "（クローザー " + CNAME(got.closer) + "）。招待も5分以内に変わります",
+      "元に戻す", () => moveApo(rec.id, old, [oldC], oldSid, {popLog: true}).then(() => toast("元の日時に戻しました")).catch(e => toast(e && e.message === "FULL" ? "元の時間に別の商談が入ったため、戻せませんでした" : errMsg(e))), 10000);
   } catch (e) {
     toast(e && e.message === "FULL" ? "その時間は、ほかの商談と重なるため入れられませんでした（今入ったかもしれません）" :
       e && e.message === "GONE" ? "このアポは消されています" : e && e.message === "CANCELED" ? "このアポは取り消されています" : errMsg(e));
@@ -1186,7 +1219,8 @@ function carryRes(raw, when) {
   return {w: Timestamp.fromDate(when), pre: x.pre, deal: "", note: x.note || "", by: x.by || "", at: x.at || null};
 }
 /* アポを when へ動かす（cands の中で、重なる商談が無い最初のクローザー）。記録・枠をトランザクションで書く。戻り値 {closer, sid} */
-async function moveApo(recId, when, cands, forceSid) {
+async function moveApo(recId, when, cands, forceSid, opt) {
+  const o = opt || {};   // v85 log：リスケ履歴に足す／popLog：元に戻すので最後の履歴を外す／kind：pre・deal／noCarry：前確を引き継がない
   const recRef = doc(db, "records", recId);
   let out = null;
   await runTransaction(db, async tx => {
@@ -1196,7 +1230,7 @@ async function moveApo(recId, when, cands, forceSid) {
     if (raw.canceled) throw new Error("CANCELED");
     const oldRef = raw.slotId ? doc(db, "slots", raw.slotId) : null;
     const oldS = oldRef ? await tx.get(oldRef) : null;
-    const myDur = oldS && oldS.exists() ? durOf(oldS.data()) : APO_MIN_OLD;   // リスケはそのアポの長さのまま（枠が無い古い記録は 90 分）
+    const myDur = oldS && oldS.exists() ? durOf(oldS.data()) : raw.rsWait && raw.rsDur ? raw.rsDur : APO_MIN_OLD;   // リスケはそのアポの長さのまま（日程未定は覚えておいた長さ。枠が無い古い記録は 90 分）
     /* forceSid＝重ねて入れた枠（_ov）へ戻すとき：その枠IDをそのまま使い、重なりの確認はしない（v54） */
     let chosen = forceSid ? cands[0] : null;
     for (const c of forceSid ? [] : [...new Set(cands)]) {
@@ -1214,8 +1248,9 @@ async function moveApo(recId, when, cands, forceSid) {
     const sid = forceSid || slotIdOf(when, chosen);
     if (oldS && oldS.exists() && raw.slotId !== sid) tx.delete(oldRef);
     tx.set(doc(db, "slots", sid), {...base, day: dk(when), time: hm(when), when: Timestamp.fromDate(when), closer: chosen});
-    const cr = carryRes(raw, when);   // 前確を新しい日時へ（v73）
-    tx.update(recRef, {"memo.when": Timestamp.fromDate(when), "memo.closer": chosen, slotId: sid, pending: true, ...(cr ? {res: cr} : {})});
+    const cr = (o.noCarry ? null : carryRes(raw, when)) || rsResAfter(raw, when);   // 前確を新しい日時へ（v73）。日程未定を同じ日時で決めたらリスケを外す（v85）
+    const log = o.log ? {rsLog: rsLogAdd(raw, when, o.kind, chosen)} : o.popLog && raw.rsLog ? {rsLog: raw.rsLog.slice(0, -1)} : {};
+    tx.update(recRef, {"memo.when": Timestamp.fromDate(when), "memo.closer": chosen, slotId: sid, pending: true, ...(cr ? {res: cr} : {}), ...log, ...(raw.rsWait ? {rsWait: false} : {})});
     out = {closer: chosen, sid, base};
   });
   /* サーバーからの通知を待たずに、自分のカレンダーへすぐ出す */
@@ -1224,6 +1259,100 @@ async function moveApo(recId, when, cands, forceSid) {
   refreshHistSoon();
   return out;
 }
+/* ---------- リスケで日程が決まっていない（v85）：枠を消して、自分のリスケのリストへ。元に戻す用に、書く前の中身を返す ---------- */
+const RS_ERR = {GONE: "このアポは消されています", CANCELED: "このアポは取り消されています", WAITING: "もう日程未定になっています", MOVED: "その間に日程が変わったため、戻せませんでした", TAKEN: "その時間に別の商談が入ったため、戻せませんでした"};
+const rsErr = e => (e && RS_ERR[e.message]) || errMsg(e);
+async function rsToWait(r, kind) {
+  const recRef = doc(db, "records", r.id);
+  let raw = null, sraw = null, before = null;
+  await runTransaction(db, async tx => {
+    const rs = await tx.get(recRef);
+    if (!rs.exists()) throw new Error("GONE");
+    raw = rs.data();
+    if (raw.canceled) throw new Error("CANCELED");
+    if (raw.rsWait && !raw.slotId) throw new Error("WAITING");
+    const sref = raw.slotId ? doc(db, "slots", raw.slotId) : null;
+    const ss = sref ? await tx.get(sref) : null;
+    sraw = ss && ss.exists() ? ss.data() : null;
+    const w0 = raw.memo.when, x = raw.res && raw.res.w && +tsd(raw.res.w) === +tsd(w0) ? raw.res : null;
+    before = x ? {pre: x.pre || "", deal: x.deal || "", note: x.note || ""} : null;
+    if (sraw) tx.delete(sref);
+    tx.update(recRef, {pending: false, slotId: null, rsWait: true, rsDur: sraw ? durOf(sraw) : raw.rsDur || APO_MIN_OLD, rsLog: rsLogAdd(raw, null, kind),
+      res: {w: w0, pre: kind === "pre" ? "リスケ" : (x && x.pre) || "", deal: kind === "deal" ? "リスケ" : "", note: (x && x.note) || "", by: U, at: serverTimestamp()}});
+  });
+  if (raw.slotId) { slots = slots.filter(s => s.id !== raw.slotId); extraSlots = extraSlots.filter(s => s.id !== raw.slotId); if (curTab === "cal") renderCal(); }
+  resCache.clear(); refreshHistSoon();
+  return {raw, sraw, before};
+}
+/* 日程未定を元に戻す（押した直後の［元に戻す］）：枠と結果を戻す。結果は「押した人の名前」で書き直す（ほかの人の名前で結果を作れないルールのため） */
+async function rsUndoWait(id, raw, sraw, before) {
+  const recRef = doc(db, "records", id);
+  await runTransaction(db, async tx => {
+    const rs = await tx.get(recRef);
+    if (!rs.exists()) throw new Error("GONE");
+    const cur = rs.data();
+    if (cur.canceled) throw new Error("CANCELED");
+    if (!cur.rsWait || cur.slotId) throw new Error("MOVED");
+    if (sraw && !String(raw.slotId).includes("_ov")) {   // その間に同じクローザーの重なる時間へ別の商談が入っていたら戻さない（restoreCancel と同じ）
+      const when = tsd(sraw.when);
+      for (const off of OVERLAP_STEPS) {
+        const s = await tx.get(doc(db, "slots", slotIdOf(new Date(when.getTime() + off * 6e4), sraw.closer)));
+        if (s.exists() && s.data().recId !== id && stepClash(off, s.data(), durOf(sraw))) throw new Error("TAKEN");
+      }
+    }
+    const b = before || {};
+    tx.update(recRef, {pending: !!raw.pending, slotId: sraw ? raw.slotId : null, rsWait: false, rsLog: raw.rsLog || [],
+      res: {w: raw.memo.when, pre: b.pre || "", deal: b.deal || "", note: b.note || "", by: U, at: serverTimestamp()}});
+    if (sraw) tx.set(doc(db, "slots", raw.slotId), sraw);
+  });
+  if (sraw) { slots = slots.filter(s => s.recId !== id).concat([{...sraw, id: raw.slotId, when: tsd(sraw.when)}]); if (curTab === "cal") renderCal(); }
+  resCache.clear(); refreshHistSoon();
+}
+/* 日程を決めた直後の［元に戻す］：もう一度 日程未定へ（元の日時・クローザーに戻して枠を消す）。②のリスケから前確を引き継いだときは、結果も書き直す */
+async function rsBackToWait(id, old, oldC, before) {
+  const recRef = doc(db, "records", id);
+  let sid = null, carried = false;
+  await runTransaction(db, async tx => {
+    const rs = await tx.get(recRef);
+    if (!rs.exists()) throw new Error("GONE");
+    const raw = rs.data();
+    if (raw.canceled) throw new Error("CANCELED");
+    sid = raw.slotId || null;
+    const x = raw.res;   // 前確を引き継いだ（w が違う）・同じ日時で決めてリスケを外した（中身が違う）ときは、結果を書き戻す
+    carried = !!(x && x.w && before && (+tsd(x.w) !== +old || (x.pre || "") !== (before.pre || "") || (x.deal || "") !== (before.deal || "")));
+    if (sid) tx.delete(doc(db, "slots", sid));
+    tx.update(recRef, {"memo.when": Timestamp.fromDate(old), "memo.closer": oldC, slotId: null, pending: false, rsWait: true, rsLog: (raw.rsLog || []).slice(0, -1)});
+  });
+  if (carried) await updateDoc(recRef, {res: {w: Timestamp.fromDate(old), pre: before.pre || "", deal: before.deal || "", note: before.note || "", by: U, at: serverTimestamp()}});
+  if (sid) { slots = slots.filter(s => s.id !== sid); if (curTab === "cal") renderCal(); }
+  resCache.clear(); refreshHistSoon();
+}
+/* 結果で「リスケ」を押したときの3択（v85）。ここでは何も保存しない＝「やめる」は今のまま。カレンダーに枠を作れないアポ（canResched が false）は今まで通りその場で保存 */
+let rsDlgRec = null, rsDlgKind = "";
+function openRsDlg(r, kind) {
+  rsDlgRec = r; rsDlgKind = kind;
+  const m = r.memo || {}, mine = r.uid === U;
+  $("rsTarget").innerHTML = `<b>${esc(m.shop || "（店名なし）")}</b><small>商談 ${md(m.when)} ${hm(m.when)}${m.closer ? " ・ クローザー " + esc(CNAME(m.closer)) : ""} ・ 獲得 ${esc(nameOf(r.uid))}</small>`;
+  $("rsWaitD").textContent = "カレンダーとクローザーの予定から外します。" + (mine ? "自分のリマインドの一番上" : nameOf(r.uid) + "さんのリマインドの一番上") + "の「リスケ（日程未定）」に残り、日程が決まったらそこから入れられます";
+  $("rsScrim").hidden = $("rsDlg").hidden = false;
+}
+function closeRsDlg() { $("rsScrim").hidden = $("rsDlg").hidden = true; rsDlgRec = null; }
+$("rsClose").onclick = closeRsDlg; $("rsScrim").onclick = closeRsDlg;
+document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("rsDlg").hidden) { e.stopPropagation(); closeRsDlg(); } }, true);   // 下の記録の詳細まで閉じないように
+$("rsPick").onclick = () => {
+  const r = rsDlgRec, kind = rsDlgKind; closeRsDlg(); if (!r) return;
+  closeDetail({noBack: true});
+  openMemo({...r, rs: true, rsKind: kind});
+};
+$("rsWaitBtn").onclick = async () => {
+  const r = rsDlgRec, kind = rsDlgKind; closeRsDlg(); if (!r) return;
+  closeDetail({noBack: true});
+  try {
+    const got = await rsToWait(r, kind);
+    toast("リスケ（日程未定）にしました。" + (r.uid === U ? "リマインドの一番上に出ます" : nameOf(r.uid) + "さんのリマインドに出ます") + (got.sraw ? "。クローザーのGoogleカレンダーからも5分以内に消えます" : ""),
+      "元に戻す", () => rsUndoWait(r.id, got.raw, got.sraw, got.before).then(() => toast("元に戻しました")).catch(e => toast(rsErr(e))), 10000);
+  } catch (e) { toast(rsErr(e)); }
+};
 
 /* ============================================================
    アポカレンダー
@@ -1277,7 +1406,7 @@ const APO_MIN = 120;
 const APO_MIN_OLD = 90;   // dur の無い枠（2026-10-14 より前）の長さ。社長「既存のものはそのまま」
 const APO_LBL = APO_MIN % 60 === 0 ? APO_MIN / 60 + "時間" : APO_MIN % 60 === 30 ? Math.floor(APO_MIN / 60) + "時間半" : APO_MIN + "分";
 const durOf = s => (s && s.dur) || APO_MIN_OLD;                       // その枠（アポ）の長さ
-const recDur = r => { const sl = r && allSlots().find(s => s.recId === r.id); return sl ? durOf(sl) : APO_MIN; };   // その記録の商談の長さ（枠が無ければ新しい長さ）
+const recDur = r => { const sl = r && allSlots().find(s => s.recId === r.id); return sl ? durOf(sl) : (r && r.rsWait && r.rsDur) || APO_MIN; };   // その記録の商談の長さ（枠が無ければ新しい長さ。リスケの日程未定は覚えておいた長さ）
 const spanFor = except => except && !except.draft ? recDur(except) : APO_MIN;   // 入れようとしている商談の長さ（リスケ・日時の直しは元の長さ、新規は APO_MIN）
 /* 商談と重なりうる、同じクローザーの枠の開始時刻（30分刻み。前は相手の長さが最大 APO_MIN なので −(APO_MIN−30) まで、後ろは APO_MIN−30 まで） */
 const OVERLAP_STEPS = [];
@@ -1830,6 +1959,7 @@ function renderRemind() {
   const list = visiblePending(pendMine).filter(r => !isPastApo(r, now)).concat(myResPending().filter(r => r.memo.when < now)).sort((a, b) => a.memo.when - b.memo.when);
   const groups = [["過ぎている予定", list.filter(r => r.memo.when < now)], ["今日", list.filter(r => r.memo.when >= now && r.memo.when < tmr)], ["明日以降", list.filter(r => r.memo.when >= tmr)]];
   const body = $("rmBody"); body.innerHTML = "";
+  renderRsWait(body);    // リスケ（日程未定）（v85）
   renderResTodo(body);   // 商談の結果まだ（v66）
   groups.forEach(([title, g]) => {
     const h = document.createElement("h2"); h.innerHTML = `${title} <span class="aside">${g.length}件</span>`; body.appendChild(h);
@@ -1882,6 +2012,7 @@ function setCalMode(m) {
 }
 $("calMode").onclick = e => { const b = e.target.closest("button"); if (!b) return; myWk = 0; setCalMode(b.dataset.m); };
 function mrBtn(r) {
+  if (isRsWait(r)) return "日程を決める";   // v85
   if (r.auto) return "前確を入れる";   // v77
   if (r.isTask) return canEditTask(r) ? (r.r === "再架電" || r.r === "折り返し待ち" ? "かけた" : "完了") : "";
   if (!r.memo || !r.memo.when) return "日時を入れる";   // 日時未定のアポ
@@ -1895,11 +2026,11 @@ function mrItem(r, late) {
   const b = mrBtn(r);
   const row = document.createElement("div"); row.className = "mr-item tap"; row.tabIndex = 0;
   row.style.setProperty("--c", c.fg);
-  row.innerHTML = `<span class="t num">${m.when ? (late ? md(m.when) + "<br>" : "") + hm(m.when) : "—"}</span>
+  row.innerHTML = `<span class="t num">${isRsWait(r) ? "未定" : m.when ? (late ? md(m.when) + "<br>" : "") + hm(m.when) : "—"}</span>
     <span class="s"><span class="k" style="background:${c.bg};color:${c.fg}">${esc(r.r)}</span>${esc(shop)}${sub ? `<small>${esc(sub)}</small>` : ""}</span>
     ${b ? `<button class="go" type="button">${b}</button>` : ""}`;
   const go = row.querySelector(".go");
-  if (go) go.onclick = e => { e.stopPropagation(); if (b === "日時を入れる") openMemo(r); else if (b === "詳細") openDetail(r); else markDone(r); };
+  if (go) go.onclick = e => { e.stopPropagation(); if (b === "日程を決める") openResched(r); else if (b === "日時を入れる") openMemo(r); else if (b === "詳細") openDetail(r); else markDone(r); };
   row.onclick = () => m.when ? openDetail(r) : openMemo(r);
   row.onkeydown = e => { if (e.key === "Enter") row.onclick(); };
   return row;
@@ -1918,6 +2049,7 @@ function renderMyRm() {
     items.forEach(r => d.appendChild(mrItem(r, isLate)));
     box.appendChild(d);
   };
+  if (rsMine.length && myWk === 0) sec("mr-late", "リスケ（日程未定）", rsMine, false, "");   // v85
   if (late.length && myWk === 0) sec("mr-late", "過ぎています（3日前まで）", late, true, "");
   const nav = document.createElement("div"); nav.className = "mr-nav";
   nav.innerHTML = `<button type="button" aria-label="前の週"${myWk <= 0 ? " disabled" : ""}>◀</button><b>${md(from)} 〜 ${md(addDays(to, -1))}</b><button type="button" aria-label="次の週">▶</button>`;
@@ -1937,6 +2069,41 @@ function resStateText(r) {
   const x = resOf(r);
   if (!x || !x.pre) return "前確まだ";
   return "前確 " + x.pre + "・商談の結果まだ";
+}
+/* リスケ（日程未定）のリスト（v85・社長 2026-11-02）：ふだんはアポを取った本人の分だけ。管理者は「全員分を見る」を開いた時だけ全員分（開いている間だけ読む） */
+function renderRsWait(body) {
+  const admin = isAdminMe(), all = !!rsAll && admin, list = all ? rsAll : rsMine;
+  if (!list.length && !admin) return;
+  const bar = document.createElement("div"); bar.className = "res-todo rs-todo";
+  bar.innerHTML = `<b>リスケ（日程未定） ${list.length}件${all ? "（全員分）" : ""}</b><small>新しい日程が決まったら［日程を決める］で入れてください。カレンダーとクローザーの予定からは外れています</small>` +
+    (admin ? `<button type="button" class="rs-all">${all ? "自分の分だけにする" : "全員分を見る"}</button>` : "");
+  const tg = bar.querySelector(".rs-all");
+  if (tg) tg.onclick = () => {
+    if (rsAllUnsub) { rsAllUnsub(); rsAllUnsub = null; rsAll = null; renderRemind(); return; }
+    rsAllUnsub = onSnapshot(query(collection(db, "records"), where("r", "==", "アポ"), where("rsWait", "==", true)), s => {
+      rsAll = s.docs.map(recOf).filter(r => isRsWait(r) && r.memo && r.memo.when).sort((a, b) => a.memo.when - b.memo.when);
+      if (curTab === "remind") renderRemind();
+    }, e => { console.error("リスケのリスト（全員分）", e); toast(errMsg(e)); if (rsAllUnsub) rsAllUnsub(); rsAllUnsub = null; rsAll = null; });
+  };
+  body.appendChild(bar);
+  if (!list.length) return;
+  const c = document.createElement("div"); c.className = "card res-list";
+  list.forEach(r => {
+    const m = r.memo, x = (r.rsLog || []).slice(-1)[0], row = document.createElement("div"); row.className = "rm tap res-row"; row.tabIndex = 0;
+    row.innerHTML = `<div class="time">未定<small>元 ${md(m.when)}</small></div>
+      <div class="info"><div class="shop">${esc(m.shop || "（店名なし）")}${RS_BADGE}</div>
+      <div class="meta">元の日時 ${md(m.when)} ${hm(m.when)}${x && x.kind ? "（" + (x.kind === "pre" ? "前確" : "商談") + "でリスケ）" : ""}</div>
+      <div class="meta">獲得 ${esc(nameOf(r.uid))}${m.closer ? " ・ クローザー " + esc(CNAME(m.closer)) : ""}</div>
+      ${m.tel ? `<div class="tel-line num">☎ ${esc(m.tel)}</div>` : ""}</div>
+      <div class="btns">${canResched(r) ? `<button class="done rs-go">日程を決める</button>` : ""}${canCancel(r) ? `<button class="rs-cx">取り消す</button>` : ""}</div>`;
+    const go = row.querySelector(".rs-go"), cx = row.querySelector(".rs-cx");
+    if (go) go.onclick = e => { e.stopPropagation(); openResched(r); };
+    if (cx) cx.onclick = e => { e.stopPropagation(); openCancel(r); };
+    row.onclick = () => openDetail(r);
+    row.onkeydown = e => { if (e.key === "Enter") openDetail(r); };
+    c.appendChild(row);
+  });
+  body.appendChild(c);
 }
 function renderResTodo(body) {
   const list = myResPending();   // v74：自分の分だけ（チーム全員の分は外した）
@@ -2071,7 +2238,8 @@ function openDetail(r, cal) {
   $("rdTitle").innerHTML = resChip(r.r) + " " + esc(r.isTask ? ([r.title, m.shop].filter(Boolean).join(" ") || r.r) : (m.shop || "（店名なし）"));
   const rows = [];
   if (r.canceled) rows.push(["状態", CX_BADGE + (r.canceledAt ? ` <small>${md(tsd(r.canceledAt))} ${hm(tsd(r.canceledAt))} に取り消し${r.canceledBy && r.canceledBy !== r.uid ? "（" + esc(nameOf(r.canceledBy)) + "）" : ""}</small>` : "")]);
-  if (w) {
+  if (isRsWait(r)) rows.push(["元の商談日時", `<b class="num">${md(w)} ${hm(w)}</b>${RS_BADGE}`]);
+  else if (w) {
     const mins = Math.round((w - now) / 6e4);
     const left = mins > 0 && mins < 24 * 60 ? `<span class="rd-left">あと${mins >= 60 ? Math.floor(mins / 60) + "時間" + (mins % 60 ? mins % 60 + "分" : "") : mins + "分"}</span>` : mins <= 0 && keepsLate(r) && !r.done ? `<span class="badge late">過ぎています</span>` : "";
     rows.push([r.isTask ? "日時" : r.r === "アポ" ? "商談日時" : "かけ直す日時", `<b class="num">${dayWord(w)} ${md(w)} ${hm(w)}${r.r === "アポ" && !r.isTask ? "〜" + hm(new Date(w.getTime() + recDur(r) * 6e4)) : ""}</b>${left}`]);
@@ -2082,6 +2250,7 @@ function openDetail(r, cal) {
   else if (isSheetRec(r)) rows.push(["獲得", esc(apName(r) || "−") + " " + SHEET_BADGE + `<small>KPIのクローザーの「外部」に数えるだけ（テレアポの数・カレンダーには入りません）</small>`]);
   else rows.push([r.r === "アポ" ? "獲得" : "担当", esc(nameOf(r.uid)) + (r.pre ? " " + PRE_BADGE + `<small>KPIに数えない${r.enteredBy && r.enteredBy !== r.uid ? "・入力 " + esc(nameOf(r.enteredBy)) : ""}</small>` : `<small>${md(r.t)} ${hm(r.t)}</small>`)]);
   if (r.edited && r.edited.by) { const ea = tsd(r.edited.at); rows.push(["最終更新", esc(nameOf(r.edited.by)) + "（管理者）" + (ea ? " " + md(ea) + " " + hm(ea) : "")]); }   // v76：管理者が中身を直したとき
+  if (!r.isTask && r.rsLog && r.rsLog.length) rows.push(["リスケ履歴", rsLogHtml(r)]);   // v85
   rows.push(["メモ", m.text ? `<span class="rd-memo">${esc(m.text)}</span>` : `<span class="rd-none">なし</span>`]);
   if (!r.isTask && r.r === "アポ" && !isSheetRec(r)) rows.push(["カレンダーの説明", m.info ? `<span class="rd-memo">${esc(m.info)}</span>` : `<span class="rd-none">なし（「メモを編集」から貼り付けると、クローザーのカレンダーに入ります）</span>`]);
   $("rdTel").innerHTML = m.tel
@@ -2093,8 +2262,8 @@ function openDetail(r, cal) {
   if (r.isTask && mine && !r.done) acts.push(`<button class="primary" data-a="done">${r.r === "再架電" ? "かけた（結果を押す）" : "完了にする"}</button>`, `<button data-a="later">明日へ延期</button>`);
   if (!r.isTask && mine && r.r === "再架電" && !r.done && !r.canceled && w) acts.push(`<button class="primary" data-a="done">かけた（結果を押す）</button>`, `<button data-a="later">明日へ延期</button>`);
   /* アポからは、前確の予定をそのまま作れる */
-  if (canResched(r)) acts.push(`<button data-a="rs">日程を変える（リスケ）</button>`);
-  if (!r.isTask && r.r === "アポ" && !r.canceled && !isSheetRec(r)) acts.push(`<button data-a="prec">＋ 前確の予定を作る</button>`);
+  if (canResched(r)) acts.push(`<button data-a="rs"${isRsWait(r) ? ` class="primary"` : ""}>${isRsWait(r) ? "日程を決める" : "日程を変える（リスケ）"}</button>`);
+  if (!r.isTask && r.r === "アポ" && !r.canceled && !isSheetRec(r) && !isRsWait(r)) acts.push(`<button data-a="prec">＋ 前確の予定を作る</button>`);
   /* 予定を取り消す（キャンセル／入れ間違いで消す）：取った本人・管理者・そのアポのクローザー */
   if (canCancel(r)) acts.push(`<button class="cx-btn" data-a="cx">予定を取り消す</button>`);
   $("rdActs").innerHTML = acts.join(""); $("rdActs").hidden = !acts.length;
@@ -2123,8 +2292,16 @@ function openDetail(r, cal) {
 const RES_GOOD = ["OK", "受注", "成約予定"], RES_BAD = ["NG", "NG（受注後買取）", "キャンセル", "失注", "飛び", "獲得不可"];
 /* ①前確は、アポに日時が入った時からいつでも出す（前確は商談の前にするので。社長 2026-10-16「前確の結果ボタンはずっと出してほしい」v70）。
    ②商談の結果は今まで通り、商談の始まりの時刻から */
+/* リスケの履歴（v85）：新しい順。「元の日時 → 新しい日時／日程未定」と、だれがいつ */
+function rsLogHtml(r) {
+  return r.rsLog.slice().reverse().map(x => {
+    const f = tsd(x.from), t = tsd(x.to), a = tsd(x.at);
+    return `<div class="rs-log"><span class="num">${f ? md(f) + " " + hm(f) : "−"} → ${t ? md(t) + " " + hm(t) : "日程未定"}</span><small>${x.kind === "pre" ? "前確でリスケ・" : x.kind === "deal" ? "商談でリスケ・" : ""}${t && x.closer ? "クローザー " + esc(CNAME(x.closer)) + "・" : ""}${esc(nameOf(x.by))}${a ? "（" + md(a) + " " + hm(a) + "）" : ""}</small></div>`;
+  }).join("");
+}
 function resBoxHtml(r) {
   if (!r || r.isTask || r.r !== "アポ" || !(r.memo && r.memo.when) || r.canceled) return "";
+  if (isRsWait(r)) return `<div class="res-box" id="rdRes"><div class="res-h">リスケ（日程未定）</div><div class="res-note">新しい日程が決まったら、下の［日程を決める］を押してください。カレンダーとクローザーの予定からは外れています。</div></div>`;   // v85
   const due = resDue(r);
   const x = resOf(r) || {}, edit = canResult(r);
   const chips = (list, cur, key) => `<div class="res-chips" data-k="${key}">` + list.map(v =>
@@ -2166,10 +2343,9 @@ $("rdBody").addEventListener("click", async e => {
   const b = e.target.closest(".res-chip"); if (!b || b.disabled || !detailRec) return;
   const r = detailRec, k = b.closest(".res-chips").dataset.k, v = b.dataset.v;
   const cur = (resOf(r) || {})[k] || "", val = cur === v ? "" : v;
+  if (val === "リスケ" && canResched(r)) { openRsDlg(r, k); return; }   // v85：①②どちらも、日程を選ぶ／まだ決まっていない／やめる（まだ何も保存しない）
   if (!(await saveRes(r, {[k]: val}))) return;
-  if (k === "pre" && val === "リスケ" && canResched(r))
-    toast("前確：リスケにしました。新しい日時が決まったら［日程を変える］で動かしてください", "日程を変える", () => { closeDetail({noBack: true}); openResched(r); }, 9000);
-  else if (k === "pre" && val === "キャンセル" && canCancel(r))
+  if (k === "pre" && val === "キャンセル" && canCancel(r))
     toast("前確：キャンセルにしました。カレンダーの枠を空けるときは［予定を取り消す］を押してください", "予定を取り消す", () => { closeDetail({noBack: true}); openCancel(r); }, 9000);
   else toast(val ? (k === "pre" ? "前確：" : "商談の結果：") + val + " を保存しました" : "外しました");
 });
@@ -2200,7 +2376,7 @@ $("rdActs").onclick = e => {
    管理者だけ・商談の時間が過ぎた、取り消していないアポ。KPIの［クローザー］で「外部」の行に数えるためだけの印で、記録の memo.closer だけ書く
    （ルールは今の onlyReschedKeys の管理者の枝のまま）。カレンダーの枠（slots）・連携の係・営業結果シート・KPIシートは枠のクローザーを見るので変わらない
    （社長「そのほかの連携等の機能は要らない」）。戻すときは社内のクローザーを選ぶ（初めは枠のIDから分かる元の担当） */
-const canSetExt = r => isAdminMe() && !r.isTask && r.r === "アポ" && !r.canceled && resDue(r);
+const canSetExt = r => isAdminMe() && !r.isTask && r.r === "アポ" && !r.canceled && resDue(r) && !isRsWait(r);   // 日程未定は外部にしない（日程を決められなくなるので。v85）
 const slotCloserOf = r => { const x = String(r.slotId || "").match(/^\d{4}-\d{2}-\d{2}_\d{4}_(.+?)(?:_ov.*)?$/); return x ? x[1] : ""; };
 function extCtlHtml(r) {
   if (!canSetExt(r)) return "";
@@ -2276,7 +2452,7 @@ async function runCancel(kind) {
     if (raw.slotId) { const ss = await getDoc(doc(db, "slots", raw.slotId)); if (ss.exists()) sraw = ss.data(); }
     if (kind === "cx") {
       const b = writeBatch(db);
-      b.update(doc(db, "records", r.id), {pending: false, canceled: true, canceledAt: Timestamp.now(), canceledBy: U, slotId: null, undated: false});
+      b.update(doc(db, "records", r.id), {pending: false, canceled: true, canceledAt: Timestamp.now(), canceledBy: U, slotId: null, undated: false, ...(raw.rsWait ? {rsWait: false} : {})});
       if (sraw) b.delete(doc(db, "slots", raw.slotId));
       await b.commit();
     } else {
@@ -2302,7 +2478,7 @@ async function restoreCancel(kind, id, raw, sraw) {
         tx.set(doc(db, "records", id), raw);
         if (!raw.pre) tx.set(doc(db, "stats", raw.day), statInc(raw.uid, raw.r, raw.hour, 1, raw.mb), {merge: true});
       } else {
-        tx.update(doc(db, "records", id), {pending: !!raw.pending, canceled: false, canceledAt: null, canceledBy: null, slotId: raw.slotId || null, undated: !!raw.undated});
+        tx.update(doc(db, "records", id), {pending: !!raw.pending, canceled: false, canceledAt: null, canceledBy: null, slotId: raw.slotId || null, undated: !!raw.undated, ...(raw.rsWait ? {rsWait: true} : {})});
       }
       if (sraw) tx.set(doc(db, "slots", raw.slotId), sraw);
     });

@@ -28,7 +28,7 @@
   } catch (e) {}
 })();
 </script>
-<link rel="stylesheet" href="./style.css?v=84">
+<link rel="stylesheet" href="./style.css?v=85">
 <script>
 /* LINEの中のブラウザではGoogleログインが通らない（途中の情報を覚えておけない）。
    LINEは ?openExternalBrowser=1 を付けると Safari / Chrome で開き直してくれるので、自動で付け直す */
@@ -465,6 +465,19 @@
   <div class="ds-foot"><button type="button" class="rd-new" id="rdNew" hidden>＋ この時間にアポを追加</button><button id="rdEdit">メモを編集</button><button id="rdClose" class="primary">閉じる</button></div>
 </div>
 
+<!-- 結果で「リスケ」を押したとき（v85）：日程を選ぶ／まだ決まっていない／やめる -->
+<div class="scrim" id="rsScrim" hidden></div>
+<div class="daysum cxd" id="rsDlg" role="dialog" aria-modal="true" aria-labelledby="rsTitle" hidden>
+  <div class="ds-head"><h3 id="rsTitle">新しい日程は決まっていますか？</h3></div>
+  <div class="cx-target" id="rsTarget"></div>
+  <div class="cx-opts">
+    <button type="button" class="cx-opt" id="rsPick"><b>日程を選ぶ</b><small>同じアポのまま新しい日時へ動かします。クローザーの招待も新しい日時に変わります</small></button>
+    <button type="button" class="cx-opt" id="rsWaitBtn"><b>まだ決まっていない</b><small id="rsWaitD"></small></button>
+  </div>
+  <p class="cx-note">日程が決まって動かすと、元の日のKPIのリスケからは外れます。回数は記録の詳細の「リスケ履歴」で見られます</p>
+  <div class="ds-foot"><button id="rsClose" class="primary">やめる</button></div>
+</div>
+
 <!-- 予定を取り消す（キャンセル＝記録は残す／入れ間違い＝記録ごと消す） -->
 <div class="scrim" id="cxScrim" hidden></div>
 <div class="daysum cxd" id="cxDlg" role="dialog" aria-modal="true" aria-labelledby="cxTitle" hidden>
@@ -665,7 +678,7 @@
 <div class="offline" id="offline" hidden>オフライン中：つながったら送ります</div>
 <div class="toast" id="toast"></div>
 
-<script src="./breaktimer.js?v=84"></script>
-<script type="module" src="./app.js?v=84"></script>
+<script src="./breaktimer.js?v=85"></script>
+<script type="module" src="./app.js?v=85"></script>
 </body>
 </html>

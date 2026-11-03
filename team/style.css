@@ -932,6 +932,12 @@ img{max-width:100%;}
 .res-todo b{display:block; font-size:14px;}
 .res-todo small{display:block; font-size:11.5px; color:var(--ink2); margin-top:2px;}
 .res-list{margin-bottom:12px;}
+/* リスケ（日程未定）（v85） */
+#rsScrim{z-index:58;} #rsDlg{z-index:59;}
+.rs-todo .rs-all{display:block; margin-top:6px; padding:3px 10px; border:1px solid var(--warn); border-radius:6px; background:var(--card); color:var(--warn); font-size:12px; font-weight:700;}
+.rs-log{line-height:1.5;}
+.rs-log + .rs-log{margin-top:4px;}
+.rs-log small{display:block; font-size:11.5px; color:var(--ink2);}
 .res-by{margin-top:10px;}
 button.res-tile{text-align:left; font:inherit; color:inherit; cursor:pointer; border:1px solid var(--rule);}
 button.res-tile:hover{border-color:var(--rule2);}
