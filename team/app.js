@@ -7,7 +7,7 @@
        slots/{日_時刻_クローザー}  アポの枠。1枠1件なので二重予約できない
        stats/{日}      日ごとの集計 c.{uid}.{結果} / h.{uid}.{時}（KPIとチーム数はここだけ読む）
        config/items    結果の項目（管理者が編集）
-       config/report   日報の設定（週間目標・名前と月の目標・繰り越し・週の補正。管理者が編集。無ければ DEFAULT_REPORT）
+       config/report   日報の設定（週間目標・月間目標・名前と月の目標・繰り越し・週の補正。管理者が編集。無ければ DEFAULT_REPORT）
        imports/{uid}   前のカウンターからの引っ越しの進み具合 days.{日} = {n, last, done, skip}
    ・カレンダーとアポはリアルタイム、チームの架電数は30秒ごとに読む（無料枠に収めるため）
    ・変更履歴（最近の分。それより前は各所のコメントと project-kekka-counter.md）
@@ -2984,7 +2984,7 @@ function drawChart(bk, opt) {   // opt.int＝目盛りを整数に（件数の�
    数字の決まり：
    ・獲得アポ数＝その日の人ごとのアポ（KPIと同じ。「KPIに数えない」案件は stats に無いので入らない）＋繰り越し
    ・週間目標＝その週（月〜土。月の最初の週は1日から。日曜は入れない）の獲得アポ数の合計／週間目標（毎週同じ20）＋週の補正。達成率は整数の％
-   ・全体目標＝月の1日からその日までの全員のアポ／全員の目標の合計（97）。達成率は小数1けた
+   ・全体目標＝月の1日からその日までの全員のアポ／月間目標（v86。0か空なら全員の目標の合計）。達成率は小数1けた
    ・個人コミット＝月の1日からその日までのその人のアポ／その人の目標（竹内27・渡邊25・東海林25・高井10・原田5・寶田5）
    ・累計（全体・個人）はアプリの集計そのまま（社長 2026-10-10「今日からの分はアプリと数字合うと思うから、それでお願い」）
    ・繰り越し：日報を出したあとに入ったアポを次の日の獲得アポ数に回す（元の日から引いて足す日に足す。累計は変わらない）。
@@ -2999,6 +2999,7 @@ const REPORT_ALL = TENANT.reportAll === true;   // true にすると全員のKPI
 const canReport = () => !!me && (me.role === "admin" || REPORT_ALL);
 const DEFAULT_REPORT = {
   weekGoal: 20,
+  monthGoal: 0,   // 月間目標（v86）。0＝全員の目標の合計を使う
   people: [   // 日報に出る順。goal＝月の目標。match＝アプリの名前の頭の字（どれかで始まれば同じ人）か uid
     {label: "竹内",   goal: 27, match: ["竹内"]},
     {label: "渡邊",   goal: 25, match: ["渡邊", "渡邉"]},
@@ -3032,7 +3033,7 @@ function normReport(d) {
     .map(c => ({from: c.from, to: c.to, label: String(c.label), n: +c.n})) : [];
   const weekAdj = {}; Object.entries(d.weekAdj || {}).forEach(([k, v]) => { if (DAY_RE.test(k) && +v) weekAdj[k] = +v; });
   const dealPeople = Array.isArray(d.dealPeople) ? d.dealPeople.filter(p => p && p.uid).map(p => ({uid: String(p.uid), label: String(p.label || ""), goal: Math.max(0, Math.round(+p.goal || 0))})) : [];
-  return {weekGoal: +d.weekGoal > 0 ? +d.weekGoal : DEFAULT_REPORT.weekGoal, people, carry, weekAdj,
+  return {weekGoal: +d.weekGoal > 0 ? +d.weekGoal : DEFAULT_REPORT.weekGoal, monthGoal: Math.max(0, Math.round(+d.monthGoal || 0)), people, carry, weekAdj,
     dealWeekGoal: Math.max(0, Math.round(+d.dealWeekGoal || 0)), dealMonthGoal: Math.max(0, Math.round(+d.dealMonthGoal || 0)), dealPeople};
 }
 /* 日報の1人に当たるアプリのメンバー（外した人も含む。外部の人は除く） */
@@ -3060,7 +3061,7 @@ async function buildReport(dayKey) {
     return {label: p.label, goal: p.goal, day, month, week};
   });
   const weekAdj = REPORT.weekAdj[w0k] || 0, week = rows.reduce((a, r) => a + r.week, 0) + weekAdj;
-  const monthTot = rows.reduce((a, r) => a + r.month, 0), goalTot = rows.reduce((a, r) => a + r.goal, 0), wg = REPORT.weekGoal;
+  const monthTot = rows.reduce((a, r) => a + r.month, 0), goalTot = REPORT.monthGoal || rows.reduce((a, r) => a + r.goal, 0), wg = REPORT.weekGoal;   // 月間目標は個人の目標の合計と合わなくてよい（社長 2026-11-04「目標設定と各メンバーの合計はまた別で考えたい」）
   const pct0 = wg ? Math.round(week / wg * 100) : 0, pct1 = goalTot ? (monthTot / goalTot * 100).toFixed(1) : "0.0";
   const mo = D.getMonth() + 1;
   const text = [`【${mo}月度】`, `${mo}月${D.getDate()}日（${WD[D.getDay()]}）`, "■獲得アポ数", ...rows.map(r => `${r.label} ${r.day}`),
@@ -3139,6 +3140,7 @@ const weekRow = (k, v) => `<div class="rpe-row rpw-row"><input class="rpw-k" typ
 function openReportEdit() {
   if (!isAdminMe()) { toast("設定を直せるのは管理者だけです"); return; }
   $("rpeWeek").value = REPORT.weekGoal;
+  $("rpeMonth").value = REPORT.monthGoal || "";
   $("rpePeople").innerHTML = REPORT.people.map(peopleRow).join("");
   $("rpeCarry").innerHTML = REPORT.carry.map(carryRow).join("");
   $("rpeWeekAdj").innerHTML = Object.entries(REPORT.weekAdj).sort().map(([k, v]) => weekRow(k, v)).join("");
@@ -3167,6 +3169,7 @@ $("rpeDlg").addEventListener("input", e => { if (e.target.classList.contains("rp
 $("rpeSave").onclick = () => {
   const weekGoal = +$("rpeWeek").value;
   if (!(weekGoal > 0)) { toast("週間目標を入れてください"); return; }
+  const monthGoal = Math.max(0, Math.round(+$("rpeMonth").value || 0));
   const people = [...$("rpePeople").querySelectorAll(".rpe-row")].map(r => ({
     label: r.querySelector(".rpe-l").value.trim(), goal: Math.max(0, Math.round(+r.querySelector(".rpe-g").value || 0)),
     match: r.querySelector(".rpe-m").value.split(/[・,、\s/／]+/).map(s => s.trim()).filter(Boolean)
@@ -3199,7 +3202,7 @@ $("rpeSave").onclick = () => {
   const shown = [...$("rpeDeal").querySelectorAll(".rpd-row")].map(r => ({uid: r.dataset.uid, label: r.querySelector(".rpd-l").value.trim(), goal: Math.max(0, Math.round(+r.querySelector(".rpd-g").value || 0))}));
   const dealPeople = shown.concat(REPORT.dealPeople.filter(p => !shown.some(s => s.uid === p.uid)));
   const b = $("rpeSave"); b.disabled = true;
-  setDoc(doc(db, "config", "report"), {weekGoal, people, carry, weekAdj, dealWeekGoal, dealMonthGoal, dealPeople, updatedAt: serverTimestamp(), updatedBy: U})
+  setDoc(doc(db, "config", "report"), {weekGoal, monthGoal, people, carry, weekAdj, dealWeekGoal, dealMonthGoal, dealPeople, updatedAt: serverTimestamp(), updatedBy: U})
     .then(() => { toast("日報の設定を保存しました"); closeReportEdit(); })   // 開いている日報は config/report の購読が作り直す
     .catch(e => toast(errMsg(e))).finally(() => { b.disabled = false; });
 };

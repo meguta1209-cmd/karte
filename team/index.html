@@ -28,7 +28,7 @@
   } catch (e) {}
 })();
 </script>
-<link rel="stylesheet" href="./style.css?v=85">
+<link rel="stylesheet" href="./style.css?v=86">
 <script>
 /* LINEの中のブラウザではGoogleログインが通らない（途中の情報を覚えておけない）。
    LINEは ?openExternalBrowser=1 を付けると Safari / Chrome で開き直してくれるので、自動で付け直す */
@@ -580,6 +580,8 @@
   <div class="ds-head"><h3 id="rpeTitle">日報の設定を直す</h3></div>
   <p class="ds-note">全体目標・個人コミットの累計は、アプリの集計そのままです。日報を出したあとに入ったアポは「繰り越し」で次の日の獲得アポ数に回せます（累計は変わりません）。</p>
   <div class="fld"><label for="rpeWeek">週間目標（毎週同じ件数）</label><input id="rpeWeek" type="number" inputmode="numeric" min="1"></div>
+  <div class="fld"><label for="rpeMonth">月間目標（全体・その月の件数）</label><input id="rpeMonth" type="number" inputmode="numeric" min="0" placeholder="空なら月の目標の合計"></div>
+  <p class="rep-hint">日報の「■全体目標」の数です。下の「月の目標」の合計と合っていなくても、この数を使います。0 か空なら、合計を使います。月が変わっても自動では変わらないので、月ごとに直してください。</p>
   <h4>名前と月の目標 <span class="aside">上から日報に出る順</span></h4>
   <p class="rep-hint">「アプリの名前」は、メンバーの名前がその字で始まれば同じ人として数えます（「・」で区切って複数OK。例：渡邊・渡邉）。アプリにいない人は0で出ます。</p>
   <div class="rpe-head"><span>日報の名前</span><span>月の目標</span><span>アプリの名前</span><span></span></div>
@@ -678,7 +680,7 @@
 <div class="offline" id="offline" hidden>オフライン中：つながったら送ります</div>
 <div class="toast" id="toast"></div>
 
-<script src="./breaktimer.js?v=85"></script>
-<script type="module" src="./app.js?v=85"></script>
+<script src="./breaktimer.js?v=86"></script>
+<script type="module" src="./app.js?v=86"></script>
 </body>
 </html>
