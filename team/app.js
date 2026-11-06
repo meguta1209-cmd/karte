@@ -346,6 +346,7 @@ function stopAll() {
 let listenDay = null;
 function startApp() {
   started = true;
+  if (csUid !== U) { $("calSearchIn").value = ""; csUid = U; }   // 同じ端末で別の人がログインした時に、前の人の番号を残さない。通信の張り直しでは消さない（v87）
   /* 架電と休憩のタイマー（v55）。音・ふるえは通知の設定に従う */
   if (window.BreakTimer && $("brkTimer")) window.BreakTimer.mount({timer: $("brkTimer"), bar: $("brkBar"), notify: k => { beep(k === "end" ? 3 : k === "call" ? 1 : 2); if ($("swVib").checked && navigator.vibrate) navigator.vibrate(k === "call" ? [150] : [200, 100, 200]); }});   // 休憩・昼明け＝2回、再開＝1回、稼働終了＝3回
   const recs = collection(db, "records");
@@ -382,6 +383,7 @@ function startApp() {
     rsMine = s.docs.map(recOf).filter(r => isRsWait(r) && r.memo && r.memo.when).sort((a, b) => a.memo.when - b.memo.when);
     if (curTab === "remind") renderRemind();
     if (curTab === "cal" && calMode === "me") renderMyRm();
+    if (curTab === "cal") renderCalSearch();
   }, onErr("リスケのリスト")));
   unsubs.push(() => { if (rsAllUnsub) rsAllUnsub(); rsAllUnsub = null; rsAll = null; });
   unsubs.push(onSnapshot(collection(db, "busy"), {includeMetadataChanges: true}, s => {   // サーバーの最新が届いたことも知りたいので
@@ -402,7 +404,7 @@ function startApp() {
      テスター指摘：r を付けないと再架電まで読んで8割むだ・無料枠の1日5万件に近づく） */
   unsubs.push(onSnapshot(query(recs, where("r", "==", "アポ"), where("memo.when", ">=", Timestamp.fromDate(addDays(today(), -35)))), s => {
     apoRecent = s.docs.map(recOf).filter(r => r.r === "アポ"); apoRecentLoaded = true;
-    updateRmDot(); if (curTab === "remind") renderRemind();
+    updateRmDot(); if (curTab === "remind") renderRemind(); if (curTab === "cal") renderCalSearch();
     if (detailRec && !$("recDetail").hidden) { const x = apoRecent.find(r => r.id === detailRec.id); if (x) { detailRec.res = x.res; detailRec.rsWait = x.rsWait; detailRec.slotId = x.slotId; renderResBox(detailRec); } }
   }, onErr("商談の結果")));
   startFeedback();
@@ -1063,7 +1065,9 @@ $("mSave").onclick = async () => {
       const cl = await bookSlot(rec, m, w, remind, edited);
       /* サーバーからの通知を待たずに、自分のカレンダーへすぐ出す */
       const sid = lastBookedSid || slotIdOf(w, cl);
-      slots = slots.filter(s => s.recId !== rec.id && s.id !== sid).concat([{id: sid, day: dk(w), time: hm(w), when: w, dur: lastBookedDur || APO_MIN, closer: cl, uid: rec.owner || U, recId: rec.id, shop: m.shop, tel: m.tel, text: m.text, info: m.info || "", ...(rec.pre ? {pre: true} : {})}]);
+      const nsl = {id: sid, day: dk(w), time: hm(w), when: w, dur: lastBookedDur || APO_MIN, closer: cl, uid: rec.owner || U, recId: rec.id, shop: m.shop, tel: m.tel, text: m.text, info: m.info || "", ...(rec.pre ? {pre: true} : {})};
+      keepSlot(rec.id, nsl);
+      slots = slots.filter(s => s.recId !== rec.id && s.id !== sid).concat([nsl]);
       if (curTab === "cal") renderCal();
       closeMemo();
       toast((rec.draft ? (rec.pre ? PRE_LABEL + "の案件として登録しました（KPIには数えません）" : "アポを登録しました（アポ+1）") : "保存しました。" + md(w) + " " + hm(w)) + "（クローザー " + CNAME(cl) + (rec.pre && rec.owner !== U ? "・獲得 " + nameOf(rec.owner) : "") + "）");
@@ -1254,7 +1258,9 @@ async function moveApo(recId, when, cands, forceSid, opt) {
     out = {closer: chosen, sid, base};
   });
   /* サーバーからの通知を待たずに、自分のカレンダーへすぐ出す */
-  slots = slots.filter(s => s.recId !== recId).concat([{...out.base, id: out.sid, day: dk(when), time: hm(when), when, closer: out.closer}]);
+  const nsl = {...out.base, id: out.sid, day: dk(when), time: hm(when), when, closer: out.closer};
+  keepSlot(recId, nsl);
+  slots = slots.filter(s => s.recId !== recId).concat([nsl]);
   if (curTab === "cal") renderCal();
   refreshHistSoon();
   return out;
@@ -1305,7 +1311,7 @@ async function rsUndoWait(id, raw, sraw, before) {
       res: {w: raw.memo.when, pre: b.pre || "", deal: b.deal || "", note: b.note || "", by: U, at: serverTimestamp()}});
     if (sraw) tx.set(doc(db, "slots", raw.slotId), sraw);
   });
-  if (sraw) { slots = slots.filter(s => s.recId !== id).concat([{...sraw, id: raw.slotId, when: tsd(sraw.when)}]); if (curTab === "cal") renderCal(); }
+  if (sraw) { const nsl = {...sraw, id: raw.slotId, when: tsd(sraw.when)}; keepSlot(id, nsl); slots = slots.filter(s => s.recId !== id).concat([nsl]); if (curTab === "cal") renderCal(); }
   resCache.clear(); refreshHistSoon();
 }
 /* 日程を決めた直後の［元に戻す］：もう一度 日程未定へ（元の日時・クローザーに戻して枠を消す）。②のリスケから前確を引き継いだときは、結果も書き直す */
@@ -1324,7 +1330,7 @@ async function rsBackToWait(id, old, oldC, before) {
     tx.update(recRef, {"memo.when": Timestamp.fromDate(old), "memo.closer": oldC, slotId: null, pending: false, rsWait: true, rsLog: (raw.rsLog || []).slice(0, -1)});
   });
   if (carried) await updateDoc(recRef, {res: {w: Timestamp.fromDate(old), pre: before.pre || "", deal: before.deal || "", note: before.note || "", by: U, at: serverTimestamp()}});
-  if (sid) { slots = slots.filter(s => s.id !== sid); if (curTab === "cal") renderCal(); }
+  if (sid) { slots = slots.filter(s => s.id !== sid); extraSlots = extraSlots.filter(s => s.id !== sid); if (curTab === "cal") renderCal(); }
   resCache.clear(); refreshHistSoon();
 }
 /* 結果で「リスケ」を押したときの3択（v85）。ここでは何も保存しない＝「やめる」は今のまま。カレンダーに枠を作れないアポ（canResched が false）は今まで通りその場で保存 */
@@ -1361,6 +1367,11 @@ const isSlotTime = d => d.getDay() !== 0 && d.getMinutes() % 30 === 0 && d.getHo
 const slotIdOf = (d, c) => dk(d) + "_" + pad(d.getHours()) + pad(d.getMinutes()) + "_" + c;
 let extraSlots = [];      // 過去の週を見るときに一度だけ読んだ分
 const allSlots = () => slots.concat(extraSlots.filter(x => !slots.some(s => s.id === x.id)));
+/* 枠を直した時（v87）：古い枠を過去の週の分から外す。新しい枠が枠の購読の範囲（7日前から）より前なら、購読で slots が置きかわると消えるので、過去の週の分にも入れておく */
+function keepSlot(recId, sl) {
+  extraSlots = extraSlots.filter(s => s.recId !== recId);
+  if (sl.day < dk(addDays(today(), -7))) extraSlots = extraSlots.concat([sl]);
+}
 function slotsAt(d, except) { const k = dk(d) + " " + hm(d); return allSlots().filter(s => s.day + " " + s.time === k && !(except && s.recId === except.id)); }
 /* Googleカレンダーの「予定あり」（時間だけ）。busy/{uid}.blocks = [{s, e}] */
 let busyMap = {};
@@ -1833,7 +1844,111 @@ function renderUndated() {
     box.querySelectorAll("button").forEach(x => x.onclick = () => openMemo(undated[+x.dataset.i]));
   }
   if (curTab === "cal" && calMode === "me") renderMyRm();   // 自分のリマインドの「日時なし」（v74）
+  if (curTab === "cal") renderCalSearch();   // renderCal からも来るので、枠・名簿・Googleの予定が変わっても結果が新しくなる（v87）
 }
+
+/* ---------- 電話番号で探す（v87・2026-11-05 社長「カウンターアプリのカレンダーに」電話番号検索欄）：
+   もう読んである予定の中だけを探す＝新しい購読を足さない（読むのは8〜35日前のアポを押した時の枠1件だけ）。見える範囲も今のカレンダーと同じ。
+   探す物：枠（7日前から＋開いた過去の週）／商談日が35日前からのアポで枠のある物／日時未定のアポ／外部の人の【商談】【契約】／
+   自分のリスケ（日程未定）／自分の再架電・予定（終わっていない物で過ぎて3日まで）。外部の人の分は係が昨日から書くので、それより前は無い。
+   出さない物：取り消したアポ・ほかの人のリスケ・営業結果シートだけの案件（どれもカレンダーに載らない）。ほかの人の再架電・予定はルールで読めない ---------- */
+const CS_MIN = 3, CS_MAX = 30;   // 3桁から探す。出すのは30件まで
+let csItems = [], csUid = null;
+/* 数字だけで比べる。全角・ハイフン・かっこは数字以外なので消える。国番号（+81・0081・頭の 81-）は 0 に読みかえる（(0) や 090 と続いても1つの 0） */
+function telDigits(s) {
+  return toHalf(s).replace(/\+81\)?\D*(?:0\)?\D*)?/, "0").replace(/^\D*(?:0081[-() .]*|81[-() .]+)(?:0\)?[-() .]*)?(?=(?:\D*\d){9})/, "0").replace(/\D/g, "");   // 0081 と 81- は頭で、後ろに9桁以上ある時だけ（06-1234-0081 を崩さない）
+}
+/* メモ・カレンダーの説明の中の電話番号（案件情報を貼ると、番号が電話の欄ではなくここに入ることがある）。
+   頭から数字を読んでいき、本当の番号の桁数（携帯など 020・050・060・070・080・090 は11桁、ほかは10桁）でちょうど終わる物だけ拾う。区切りは混ざっていてよい。
+   捨てる物：00 で始まる／「0」1桁で切れる／2桁で切れるのに 03・04・06 でない（05 1234…＝日付、00 1234…＝時刻）／改行をまたぐ／桁が余る。
+   迷ったら拾う（余計な行が1行増えるだけで、探せない方が困る。社内の受付番号など見分けられない物は残る） */
+const TEL_SEP = /[-\t .・\/_()]/;
+function telsInText(s) {
+  const t = toHalf(s).replace(/[─━‒⁃]/g, "-"), out = [];
+  const re = /\(?(?:(?:\+|00)81|81(?=[-\t .・\/_()]))\)?|\(?0/g;
+  const seps = p => { let n = 0; while (n < 3 && p < t.length && TEL_SEP.test(t[p])) { p++; n++; } return p; };
+  for (let m; (m = re.exec(t)); ) {
+    const prev = t.slice(0, m.index).trimEnd().slice(-1);
+    if (/\d/.test(t[m.index - 1] || "") || prev === "〒") continue;
+    let p = m.index + m[0].length, d = "0", first = 0;
+    if (m[0].indexOf("81") >= 0) { p = seps(p); if (t[p] === "0") p++; p = seps(p); }
+    while (p < t.length) {
+      const c = t[p];
+      if (/\d/.test(c)) { d += c; p++; if (d.length === (/^0[25-9]0/.test(d) ? 11 : 10)) break; continue; }
+      const q = seps(p);
+      if (q === p) break;
+      if (!first) first = d.length;
+      p = q;
+    }
+    const need = /^0[25-9]0/.test(d) ? 11 : 10;
+    if (d.length !== need || /\d/.test(t[p] || "") || d[1] === "0" || first === 1 || (first === 2 && !/^0[346]/.test(d))) continue;
+    out.push(t.slice(m.index, p));   // 読み終えた所まで飛ばない：「03/15 06-1234-5678」は 03/15 06-1234 を拾ったあと、続けて 06-1234-5678 も拾う
+  }
+  return out;
+}
+/* 枠がまだ読めていない過去のアポ（8〜35日前）を開く：商談の長さは枠にあるので、その枠を1件だけ読んでから詳細を出す（読み取り1件・押した時だけ） */
+async function openOldApo(r, now) {
+  if (slotOpening) return;
+  slotOpening = true;
+  try {
+    const s = await getDoc(doc(db, "slots", r.slotId));
+    if (s.exists() && !allSlots().some(x => x.id === s.id)) extraSlots = extraSlots.concat([{id: s.id, ...s.data(), when: tsd(s.data().when)}]);
+  } catch (_) {} finally { slotOpening = false; }
+  openDetail(r, {at: r.memo.when, past: r.memo.when < now});
+}
+function calSearchPool() {
+  const now = new Date(), out = [], seen = new Set(), recs = new Map(apoRecent.map(r => [r.id, r]));
+  const apoWho = (closer, uid) => [closer ? "クローザー " + CNAME(closer) : "", uid ? "獲得 " + nameOf(uid) : ""].filter(Boolean).join(" ・ ");
+  const memoTels = m => [m.tel, ...telsInText(m.text), ...telsInText(m.info)];
+  allSlots().forEach(s => {
+    if (!s.when) return;
+    const id = s.recId || s.id, m = (recs.get(id) || {}).memo || {};   // 枠と記録で番号が違っても、どちらでも見つかるように
+    seen.add(id);
+    out.push({when: s.when, kind: "アポ", shop: s.shop, who: apoWho(s.closer, s.uid) + (s.pre ? " ・ " + PRE_LABEL : ""), tels: [s.tel, ...telsInText(s.text), ...telsInText(s.info), ...memoTels(m)], open: () => openSlotDetail(s.when, [s], s.when < now)});
+  });
+  apoRecent.forEach(r => {
+    if (seen.has(r.id) || !r.slotId || r.canceled || isRsWait(r) || isSheetRec(r) || !r.memo || !r.memo.when) return;   // 枠がまだ読めていない過去のアポ（8〜35日前）
+    out.push({when: r.memo.when, kind: "アポ", shop: r.memo.shop, who: apoWho(r.memo.closer, r.uid), tels: memoTels(r.memo), open: () => openOldApo(r, now)});
+  });
+  undated.forEach(r => out.push({when: null, label: "未定", kind: "日時未定のアポ", shop: (r.memo || {}).shop, who: apoWho((r.memo || {}).closer, r.uid), tels: memoTels(r.memo || {}), open: () => openMemo(r)}));
+  rsMine.forEach(r => out.push({when: null, label: "未定", kind: "リスケ（日程未定）", shop: r.memo.shop, who: "元の日時 " + md(r.memo.when) + " " + hm(r.memo.when) + " ・ " + apoWho(r.memo.closer, r.uid), tels: memoTels(r.memo), open: () => openDetail(r)}));
+  visiblePending(pendMine).forEach(r => {
+    if (r.auto || (!r.isTask && r.r !== "再架電")) return;   // 自分のアポは上の枠で出している。自動の前確（まだ・留守）はそのアポと同じ物なので2行にしない（押すと同じ詳細）
+    out.push({when: r.memo.when, kind: r.r, task: !!r.isTask, shop: [r.title, r.memo.shop].filter(Boolean).join(" "), who: "担当 " + nameOf(r.uid), tels: memoTels(r.memo), open: () => openDetail(r)});
+  });
+  closerList().concat(viewList()).forEach(c => ((busyMap[c.id] || {}).deals || []).forEach(x => {
+    const d0 = new Date(x.s), d1 = new Date(x.s); d0.setHours(SLOT_H0, 0, 0, 0); d1.setHours(SLOT_H1, 0, 0, 0);
+    if (x.s.getDay() === 0 || x.s >= d1 || x.e <= d0) return;   // 日曜・営業時間の外の予定はカレンダーに出ないので、検索にも出さない
+    const tels = telsInText([x.t, x.p, x.m].join(" "));
+    if (tels.length) out.push({when: x.s, kind: dealKind(x), shop: dealShop(x), who: c.name + "さんのGoogleカレンダーの予定", tels, open: () => { dealIdx.deal_search = {...x, cid: c.id}; showDeal("deal_search"); }});
+  }));
+  return out;
+}
+function renderCalSearch() {
+  const box = $("calSearchOut"), raw = $("calSearchIn").value, q = telDigits(raw);
+  $("calSearchClear").hidden = !raw;
+  box.hidden = !raw.trim();
+  csItems = [];
+  if (box.hidden) { box.innerHTML = ""; return; }
+  if (q.length < CS_MIN) { box.innerHTML = `<p class="cs-note">番号を${CS_MIN}桁以上入れると探します（数字だけで比べます）。</p>`; return; }
+  const now = new Date(), cut = addDays(today(), apoRecentLoaded ? -35 : -7);
+  const hits = calSearchPool().map(it => ({...it, tel: it.tels.find(t => t && telDigits(t).includes(q))})).filter(it => it.tel);
+  /* 近い予定から → 日時なし → 過ぎた予定（新しい順） */
+  const rank = it => !it.when ? 1 : it.when >= now ? 0 : 2;
+  hits.sort((a, b) => rank(a) - rank(b) || (rank(a) === 0 ? a.when - b.when : rank(a) === 2 ? b.when - a.when : 0));
+  csItems = hits.slice(0, CS_MAX);
+  const rows = csItems.map((it, i) => {
+    const c = it.task ? TASK_COL[it.kind] || TASK_COL["その他"] : COL[it.kind] || {bg: "#E8EAED", fg: "#3C4043"}, past = it.when && it.when < now;
+    return `<div class="mr-item tap" role="button" tabindex="0" data-i="${i}" style="--c:${c.fg}"><span class="t num">${it.when ? md(it.when) + "<br>" + hm(it.when) : esc(it.label)}</span>
+      <span class="s"><span class="k" style="background:${c.bg};color:${c.fg}">${esc(it.kind)}</span>${esc(it.shop || "（店名なし）")}<small class="num">☎ ${esc(it.tel)}</small><small>${past ? "過ぎた予定 ・ " : ""}${esc(it.who)}</small></span></div>`;
+  }).join("");
+  box.innerHTML = `<div class="cs-head">${hits.length ? hits.length + "件見つかりました" + (hits.length > CS_MAX ? `（先に${CS_MAX}件を出しています。番号をもう少し入れてください）` : "") : "見つかりませんでした"}</div>` + rows +
+    `<p class="cs-note"><b>${md(cut)}より前のアポは探していません</b>（◀でその週を開くと、その週の分も探します）。自分の再架電・予定は、終わっていない物で過ぎて3日まで。外部の人のカレンダーの予定は昨日から。取り消した予定は出ません。</p>`;
+}
+$("calSearchIn").oninput = renderCalSearch;
+$("calSearchClear").onclick = () => { $("calSearchIn").value = ""; renderCalSearch(); $("calSearchIn").focus(); };
+$("calSearchOut").onclick = e => { const row = e.target.closest("[data-i]"); if (row && csItems[+row.dataset.i]) csItems[+row.dataset.i].open(); };
+$("calSearchOut").onkeydown = e => { if (e.key === "Enter") { const row = e.target.closest("[data-i]"); if (row && csItems[+row.dataset.i]) csItems[+row.dataset.i].open(); } };
 
 /* ============================================================
    リマインド・通知
@@ -1928,7 +2043,7 @@ function checkRusu(now) {
 const canEditTask = t => t.uid === U || t.by === U || (me && me.role === "admin");
 const itemLabel = r => r.isTask ? (r.title || r.r) : r.r;
 function todayMine() { const T = today(), E = addDays(T, 1); return visiblePending(pendMine).filter(r => r.memo.when >= T && r.memo.when < E).sort((a, b) => a.memo.when - b.memo.when); }
-function renderAfterPending() { renderNext(); if (curTab === "remind") renderRemind(); if (curTab === "cal" && calMode === "me") renderMyRm(); updateRmDot(); }
+function renderAfterPending() { renderNext(); if (curTab === "remind") renderRemind(); if (curTab === "cal" && calMode === "me") renderMyRm(); if (curTab === "cal") renderCalSearch(); updateRmDot(); }
 const isPastApo = (r, now) => !r.isTask && r.r === "アポ" && r.memo && r.memo.when && r.memo.when < now;   // 時刻を過ぎた商談（v78）
 function updateRmDot() {
   const now = new Date();
@@ -2459,7 +2574,7 @@ async function runCancel(kind) {
       if (!canErase(r)) return;
       await deleteRec({...raw, id: r.id, slotId: sraw ? raw.slotId : null});
     }
-    if (raw.slotId) { slots = slots.filter(s => s.id !== raw.slotId); if (curTab === "cal") renderCal(); }
+    if (raw.slotId) { slots = slots.filter(s => s.id !== raw.slotId); extraSlots = extraSlots.filter(s => s.id !== raw.slotId); if (curTab === "cal") renderCal(); }
     refreshHistSoon();
     toast(kind === "cx" ? "取り消しました（記録は「キャンセル」として残っています）" : "記録ごと消しました", "元に戻す", () => restoreCancel(kind, r.id, raw, sraw), 10000);
   } catch (e) { toast(errMsg(e)); }
@@ -2483,6 +2598,7 @@ async function restoreCancel(kind, id, raw, sraw) {
       if (sraw) tx.set(doc(db, "slots", raw.slotId), sraw);
     });
     deletedIds.delete(id);
+    if (sraw) loadPastWeek();   // 開いている過去の週の枠も戻す（v87。今の週ならここでは読まない）
     refreshHistSoon();
     toast("元に戻しました");
   } catch (e) { toast(e && e.message === "TAKEN" ? "その時間に別の商談が入ったため、戻せませんでした" : errMsg(e)); }
