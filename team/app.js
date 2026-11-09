@@ -2068,6 +2068,9 @@ function renderNext() {
 setInterval(() => { if (started) { renderNext(); updateRmDot(); } }, 60000);   // 商談の時間が来たら、赤い丸の「結果まだ」も1分以内に増やす（v66）
 
 /* v74：リマインドは自分の分だけ（「チーム全員」は外した。再架電と予定は本人だけが読める） */
+/* v88（2026-11-09 社長「任すで」→秘書がB案）：かたまりごとに30件までにしていたのを、30件の下の［もっと見る（残り○件）］で全部並べられるように。
+   もう読んである pendMine などを並べ直すだけ＝Firestore の読む回数は増えない。開いた・たたんだは画面を開いている間だけ覚える */
+const RM_MAX = 30, rmOpen = {};
 function renderRemind() {
   const now = new Date(), tmr = addDays(today(), 1);
   /* v78（社長 2026-10-22）：過ぎた商談は、結果が入るまで「過ぎている予定」に残し（35日まで・取った人とクローザー）、ボタンは［商談結果を入れる］。結果が入ったらすぐ消す */
@@ -2076,11 +2079,15 @@ function renderRemind() {
   const body = $("rmBody"); body.innerHTML = "";
   renderRsWait(body);    // リスケ（日程未定）（v85）
   renderResTodo(body);   // 商談の結果まだ（v66）
-  groups.forEach(([title, g]) => {
-    const h = document.createElement("h2"); h.innerHTML = `${title} <span class="aside">${g.length}件</span>`; body.appendChild(h);
-    const c = document.createElement("div"); c.className = "card";
-    if (!g.length) c.innerHTML = `<div class="empty">ありません</div>`;
-    g.slice(0, 30).forEach(r => {
+  groups.forEach(([title, g], gi) => {
+    const h = document.createElement("h2"); body.appendChild(h);
+    const c = document.createElement("div"); c.className = "card"; body.appendChild(c);
+    /* v88：［もっと見る］［たたむ］はこのかたまりだけ描き直す（renderRemind 全体だと「かけ済み」が読み直しに行くことがあるので呼ばない） */
+    const fill = () => {
+    const cut = g.length > RM_MAX && !rmOpen[gi];   // 30件で止めている時だけ true
+    h.innerHTML = `${title} <span class="aside">${g.length}件${cut ? `（${RM_MAX}件を表示中）` : ""}</span>`;
+    c.innerHTML = g.length ? "" : `<div class="empty">ありません</div>`;
+    (cut ? g.slice(0, RM_MAX) : g).forEach(r => {
       const late = r.memo.when < now, mine = r.uid === U;
       const row = document.createElement("div"); row.className = "rm" + (late ? " late" : "") + (r.isTask ? " task" : "");
       const head = r.isTask
@@ -2108,7 +2115,18 @@ function renderRemind() {
       row.onkeydown = e => { if (e.key === "Enter") openDetail(r); };
       c.appendChild(row);
     });
-    body.appendChild(c);
+    if (g.length > RM_MAX) {   // v88
+      const m = document.createElement("button"); m.type = "button"; m.className = "rm-more"; m.dataset.g = gi;
+      m.textContent = cut ? `もっと見る（残り${g.length - RM_MAX}件）` : `たたむ（${RM_MAX}件だけ表示）`;
+      m.onclick = () => {
+        rmOpen[gi] = !rmOpen[gi]; fill();
+        const b = c.querySelector(".rm-more");
+        if (b) { b.focus({preventScroll: true}); if (!rmOpen[gi] && b.scrollIntoView) b.scrollIntoView({block: "center"}); }   // 作り直したボタンに選択を戻す／たたんだら、ずっと下に取り残されないようにボタンの所へ
+      };
+      c.appendChild(m);
+    }
+    };
+    fill();
   });
   renderAsked(body);
   renderDone(body);
