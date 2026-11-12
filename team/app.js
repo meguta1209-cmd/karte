@@ -219,7 +219,7 @@ const RES_PRE = ["OK", "NG（受注後買取）", "NG", "リスケ", "キャン�
 /* 画面に出す前確の選択肢（社長 2026-10-16「前確の項目減らしてよくて、OKか、リスケか、キャンセルか留守かでいいよ！」）。
    ほかの値で入っているアポは、その値もボタンで出す（押すと外れる） */
 const RES_PRE_SHOW = ["OK", "リスケ", "キャンセル", "留守"];
-const RES_DEAL = ["受注", "成約予定", "失注", "リスケ", "飛び", "獲得不可", "再営"];   // 獲得不可（v81・社長 2026-10-23「これ最優先」）＝飛びと同じく商談数・受注率に入れず別に数える。成約予定（v73・社長「商談結果の項目に成約予定を追加して」）＝商談はした・まだ受注ではない。飛び（v75・社長 2026-10-20）＝お客さんが来なかった・つながらなかった＝実施に数えない
+const RES_DEAL = ["受注", "成約予定", "検討", "失注", "リスケ", "飛び", "獲得不可", "再営"];   // 検討（v89・社長 2026-11-12「アプリの商談結果入力欄に検討をいれて！！」）＝成約予定と同じ扱い：商談はした・受注には数えない。獲得不可（v81・社長 2026-10-23「これ最優先」）＝飛びと同じく商談数・受注率に入れず別に数える。成約予定（v73・社長「商談結果の項目に成約予定を追加して」）＝商談はした・まだ受注ではない。飛び（v75・社長 2026-10-20）＝お客さんが来なかった・つながらなかった＝実施に数えない
 const RES_WAIT = ["OK", "前確認待ち", "オンライン前確"];   // この前確のあとは、まだ商談の結果が要る（ほかの前確の結果は、それで終わり）
 const resOf = r => { const x = r && r.res, w = r && r.memo && r.memo.when; if (!x || !w) return null; const xw = tsd(x.w); return xw && +xw === +w ? x : null; };
 const resDue = r => !!r && !r.isTask && r.r === "アポ" && !!(r.memo && r.memo.when) && r.memo.when <= new Date();
@@ -243,7 +243,7 @@ const resPending = r => { if (!resDue(r) || r.canceled || isRsWait(r)) return fa
 const resCanceled = r => !!r.canceled || (resOf(r) || {}).pre === "キャンセル";
 /* 実施した商談（社長 2026-10-16「実施されたもののみ商談数にする」）＝②商談の結果が 受注・成約予定・失注・再営 のどれか（成約予定は v73。受注には数えない）。
    ②がリスケ・前確で終わったもの（NG・留守・キャンセル・リスケなど）・取り消したもの・結果まだ は数えない */
-const RES_DONE = ["受注", "成約予定", "失注", "再営"];
+const RES_DONE = ["受注", "成約予定", "検討", "失注", "再営"];   // 検討（v89）も実施に入れる
 const resHeld = r => !r.canceled && RES_DONE.includes((resOf(r) || {}).deal);
 let apoRecent = [], apoRecentLoaded = false;   // 商談日が35日前からのアポ（リマインドの「商談の結果まだ」用）
 /* 自分の「結果まだ」：自分が取った・自分がクローザーのアポ（管理者は全員分も「チーム全員」で見られる） */
@@ -2933,7 +2933,7 @@ async function renderTeleRes(a, b, pa, seq, rowUids) {
   const dd = (x, y) => x != null && y != null ? delta(x, y, "%") : `<span class="d flat">&nbsp;</span>`;
   $("tiles").insertAdjacentHTML("beforeend",
     tile("held", "商談率", pctTxt(rc.meet), `商談 ${c.held} ／ 商談日のアポ ${rc.den}${c.todo ? `（結果まだ ${c.todo}）` : ""}`, dd(rc.meet, rp.meet)) +
-    tile("won", "成約率", pctTxt(rc.close), `受注 ${c.won} ／ 商談 ${c.held}${c.plan ? `・成約予定 ${c.plan}` : ""}${few ? "　＊実施5件未満" : ""}`, dd(rc.close, rp.close)) +
+    tile("won", "成約率", pctTxt(rc.close), `受注 ${c.won} ／ 商談 ${c.held}${c.plan ? `・成約予定 ${c.plan}` : ""}${c.kentou ? `・検討 ${c.kentou}` : ""}${few ? "　＊実施5件未満" : ""}`, dd(rc.close, rp.close)) +
     tile("won", "アポからの成約率", pctTxt(rc.apoClose), `受注 ${c.won} ／ 商談日のアポ ${rc.den}`, dd(rc.apoClose, rp.apoClose)));
   /* 人ごとの表：商談・受注（成約予定）・商談率・成約率の列を足す。シートから来たアポの人は、行を足す */
   const all = list.filter(resDue), groups = new Set(rowUids);
@@ -2943,7 +2943,7 @@ async function renderTeleRes(a, b, pa, seq, rowUids) {
   ["商談", "受注", "商談率", "成約率"].forEach(h => { const th = document.createElement("th"); th.textContent = h; th.className = "tr-h"; th.title = "商談の日で数えます（左の「アポ」は取った日で数えるので、数が違います）"; head.appendChild(th); });
   const cell = (g, k, v) => v ? `<button type="button" class="res-n" data-g="${esc(g)}" data-k="${k}">${v}</button>` : `<span class="res-0">0</span>`;
   const cellsOf = (g, cc) => { const r = apRates(cc), f = cc.held < FEW_HELD;
-    return `<td>${cell(g, "held", cc.held)}</td><td>${cell(g, "won", cc.won)}${cc.plan ? `<small class="plan">予定${cc.plan}</small>` : ""}</td>` +
+    return `<td>${cell(g, "held", cc.held)}</td><td>${cell(g, "won", cc.won)}${cc.plan ? `<small class="plan">予定${cc.plan}</small>` : ""}${cc.kentou ? `<small class="plan">検討${cc.kentou}</small>` : ""}</td>` +
       `<td class="${f ? "few" : ""}">${pctTxt(r.meet)}${f && r.meet != null ? "＊" : ""}</td><td class="${f ? "few" : ""}"><b>${pctTxt(r.close)}</b>${f && r.close != null ? "＊" : ""}</td>`; };
   const byG = g => resCount(all.filter(r => apGroup(r) === g));
   [...tb.rows].slice(1).forEach(tr => {
@@ -2979,6 +2979,7 @@ const RES_KINDS = [   // [キー, 名前, 数え方]
   ["held", "実施", resHeld],
   ["won", "受注", r => !r.canceled && resDeal(r) === "受注"],
   ["plan", "成約予定", r => !r.canceled && resDeal(r) === "成約予定"],
+  ["kentou", "検討", r => !r.canceled && resDeal(r) === "検討"],   // v89（成約予定と同じ扱い＝実施に入れる・受注には入れない）
   ["lost", "失注", r => !r.canceled && resDeal(r) === "失注"],
   ["again", "再営", r => !r.canceled && resDeal(r) === "再営"],
   ["rs", "リスケ", r => !r.canceled && (resDeal(r) === "リスケ" || resPre(r) === "リスケ")],
@@ -2994,7 +2995,7 @@ const resRate = c => c.held ? (c.won / c.held * 100).toFixed(1) : "–";
 /* ---------- KPI：クローザー（v68・2026-10-16 社長「今月・今週・今日・昨日・期間指定のテレアポインターと同じ内容で…上の方でクローザーとテレアポを選べるようにして」） ----------
    テレアポと同じ作り：期間のボタン・メンバー（クローザー）・数字のタイル（前期比つき）・人ごとの表・日別（時間帯別）のグラフ・結果の内訳。
    数え方は v66 のまま（商談数＝実施＝②が受注・失注・再営。RES_KINDS）。商談日で数える。stats は読まない */
-const RES_CHIP = {won: ["受注", "#1F7256", "#FFFFFF"], plan: ["成約予定", "#D6EFE2", "#145A43"], lost: ["失注", "#B8392C", "#FFFFFF"], again: ["再営", "#1E4E86", "#FFFFFF"],
+const RES_CHIP = {won: ["受注", "#1F7256", "#FFFFFF"], plan: ["成約予定", "#D6EFE2", "#145A43"], kentou: ["検討", "#E3ECF7", "#1E4E86"], lost: ["失注", "#B8392C", "#FFFFFF"], again: ["再営", "#1E4E86", "#FFFFFF"],
   rs: ["リスケ", "#FBEFD2", "#8A5A00"], tobi: ["飛び", "#4A4F55", "#FFFFFF"], ng: ["獲得不可", "#7A2E1F", "#FFFFFF"], cx: ["キャンセル", "#E8EAED", "#3C4043"], todo: ["結果まだ", "#FFF3CD", "#8A5A00"]};
 const resChipK = k => { const c = RES_CHIP[k]; return `<span class="res" style="background:${c[1]};color:${c[2]}">${c[0]}</span>`; };
 /* 「外部」の1行（v71・2026-10-16 社長「石川、茂木以外のアポは全部外部としてまとめたい…アプリ上でわかったらいい」）。
@@ -3022,7 +3023,7 @@ async function renderCloserKpi(a, b, pa, days, seq) {
   resView = {list: due, label: (per ? per.textContent : "") + (member !== "all" ? "・クローザー " + groupName(member) : "")};
   const c = resCount(due), p = resCount(pdue), pr = p.held ? p.won / p.held * 100 : 0, cr = c.held ? c.won / c.held * 100 : 0;
   const tile = (k, lbl, v, u, d) => `<button type="button" class="card tile res-tile" data-k="${k}"><div class="k">${lbl}</div><div class="v">${v}<small>${u}</small></div>${d}</button>`;
-  $("resTiles").innerHTML = tile("held", "商談数（実施）", c.held, "件", delta(c.held, p.held)) + tile("won", "受注", c.won, "件", delta(c.won, p.won)) + tile("plan", "成約予定", c.plan, "件", delta(c.plan, p.plan)) +
+  $("resTiles").innerHTML = tile("held", "商談数（実施）", c.held, "件", delta(c.held, p.held)) + tile("won", "受注", c.won, "件", delta(c.won, p.won)) + tile("plan", "成約予定", c.plan, "件", delta(c.plan, p.plan)) + tile("kentou", "検討", c.kentou, "件", delta(c.kentou, p.kentou)) +
     `<div class="card tile"><div class="k">受注率</div><div class="v">${resRate(c)}<small>${c.held ? "%" : ""}</small></div>${c.held || p.held ? delta(cr, pr, "%") : `<span class="d flat">&nbsp;</span>`}</div>` +
     tile("lost", "失注", c.lost, "件", delta(c.lost, p.lost, "", true)) + tile("cx", "キャンセル", c.cx, "件", delta(c.cx, p.cx, "", true)) + tile("tobi", "飛び", c.tobi, "件", delta(c.tobi, p.tobi, "", true)) + tile("ng", "獲得不可", c.ng, "件", delta(c.ng, p.ng, "", true)) + tile("todo", "結果まだ", c.todo, "件", `<span class="d flat">&nbsp;</span>`);
   /* 人ごとの表：今の社内のクローザー全員（0件の人も）＋「外部」（それ以外のクローザーのアポ。0件でも出す・いちばん下）。各行を足すとチーム合計 */
@@ -3031,9 +3032,9 @@ async function renderCloserKpi(a, b, pa, days, seq) {
     .sort((x, y) => y.c.won - x.c.won || y.c.held - x.c.held || y.c.due - x.c.due)
     .concat([{g: EXT_G, c: resCount(all.filter(r => grp(r) === EXT_G))}]);
   const cell = (g, k, v) => v ? `<button type="button" class="res-n${k === "todo" ? " todo" : ""}" data-g="${esc(g)}" data-k="${k}">${v}</button>` : `<span class="res-0">0</span>`;
-  const KEYS = ["held", "won", "plan", "lost", "rs", "tobi", "ng", "cx"];
+  const KEYS = ["held", "won", "plan", "kentou", "lost", "rs", "tobi", "ng", "cx"];
   const tot = resCount(all);
-  $("resTable").innerHTML = `<tr><th>クローザー</th><th>商談数</th><th>受注</th><th>成約予定</th><th>失注</th><th>リスケ</th><th>飛び</th><th>獲得不可</th><th>キャンセル</th><th>受注率</th><th>結果まだ</th></tr>` +
+  $("resTable").innerHTML = `<tr><th>クローザー</th><th>商談数</th><th>受注</th><th>成約予定</th><th>検討</th><th>失注</th><th>リスケ</th><th>飛び</th><th>獲得不可</th><th>キャンセル</th><th>受注率</th><th>結果まだ</th></tr>` +
     rows.map(x => `<tr class="pick${x.g === U ? " me" : ""}" data-u="${esc(x.g)}" style="${member !== "all" && member !== x.g ? "opacity:.45" : ""}"><td class="name">${esc(groupName(x.g))}</td>${KEYS.map(k => `<td>${cell(x.g, k, x.c[k])}</td>`).join("")}<td><b>${resRate(x.c)}${x.c.held ? "%" : ""}</b></td><td>${cell(x.g, "todo", x.c.todo)}</td></tr>`).join("") +
     `<tr><td class="name">チーム合計</td>${KEYS.map(k => `<td>${cell("*", k, tot[k])}</td>`).join("")}<td><b>${resRate(tot)}${tot.held ? "%" : ""}</b></td><td>${cell("*", "todo", tot.todo)}</td></tr>`;
   /* 名前を押すとその人だけ（テレアポの表と同じ）。数字を押したときは一覧（resTable の click） */
@@ -3051,7 +3052,7 @@ async function renderCloserKpi(a, b, pa, days, seq) {
   drawChart(buckets, {int: true});
   /* 結果の内訳（商談の時間が来たアポの中で） */
   $("brkTitle").textContent = "商談の結果の内訳";
-  const keys = ["won", "plan", "lost", "again", "rs", "tobi", "ng", "cx", "todo"], total = Math.max(1, c.due), maxC = Math.max(1, ...keys.map(k => c[k]));
+  const keys = ["won", "plan", "kentou", "lost", "again", "rs", "tobi", "ng", "cx", "todo"], total = Math.max(1, c.due), maxC = Math.max(1, ...keys.map(k => c[k]));
   $("brk").innerHTML = keys.map(k => ({k, v: c[k]})).sort((x, y) => y.v - x.v).map(({k, v}) =>
     `<div class="row res-brk" data-k="${k}">${resChipK(k)}<div class="track"><i style="width:${v / maxC * 100}%"></i></div><span class="c">${v}</span><span class="p">${(v / total * 100).toFixed(1)}%</span></div>`).join("") +
     `<div class="brk-note">商談の時間が来たアポ ${c.due}件の中の内訳です（前確の留守などで終わったものは、ここには出ません）</div>`;
