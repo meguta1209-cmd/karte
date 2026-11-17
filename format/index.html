@@ -158,7 +158,7 @@ label.chk input:checked+span{color:var(--ink-3);text-decoration:line-through}
     <div id="tplList"></div>
     <div class="sec">新しい型を貼る</div>
     <div class="card">
-      <p class="warnline">お客さんの情報が入っていない、まっさらなフォーマットを貼ってください（型として端末に保存されます）。</p>
+      <p class="warnline">お客さんの情報が入っていない、まっさらなフォーマットを貼ってください（［入力フォームにする］を押すと、型として端末に自動で保存されます）。</p>
       <textarea class="paste" id="src" placeholder="上位店から来たフォーマットの文を、丸ごとここに貼ってください。&#10;&#10;例）&#10;【お客様情報】&#10;● 代表者名&#10;● 電話番号&#10;決済端末：□あり □なし" autocapitalize="off" autocomplete="off" spellcheck="false"></textarea>
       <div class="row" style="margin-top:10px">
         <button type="button" class="btn small" id="pasteBtn">貼り付け</button>
@@ -205,8 +205,8 @@ label.chk input:checked+span{color:var(--ink-3);text-decoration:line-through}
 </div>
 <div class="toast" id="toast" hidden></div>
 
-<script src="./parse.js?v=2"></script>
-<script src="./app.js?v=2"></script>
+<script src="./parse.js?v=3"></script>
+<script src="./app.js?v=3"></script>
 <script>
 if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("./sw.js").catch(() => {});
 </script>

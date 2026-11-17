@@ -52,7 +52,7 @@
         <button type="button" class="t" data-act="use"><b>${esc(t.name)}</b><small>${esc(fmtDate(t.at))}・項目 ${P.parse(t.src, t.tw).fields.length}</small></button>
         <button type="button" class="btn small" data-act="ren">名前</button>
         <button type="button" class="btn small" data-act="del">消す</button></div>`).join("")
-      : `<div class="empty">まだありません。下に貼って［入力フォームにする］→［型を保存］で、次から選ぶだけで使えます。</div>`;
+      : `<div class="empty">まだありません。下に貼って［入力フォームにする］を押すと、その型がここに残ります。次からは選ぶだけで使えます。</div>`;
   }
   const fmtDate = ms => { const d = new Date(ms || 0); return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()} 保存`; };
   $("tplList").onclick = async e => {
@@ -81,8 +81,19 @@
     const s = $("src").value;
     if (!s.trim()) { toast("フォーマットの文を貼ってください"); $("src").focus(); return; }
     if (hasValues() && !confirm("入れた値を消して、新しい型にしますか？")) return;
-    open(s, {}, null, "");
+    /* 一度使った型は自動で一覧に残す（v3・社長 11/18「型だけ自動で保存」）。入れた値は今まで通り保存しない */
+    const a = loadTpls(), same = a.find(x => x.src.trim() === s.trim());
+    if (same) { open(same.src, same.tw, same.id, same.name); toast(`保存済みの型「${same.name}」で開きました`); return; }
+    const pii = piiIn(s);
+    if (pii && !confirm(`貼った文に、お客さんの情報（「${pii}」など）が入っていませんか？\n型は、貼った文ごとこの端末に保存されます。\n\n型として保存しますか？\n（［キャンセル］なら保存せずにフォームだけ開きます）`)) { open(s, {}, null, ""); toast("型は保存していません"); return; }
+    const t = {id: "t" + Date.now().toString(36), name: uniqName(a, firstLine(s)), src: s, tw: {}, at: Date.now()};
+    a.unshift(t);
+    if (saveTpls(a)) { open(t.src, t.tw, t.id, t.name); toast(`型を「${t.name}」で保存しました（名前は①の一覧で変えられます）`); }
+    else open(s, {}, null, "");
   };
+  function piiIn(s) { const m = /0\d{1,4}[-ー\s]\d{1,4}[-ー\s]\d{3,4}|0[789]0\d{8}|[\w.+-]+@[\w-]+\.[\w.-]+|〒?\s*\d{3}[-ー]\d{4}/.exec(s.normalize("NFKC")); return m ? m[0] : null; }   // 全角の数字・＠も（テスター R2）
+  function firstLine(s) { return (s.split("\n").find(l => l.trim()) || "").trim().replace(/^[【＜<■●・]+|[】＞>]+$/g, "").slice(0, 24) || "名前なしの型"; }
+  function uniqName(a, n) { if (!a.some(x => x.name === n)) return n; let i = 2; while (a.some(x => x.name === `${n}（${i}）`)) i++; return `${n}（${i}）`; }
   $("pasteBtn").onclick = async () => {
     try { const t = await navigator.clipboard.readText(); if (t) { $("src").value = t; toast("貼りました"); } else toast("コピーした文がありません"); }
     catch (_) { $("src").focus(); toast("欄を長押しして「ペースト」を選んでください"); }
