@@ -94,6 +94,12 @@
     toast("見本を入れました");
   };
 
+  $("srcClearBtn").onclick = () => {
+    if (!$("src").value) { toast("消す文はありません"); return; }
+    if (!confirm("貼った文を全部消しますか？（保存した型はそのまま）")) return;
+    $("src").value = ""; $("src").focus(); toast("消しました");
+  };
+
   /* ---------- ② 入力 ---------- */
   function reparse() { st.model = P.parse(st.src, st.tw); }
   const typeAttr = f => {

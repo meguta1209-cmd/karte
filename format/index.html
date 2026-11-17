@@ -161,9 +161,12 @@ label.chk input:checked+span{color:var(--ink-3);text-decoration:line-through}
       <p class="warnline">お客さんの情報が入っていない、まっさらなフォーマットを貼ってください（型として端末に保存されます）。</p>
       <textarea class="paste" id="src" placeholder="上位店から来たフォーマットの文を、丸ごとここに貼ってください。&#10;&#10;例）&#10;【お客様情報】&#10;● 代表者名&#10;● 電話番号&#10;決済端末：□あり □なし" autocapitalize="off" autocomplete="off" spellcheck="false"></textarea>
       <div class="row" style="margin-top:10px">
-        <button type="button" class="btn primary" id="toForm" style="flex:1">入力フォームにする</button>
         <button type="button" class="btn small" id="pasteBtn">貼り付け</button>
         <button type="button" class="btn small" id="sampleBtn">見本</button>
+        <button type="button" class="btn small" id="srcClearBtn">クリア</button>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <button type="button" class="btn primary" id="toForm" style="flex:1">入力フォームにする</button>
       </div>
       <p class="note">入れた内容（お客さんの情報）は、この端末の中だけで使います。どこにも送りません。保存するのは「型」（貼った文）だけです。</p>
     </div>
@@ -202,8 +205,8 @@ label.chk input:checked+span{color:var(--ink-3);text-decoration:line-through}
 </div>
 <div class="toast" id="toast" hidden></div>
 
-<script src="./parse.js?v=1"></script>
-<script src="./app.js?v=1"></script>
+<script src="./parse.js?v=2"></script>
+<script src="./app.js?v=2"></script>
 <script>
 if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("./sw.js").catch(() => {});
 </script>
