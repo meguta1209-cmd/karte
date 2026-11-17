@@ -52,7 +52,7 @@
         <button type="button" class="t" data-act="use"><b>${esc(t.name)}</b><small>${esc(fmtDate(t.at))}・項目 ${P.parse(t.src, t.tw).fields.length}</small></button>
         <button type="button" class="btn small" data-act="ren">名前</button>
         <button type="button" class="btn small" data-act="del">消す</button></div>`).join("")
-      : `<div class="empty">まだありません。下に貼って［入力フォームにする］を押すと、その型がここに残ります。次からは選ぶだけで使えます。</div>`;
+      : `<div class="empty">まだありません。①の画面で型を貼って［入力フォームにする］を押すと、その型がここに残ります。次からは選ぶだけで使えます。</div>`;
   }
   const fmtDate = ms => { const d = new Date(ms || 0); return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()} 保存`; };
   $("tplList").onclick = async e => {
@@ -60,7 +60,7 @@
     const id = b.closest("[data-id]").dataset.id, a = loadTpls(), t = a.find(x => x.id === id); if (!t) return;
     if (b.dataset.act === "use") {
       if (hasValues() && !confirm("入れた値を消して、この型にしますか？")) return;
-      open(t.src, t.tw, t.id, t.name);
+      closeDrawer(); open(t.src, t.tw, t.id, t.name);
     } else if (b.dataset.act === "ren") {
       const n = await ask("型の名前を変える", t.name, "変える"); if (!n) return;
       t.name = n; saveTpls(a); if (st.tplId === id) { st.tplName = n; $("title").textContent = n; } renderTpls();
@@ -69,6 +69,13 @@
       saveTpls(a.filter(x => x.id !== id)); if (st.tplId === id) st.tplId = null; renderTpls(); toast("消しました");
     }
   };
+  /* 保存した型の一覧は左上の☰から出す（v4・社長 11/18「ハンバーガーメニューで表示」） */
+  function openDrawer() { renderTpls(); $("dScrim").hidden = $("drawer").hidden = false; $("menuBtn").setAttribute("aria-expanded", "true"); $("drawer").scrollTop = 0; }
+  function closeDrawer() { $("dScrim").hidden = $("drawer").hidden = true; $("menuBtn").setAttribute("aria-expanded", "false"); }
+  $("menuBtn").onclick = () => $("drawer").hidden ? openDrawer() : closeDrawer();
+  $("drawerClose").onclick = $("dScrim").onclick = closeDrawer;
+  document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("drawer").hidden && $("dlg").hidden) closeDrawer(); });
+
   function open(src, tw, id, name) {
     st.src = src; st.tw = JSON.parse(JSON.stringify(tw || {})); st.tplId = id || null; st.tplName = name || ""; st.dirty = !id;
     st.values = {}; st.checked = {}; st.withList = false; st.fix = false;
@@ -86,9 +93,9 @@
     if (same) { open(same.src, same.tw, same.id, same.name); toast(`保存済みの型「${same.name}」で開きました`); return; }
     const pii = piiIn(s);
     if (pii && !confirm(`貼った文に、お客さんの情報（「${pii}」など）が入っていませんか？\n型は、貼った文ごとこの端末に保存されます。\n\n型として保存しますか？\n（［キャンセル］なら保存せずにフォームだけ開きます）`)) { open(s, {}, null, ""); toast("型は保存していません"); return; }
-    const t = {id: "t" + Date.now().toString(36), name: uniqName(a, firstLine(s)), src: s, tw: {}, at: Date.now()};
+    const t = {id: "t" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), name: uniqName(a, firstLine(s)), src: s, tw: {}, at: Date.now()};
     a.unshift(t);
-    if (saveTpls(a)) { open(t.src, t.tw, t.id, t.name); toast(`型を「${t.name}」で保存しました（名前は①の一覧で変えられます）`); }
+    if (saveTpls(a)) { open(t.src, t.tw, t.id, t.name); toast(`型を「${t.name}」で保存しました（名前は左上の☰で変えられます）`); }
     else open(s, {}, null, "");
   };
   function piiIn(s) { const m = /0\d{1,4}[-ー\s]\d{1,4}[-ー\s]\d{3,4}|0[789]0\d{8}|[\w.+-]+@[\w-]+\.[\w.-]+|〒?\s*\d{3}[-ー]\d{4}/.exec(s.normalize("NFKC")); return m ? m[0] : null; }   // 全角の数字・＠も（テスター R2）
@@ -264,7 +271,7 @@
     if (pii && !confirm(`貼った文に、お客さんの情報（「${pii[0]}」など）が入っていませんか？\n型は、貼った文ごとこの端末に保存されます。\n\nこのまま保存しますか？`)) return;
     const first = (st.src.split("\n").find(l => l.trim()) || "").trim().replace(/^[【＜<■●・]+|[】＞>]+$/g, "").slice(0, 24);
     const n = await ask("型の名前（例 USEN PAY 個人事業主）", first, "保存"); if (!n) return;
-    const t = {id: "t" + Date.now().toString(36), name: n, src: st.src, tw: st.tw, at: Date.now()};
+    const t = {id: "t" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), name: n, src: st.src, tw: st.tw, at: Date.now()};
     a.unshift(t);
     if (saveTpls(a)) { st.tplId = t.id; st.tplName = n; st.dirty = false; $("title").textContent = n; renderForm(); toast("保存しました（入れた値は保存していません）"); }
   };

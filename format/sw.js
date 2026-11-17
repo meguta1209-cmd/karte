@@ -1,9 +1,9 @@
 /* フォーマット入力 — オフライン用（karte/format/ 専用）
    アプリを更新したら CACHE の数字を1つ上げ、index.html の parse.js?v= と app.js?v= も同じ数字にすること。
    消すのは自分の接頭辞（format-v）の古い物だけ（同じサイトのほかのアプリのキャッシュには触らない） */
-const VER = "format-v3";
+const VER = "format-v4";
 const CACHE = VER + "@" + new URL("./", self.location).pathname;
-const ASSETS = ["./", "./index.html", "./parse.js?v=3", "./app.js?v=3", "./manifest.webmanifest", "./icons/icon-180.png", "./icons/icon-192.png", "./icons/icon-512.png"];
+const ASSETS = ["./", "./index.html", "./parse.js?v=4", "./app.js?v=4", "./manifest.webmanifest", "./icons/icon-180.png", "./icons/icon-192.png", "./icons/icon-512.png"];
 
 self.addEventListener("install", e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)).then(() => self.skipWaiting()).catch(() => self.skipWaiting()));

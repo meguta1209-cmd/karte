@@ -138,12 +138,19 @@ label.chk input:checked+span{color:var(--ink-3);text-decoration:line-through}
 .dlg{position:fixed;left:16px;right:16px;top:20vh;z-index:51;max-width:460px;margin:0 auto;background:var(--surface);border-radius:16px;padding:16px;box-shadow:var(--shadow)}
 .dlg h3{margin:0 0 10px;font-size:16px}
 .dlg input{width:100%;border:1px solid var(--line);border-radius:10px;background:var(--surface-2);padding:10px 12px;font-size:16px;min-height:46px;margin-bottom:12px}
+/* 保存した型の一覧（左から出るメニュー。v4） */
+.menu-btn{appearance:none;border:1px solid var(--line);background:var(--surface);color:var(--ink);width:40px;height:40px;border-radius:10px;display:grid;place-items:center;flex:none;padding:0}
+.dscrim{position:fixed;inset:0;background:var(--scrim);z-index:40}
+.drawer{position:fixed;top:0;bottom:0;left:0;width:min(86vw,380px);z-index:41;background:var(--ground);box-shadow:0 0 40px rgba(0,0,0,.25);overflow-y:auto;-webkit-overflow-scrolling:touch;padding:calc(12px + env(safe-area-inset-top)) 14px calc(20px + env(safe-area-inset-bottom))}
+.drawer .dhead{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:4px}
+.drawer .dhead b{font-size:16px}
+.drawer .tpl{flex-wrap:wrap}
 .toast{position:fixed;left:50%;bottom:calc(84px + env(safe-area-inset-bottom));transform:translateX(-50%);background:var(--ink);color:var(--ground);font-size:13.5px;font-weight:600;padding:9px 14px;border-radius:999px;z-index:60;max-width:90vw;text-align:center}
 </style>
 </head>
 <body>
 <header class="topbar"><div class="topbar-in">
-  <div class="brand"><b id="title">フォーマット入力</b><span class="chip" id="left" hidden></span></div>
+  <div class="brand"><button type="button" class="menu-btn" id="menuBtn" aria-label="保存した型の一覧" aria-expanded="false" aria-controls="drawer"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></svg></button><b id="title">フォーマット入力</b><span class="chip" id="left" hidden></span></div>
   <nav class="tabs" aria-label="画面">
     <button type="button" data-go="fmt" aria-pressed="true">① 型を貼る</button>
     <button type="button" data-go="form" aria-pressed="false" disabled>② 入力</button>
@@ -154,9 +161,8 @@ label.chk input:checked+span{color:var(--ink-3);text-decoration:line-through}
 <main class="wrap">
   <!-- ① 型 -->
   <section id="vFmt">
-    <div class="sec">保存した型</div>
-    <div id="tplList"></div>
     <div class="sec">新しい型を貼る</div>
+    <p class="note" style="margin:0 2px">前に使った型は、左上の［☰］から選べます。</p>
     <div class="card">
       <p class="warnline">お客さんの情報が入っていない、まっさらなフォーマットを貼ってください（［入力フォームにする］を押すと、型として端末に自動で保存されます）。</p>
       <textarea class="paste" id="src" placeholder="上位店から来たフォーマットの文を、丸ごとここに貼ってください。&#10;&#10;例）&#10;【お客様情報】&#10;● 代表者名&#10;● 電話番号&#10;決済端末：□あり □なし" autocapitalize="off" autocomplete="off" spellcheck="false"></textarea>
@@ -197,6 +203,11 @@ label.chk input:checked+span{color:var(--ink-3);text-decoration:line-through}
   <button type="button" class="btn primary" id="barMain">できた文を見る</button>
 </div></div>
 
+<div class="dscrim" id="dScrim" hidden></div>
+<aside class="drawer" id="drawer" aria-label="保存した型" hidden>
+  <div class="dhead"><b>保存した型</b><button type="button" class="btn small" id="drawerClose">閉じる</button></div>
+  <div id="tplList"></div>
+</aside>
 <div class="scrim" id="scrim" hidden></div>
 <div class="dlg" id="dlg" role="dialog" aria-modal="true" hidden>
   <h3 id="dlgT">型の名前</h3>
@@ -205,8 +216,8 @@ label.chk input:checked+span{color:var(--ink-3);text-decoration:line-through}
 </div>
 <div class="toast" id="toast" hidden></div>
 
-<script src="./parse.js?v=3"></script>
-<script src="./app.js?v=3"></script>
+<script src="./parse.js?v=4"></script>
+<script src="./app.js?v=4"></script>
 <script>
 if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("./sw.js").catch(() => {});
 </script>
