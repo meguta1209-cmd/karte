@@ -1,0 +1,17 @@
+{
+  "name": "フォーマット入力",
+  "short_name": "フォーマット入力",
+  "description": "フォーマットの文を丸ごと貼ると入力フォームに変わる。入れた内容は端末の中だけ",
+  "lang": "ja",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#EEF0EC",
+  "theme_color": "#0E7C5A",
+  "icons": [
+    { "src": "./icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "./icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "./icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

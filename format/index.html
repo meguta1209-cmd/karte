@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>フォーマット入力</title>
+<meta name="description" content="上位店などから来たフォーマット文を丸ごと貼ると、入力フォームに変わる。入れた内容は端末の中だけ">
+<meta name="theme-color" content="#EEF0EC" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0F1412" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="フォーマット入力">
+<meta name="format-detection" content="telephone=no">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="apple-touch-icon" href="./icons/icon-180.png">
+<link rel="icon" href="./icons/icon-192.png">
+<style>
+/* フォーマット入力 — 2026-11-17。色は落ち着いた灰緑の地＋深い緑1色を操作色に。出力は等幅 */
+:root{
+  --ground:#EEF0EC;--surface:#FFFFFF;--surface-2:#F5F7F3;--sunken:#E4E8E2;
+  --line:rgba(18,28,22,.14);--line-soft:rgba(18,28,22,.07);
+  --ink:#121A15;--ink-2:#55615A;--ink-3:#89948D;
+  --accent:#0E7C5A;--accent-ink:#FFFFFF;--accent-soft:#DCEFE6;--accent-line:rgba(14,124,90,.38);
+  --warn:#8F5300;--warn-soft:#FBEBCF;--warn-line:rgba(201,128,20,.55);
+  --bad:#B3261E;--bad-soft:#FBE3E1;
+  --bar:rgba(255,255,255,.9);--scrim:rgba(8,12,10,.46);
+  --shadow:0 1px 2px rgba(18,28,22,.05),0 10px 28px rgba(18,28,22,.08);
+  --sans:-apple-system,BlinkMacSystemFont,"Hiragino Kaku Gothic ProN","Hiragino Sans","Yu Gothic Medium",Meiryo,system-ui,sans-serif;
+  --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,"Roboto Mono",monospace;
+  --r:14px;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --ground:#0F1412;--surface:#171E1B;--surface-2:#1C2421;--sunken:#111815;
+    --line:rgba(190,210,198,.17);--line-soft:rgba(190,210,198,.09);
+    --ink:#E7EEEA;--ink-2:#9FAEA6;--ink-3:#6E7C75;
+    --accent:#45C79A;--accent-ink:#04140D;--accent-soft:rgba(69,199,154,.15);--accent-line:rgba(69,199,154,.45);
+    --warn:#E9B265;--warn-soft:rgba(233,178,101,.14);--warn-line:rgba(233,178,101,.55);
+    --bad:#FF8A80;--bad-soft:rgba(255,138,128,.14);
+    --bar:rgba(23,30,27,.9);--scrim:rgba(3,6,5,.62);
+    --shadow:0 1px 2px rgba(0,0,0,.3),0 10px 28px rgba(0,0,0,.34);
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#0F1412;--surface:#171E1B;--surface-2:#1C2421;--sunken:#111815;
+  --line:rgba(190,210,198,.17);--line-soft:rgba(190,210,198,.09);
+  --ink:#E7EEEA;--ink-2:#9FAEA6;--ink-3:#6E7C75;
+  --accent:#45C79A;--accent-ink:#04140D;--accent-soft:rgba(69,199,154,.15);--accent-line:rgba(69,199,154,.45);
+  --warn:#E9B265;--warn-soft:rgba(233,178,101,.14);--warn-line:rgba(233,178,101,.55);
+  --bad:#FF8A80;--bad-soft:rgba(255,138,128,.14);
+  --bar:rgba(23,30,27,.9);--scrim:rgba(3,6,5,.62);
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 10px 28px rgba(0,0,0,.34);
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--sans);font-size:16px;line-height:1.6;padding-bottom:calc(100px + env(safe-area-inset-bottom))}
+button,input,textarea,select{font:inherit;color:inherit}
+button{cursor:pointer}
+[hidden]{display:none!important}
+.wrap{max-width:620px;margin:0 auto;padding:0 16px}
+
+/* 上のバー */
+.topbar{position:sticky;top:0;z-index:30;background:var(--bar);-webkit-backdrop-filter:saturate(180%) blur(14px);backdrop-filter:saturate(180%) blur(14px);border-bottom:1px solid var(--line-soft);padding:10px 16px 8px;padding-top:calc(10px + env(safe-area-inset-top))}
+.topbar-in{max-width:620px;margin:0 auto}
+.brand{display:flex;align-items:center;gap:8px;min-width:0}
+.brand b{font-size:15px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0}
+.chip{font-family:var(--mono);font-size:11.5px;font-weight:600;padding:4px 9px;border-radius:999px;white-space:nowrap;background:var(--warn-soft);color:var(--warn)}
+.chip.done{background:var(--accent-soft);color:var(--accent)}
+.tabs{display:flex;gap:6px;margin-top:8px}
+.tabs button{flex:1;appearance:none;border:1px solid var(--line);background:var(--surface);color:var(--ink-2);font-size:13.5px;font-weight:700;padding:8px 6px;border-radius:10px}
+.tabs button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.tabs button:disabled{opacity:.4}
+
+/* かたまり */
+.sec{margin:18px 0 8px;font-size:12.5px;font-weight:700;color:var(--ink-2);letter-spacing:.04em}
+.card{background:var(--surface);border:1px solid var(--line-soft);border-radius:var(--r);box-shadow:var(--shadow);padding:14px;margin:10px 0}
+.note{font-size:12.5px;color:var(--ink-3);margin:6px 2px}
+.btn{appearance:none;border:1px solid var(--line);background:var(--surface);color:var(--ink);font-weight:700;font-size:14px;padding:10px 14px;border-radius:11px;min-height:44px}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.warn{background:var(--warn-soft);border-color:var(--warn-line);color:var(--warn)}
+.btn.small{font-size:12.5px;padding:6px 10px;min-height:40px;border-radius:9px;font-weight:600;color:var(--ink-2)}
+.btn.block{width:100%}
+.btn:active{filter:brightness(.95)}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+textarea.paste{width:100%;min-height:42vh;border:1px solid var(--line);border-radius:12px;background:var(--surface-2);padding:12px;font-family:var(--mono);font-size:13.5px;line-height:1.55;resize:vertical}
+.tpl{display:flex;align-items:center;gap:10px}
+.tpl .t{flex:1;min-width:0;appearance:none;border:0;background:none;text-align:left;padding:4px 0}
+.tpl .t b{display:block;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tpl .t small{color:var(--ink-3);font-size:12px}
+.warnline{margin:0 0 10px;font-size:13px;font-weight:700;color:var(--warn);background:var(--warn-soft);border-radius:10px;padding:8px 10px}
+.empty{color:var(--ink-3);font-size:13.5px;padding:6px 2px}
+
+/* 入力 */
+.head{margin:20px 2px 4px;font-size:14px;font-weight:800;color:var(--accent);border-left:4px solid var(--accent);padding-left:8px;line-height:1.4}
+.head.made{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.head.made .btn{color:var(--ink-2)}
+.txt{font-size:12.5px;color:var(--ink-3);margin:4px 4px;white-space:pre-wrap;word-break:break-all}
+.txt.made{display:flex;gap:8px;align-items:center;justify-content:space-between}
+.f{background:var(--surface);border:1px solid var(--line-soft);border-left:4px solid var(--warn-line);border-radius:12px;padding:10px 12px 12px;margin:8px 0;box-shadow:var(--shadow)}
+.f.ok{border-left-color:var(--accent)}
+.f.soft{border-left-color:var(--line)}
+.f.skip{opacity:.5;border-left-color:var(--line)}
+.f label.lb,.f .lb{display:block;font-size:14px;font-weight:700;margin-bottom:2px}
+.f .lb .req{font-size:11px;font-weight:700;color:var(--bad);background:var(--bad-soft);border-radius:6px;padding:1px 6px;margin-left:6px;vertical-align:1px}
+.f .lb .opt{font-size:11px;font-weight:700;color:var(--ink-2);background:var(--sunken);border-radius:6px;padding:1px 6px;margin-left:6px;vertical-align:1px}
+.f .hint{font-size:12px;color:var(--ink-3);margin-bottom:6px}
+.f input[type=text],.f input[type=tel],.f input[type=email],.f input[type=date],.f input[type=time],.f textarea{width:100%;border:1px solid var(--line);border-radius:10px;background:var(--surface-2);padding:10px 12px;font-size:16px;min-height:46px}
+.f textarea{min-height:84px;resize:vertical}
+.f input:focus,.f textarea:focus,textarea.paste:focus{outline:2px solid var(--accent-line);outline-offset:1px;border-color:var(--accent)}
+.opts{display:flex;flex-wrap:wrap;gap:8px;margin-top:4px}
+.opts button{appearance:none;border:1px solid var(--line);background:var(--surface-2);color:var(--ink);font-size:14.5px;font-weight:600;padding:9px 14px;border-radius:999px;min-height:44px}
+.opts button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.other{margin-top:8px}
+.fix{margin-top:10px;padding-top:10px;border-top:1px dashed var(--line);display:grid;gap:8px}
+.fix input{width:100%;border:1px solid var(--line);border-radius:9px;background:var(--surface-2);padding:8px 10px;font-size:15px;min-height:40px}
+label.chk{display:flex;align-items:center;gap:10px;padding:9px 12px;margin:4px 0;background:var(--surface);border:1px solid var(--line-soft);border-radius:10px;font-size:14.5px;min-height:44px}
+label.chk input{width:22px;height:22px;flex:none;accent-color:var(--accent)}
+label.chk input:checked+span{color:var(--ink-3);text-decoration:line-through}
+.switch{display:flex;align-items:center;gap:10px;font-size:13.5px;color:var(--ink-2);margin-top:8px}
+.switch input{width:22px;height:22px;accent-color:var(--accent)}
+
+/* できた文 */
+.out{font-family:var(--mono);font-size:13.5px;line-height:1.65;white-space:pre-wrap;word-break:break-all;background:var(--surface);border:1px solid var(--line-soft);border-radius:12px;padding:12px;box-shadow:var(--shadow)}
+.out mark{background:var(--warn-soft);color:var(--warn);border-bottom:2px solid var(--warn-line);border-radius:3px;padding:0 2px}
+.out mark.soft{background:var(--sunken);color:var(--ink-3);border-bottom-color:var(--line)}
+.out mark::before{content:"未入力";font-family:var(--sans);font-size:10.5px;font-weight:700;margin-right:2px}
+.warnbox{background:var(--warn-soft);color:var(--warn);border:1px solid var(--warn-line);border-radius:12px;padding:10px 12px;font-size:13.5px;font-weight:600;margin:10px 0}
+.okbox{background:var(--accent-soft);color:var(--accent);border-radius:12px;padding:10px 12px;font-size:13.5px;font-weight:700;margin:10px 0}
+
+/* 下のバー */
+.bottombar{position:fixed;left:0;right:0;bottom:0;z-index:30;background:var(--bar);-webkit-backdrop-filter:saturate(180%) blur(14px);backdrop-filter:saturate(180%) blur(14px);border-top:1px solid var(--line-soft);padding:10px 16px;padding-bottom:calc(10px + env(safe-area-inset-bottom))}
+.bottombar .in{max-width:620px;margin:0 auto;display:flex;gap:8px}
+.bottombar .btn{flex:1}
+
+/* ダイアログ・お知らせ */
+.scrim{position:fixed;inset:0;background:var(--scrim);z-index:50}
+.dlg{position:fixed;left:16px;right:16px;top:20vh;z-index:51;max-width:460px;margin:0 auto;background:var(--surface);border-radius:16px;padding:16px;box-shadow:var(--shadow)}
+.dlg h3{margin:0 0 10px;font-size:16px}
+.dlg input{width:100%;border:1px solid var(--line);border-radius:10px;background:var(--surface-2);padding:10px 12px;font-size:16px;min-height:46px;margin-bottom:12px}
+.toast{position:fixed;left:50%;bottom:calc(84px + env(safe-area-inset-bottom));transform:translateX(-50%);background:var(--ink);color:var(--ground);font-size:13.5px;font-weight:600;padding:9px 14px;border-radius:999px;z-index:60;max-width:90vw;text-align:center}
+</style>
+</head>
+<body>
+<header class="topbar"><div class="topbar-in">
+  <div class="brand"><b id="title">フォーマット入力</b><span class="chip" id="left" hidden></span></div>
+  <nav class="tabs" aria-label="画面">
+    <button type="button" data-go="fmt" aria-pressed="true">① 型を貼る</button>
+    <button type="button" data-go="form" aria-pressed="false" disabled>② 入力</button>
+    <button type="button" data-go="out" aria-pressed="false" disabled>③ できた文</button>
+  </nav>
+</div></header>
+
+<main class="wrap">
+  <!-- ① 型 -->
+  <section id="vFmt">
+    <div class="sec">保存した型</div>
+    <div id="tplList"></div>
+    <div class="sec">新しい型を貼る</div>
+    <div class="card">
+      <p class="warnline">お客さんの情報が入っていない、まっさらなフォーマットを貼ってください（型として端末に保存されます）。</p>
+      <textarea class="paste" id="src" placeholder="上位店から来たフォーマットの文を、丸ごとここに貼ってください。&#10;&#10;例）&#10;【お客様情報】&#10;● 代表者名&#10;● 電話番号&#10;決済端末：□あり □なし" autocapitalize="off" autocomplete="off" spellcheck="false"></textarea>
+      <div class="row" style="margin-top:10px">
+        <button type="button" class="btn primary" id="toForm" style="flex:1">入力フォームにする</button>
+        <button type="button" class="btn small" id="pasteBtn">貼り付け</button>
+        <button type="button" class="btn small" id="sampleBtn">見本</button>
+      </div>
+      <p class="note">入れた内容（お客さんの情報）は、この端末の中だけで使います。どこにも送りません。保存するのは「型」（貼った文）だけです。</p>
+    </div>
+  </section>
+
+  <!-- ② 入力 -->
+  <section id="vForm" hidden>
+    <div class="row" style="margin-top:12px">
+      <button type="button" class="btn small" id="fixBtn" aria-pressed="false">手直し</button>
+      <button type="button" class="btn small" id="saveBtn">型を保存</button>
+      <button type="button" class="btn small" id="clearBtn">入れた値を消す</button>
+    </div>
+    <p class="note" id="fixNote" hidden>手直し中：項目の名前を直す・入力しない行にする・選択肢を足す・書いてある行を入力欄にする、ができます。直したら［型を保存］で次から同じ形になります。</p>
+    <div id="form"></div>
+  </section>
+
+  <!-- ③ できた文 -->
+  <section id="vOut" hidden>
+    <div id="outMsg"></div>
+    <pre class="out" id="out"></pre>
+    <label class="switch" id="listSw" hidden><input type="checkbox" id="withList"> 持ち物リストも文に入れる</label>
+    <p class="note">黄色の「未入力」は、まだ入れていない所です。灰色は「空でもよい」と書いてある所です。</p>
+  </section>
+</main>
+
+<div class="bottombar" id="bar" hidden><div class="in">
+  <button type="button" class="btn" id="barBack">入力にもどる</button>
+  <button type="button" class="btn primary" id="barMain">できた文を見る</button>
+</div></div>
+
+<div class="scrim" id="scrim" hidden></div>
+<div class="dlg" id="dlg" role="dialog" aria-modal="true" hidden>
+  <h3 id="dlgT">型の名前</h3>
+  <input type="text" id="dlgIn" autocomplete="off">
+  <div class="row"><button type="button" class="btn" id="dlgNo" style="flex:1">やめる</button><button type="button" class="btn primary" id="dlgOk" style="flex:1">保存</button></div>
+</div>
+<div class="toast" id="toast" hidden></div>
+
+<script src="./parse.js?v=1"></script>
+<script src="./app.js?v=1"></script>
+<script>
+if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("./sw.js").catch(() => {});
+</script>
+</body>
+</html>
